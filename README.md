@@ -58,6 +58,15 @@ Inside generated project:
 - CI workflow: `.github/workflows/ci.yml`
 - Release workflow: `.github/workflows/release.yml`
 - Tag format for release: `vX.Y.Z`
+- Optional npm publish secret: `NPM_TOKEN` (if absent, release still succeeds on GitHub assets only)
+
+### Release checklist
+
+```bash
+npm run check
+git tag vX.Y.Z
+git push origin vX.Y.Z
+```
 
 ## Troubleshooting
 
