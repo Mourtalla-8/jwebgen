@@ -26,6 +26,17 @@ Then verify:
 jwebgen help
 ```
 
+### Quick test without global install (recommended first run)
+
+Use this mode if you want zero shell/PATH setup:
+
+```bash
+git clone https://github.com/Mourtalla-8/jwebgen
+cd jwebgen
+npm ci
+npx jwebgen help
+```
+
 ### First project
 
 ```bash
@@ -72,6 +83,9 @@ jwebgen help
   - `npm i -g .`
 - Direct from GitHub (once public):
   - `npm i -g github.com/Mourtalla-8/jwebgen`
+
+If `jwebgen` is not found after global install, your npm global bin is not in `PATH` yet.
+See `TROUBLESHOOTING.md` for shell-specific fixes.
 
 ## CI and releases
 

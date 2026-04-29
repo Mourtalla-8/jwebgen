@@ -9,6 +9,13 @@ nvm use || nvm install
 npm ci
 ```
 
+Optional global CLI for local manual testing:
+
+```bash
+npm i -g .
+jwebgen help
+```
+
 ## Quality gate
 
 Before opening a PR:

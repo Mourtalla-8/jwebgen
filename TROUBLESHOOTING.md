@@ -4,8 +4,23 @@
 
 - Ensure global install succeeded:
   - `npm i -g .`
-- Check npm global bin is on `PATH`:
-  - `npm bin -g`
+- Check npm global prefix and bin:
+  - `npm config get prefix`
+  - `ls "$(npm config get prefix)/bin" | grep jwebgen`
+
+If `jwebgen` exists there, add this bin directory to your shell `PATH`:
+
+- zsh:
+  - `echo 'export PATH="$(npm config get prefix)/bin:$PATH"' >> ~/.zshrc`
+  - `source ~/.zshrc`
+- bash:
+  - `echo 'export PATH="$(npm config get prefix)/bin:$PATH"' >> ~/.bashrc`
+  - `source ~/.bashrc`
+- fish:
+  - `set -Ux fish_user_paths (npm config get prefix)/bin $fish_user_paths`
+
+No global setup alternative:
+- `npx jwebgen help`
 
 ## Node version error
 
