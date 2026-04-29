@@ -187,7 +187,7 @@ runCli().catch((error) => {
   if (error?.exitCode === 130 || error?.signal === 'SIGINT') {
     process.exit(0);
   }
-  if (Boolean(error?.jwebgenHandled)) {
+  if (error?.jwebgenHandled) {
     process.exit(1);
   }
   console.error(pc.red(error?.stack || error?.message || String(error)));

@@ -46,6 +46,26 @@ Inside generated project:
 - Generated `build.sh`: requires Java + Maven.
 - Generated `dev.sh` and `watch.sh`: require Node and target app server tooling.
 
+## Machine compatibility
+
+- Official target: Linux with systemd (best support for generated deploy/dev scripts).
+- Best effort: macOS/Windows when manually adapting server setup and path conventions.
+- Minimum toolchain:
+  - Node.js 18.19+ for CLI and dev/watch
+  - Java JDK 11+
+  - Maven
+
+## New machine checklist
+
+```bash
+node -v
+javac -version
+mvn -version
+npm ci
+npm i -g .
+jwebgen help
+```
+
 ## Global install alternatives
 
 - Local dev global link:
