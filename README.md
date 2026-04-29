@@ -14,7 +14,7 @@ CLI generator for Java web projects (Servlet/JSP) with helper scripts for build,
 ### Install globally from source
 
 ```bash
-git clone <your-github-repo-url>
+git clone https://github.com/Mourtalla-8/jwebgen
 cd jwebgen
 npm ci
 npm i -g .
@@ -51,7 +51,7 @@ Inside generated project:
 - Local dev global link:
   - `npm i -g .`
 - Direct from GitHub (once public):
-  - `npm i -g github:<owner>/jwebgen`
+  - `npm i -g github.com/Mourtalla-8/jwebgen`
 
 ## CI and releases
 
