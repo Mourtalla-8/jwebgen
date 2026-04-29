@@ -4,6 +4,8 @@ import {
   evaluateJavaCompatibility,
   parseJavaMajorRelease,
   validateArtifactId,
+  validateLocation,
+  validateNonEmpty,
   validateQualifiedName
 } from '../../src/project/inputUtils.js';
 
@@ -28,4 +30,10 @@ test('validateQualifiedName enforces minimum segments and syntax', () => {
   assert.equal(validateQualifiedName('com.exo', { minSegments: 2 }), null);
   assert.match(validateQualifiedName('com', { minSegments: 2 }), /au moins 2 segments/);
   assert.match(validateQualifiedName('com.Exo', { minSegments: 2 }), /invalide/);
+});
+
+test('validateLocation and validateNonEmpty reject invalid values', () => {
+  assert.equal(validateNonEmpty('x', 'Nom'), null);
+  assert.match(validateNonEmpty('   ', 'Nom'), /vide/);
+  assert.match(validateLocation(''), /vide/);
 });

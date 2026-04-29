@@ -62,3 +62,46 @@ test('dispatches unknown commands via onUnknown', async () => {
 
   assert.equal(unknown, 'nope');
 });
+
+test('dispatches help aliases without running project scripts', async () => {
+  let helpCalled = 0;
+  let scriptsCalled = 0;
+  await dispatchCommand('--help', [], {
+    main: async () => {},
+    showHelp: () => {
+      helpCalled += 1;
+    },
+    parseCliOptions,
+    runProjectScript: async () => {
+      scriptsCalled += 1;
+    },
+    runMigrate: async () => {},
+    runClean: async () => {},
+    showStatus: async () => {},
+    onUnknown: () => {}
+  });
+
+  assert.equal(helpCalled, 1);
+  assert.equal(scriptsCalled, 0);
+});
+
+test('dispatches build command to build.sh with args', async () => {
+  let scriptName = '';
+  let scriptArgs = [];
+  await dispatchCommand('build', ['--skip'], {
+    main: async () => {},
+    showHelp: () => {},
+    parseCliOptions,
+    runProjectScript: async (name, args) => {
+      scriptName = name;
+      scriptArgs = args;
+    },
+    runMigrate: async () => {},
+    runClean: async () => {},
+    showStatus: async () => {},
+    onUnknown: () => {}
+  });
+
+  assert.equal(scriptName, 'build.sh');
+  assert.deepEqual(scriptArgs, ['--skip']);
+});
