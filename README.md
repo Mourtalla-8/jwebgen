@@ -71,3 +71,7 @@ git push origin vX.Y.Z
 ## Troubleshooting
 
 See `TROUBLESHOOTING.md`.
+
+## Contributing
+
+See `CONTRIBUTING.md`.
