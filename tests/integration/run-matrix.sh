@@ -15,13 +15,23 @@ run_case() {
   ( "$@" ) || { echo "FAIL: $name" >&2; exit 1; }
 }
 
+assert_output_contains() {
+  local needle="$1"
+  local file="$2"
+  if ! command -v rg >/dev/null 2>&1; then
+    grep -F "$needle" "$file" >/dev/null
+    return $?
+  fi
+  rg -F "$needle" "$file" >/dev/null
+}
+
 case_tomcat_down_noninteractive() {
   PATH="$SHIMS_DIR:$PATH" \
   JWEBGEN_SHIM_TOMCAT_ACTIVE=0 \
   JWEBGEN_SHIM_HTTP_8080=0 \
   JWEBGEN_SHIM_APP_OK=0 \
   bash -lc "cd \"$FIXTURE_TOMCAT\" && timeout 5 ./scripts/watch.sh" >/tmp/jwebgen_case_out 2>&1 || true
-  rg -F "indisponible au lancement" /tmp/jwebgen_case_out >/dev/null
+  assert_output_contains "indisponible au lancement" /tmp/jwebgen_case_out
 }
 
 case_tomcat_engine_up_app_down() {
@@ -30,7 +40,7 @@ case_tomcat_engine_up_app_down() {
   JWEBGEN_SHIM_HTTP_8080=1 \
   JWEBGEN_SHIM_APP_OK=0 \
   bash -lc "cd \"$FIXTURE_TOMCAT\" && timeout 5 ./scripts/watch.sh" >/tmp/jwebgen_case_out 2>&1 || true
-  rg -F "application inaccessible" /tmp/jwebgen_case_out >/dev/null
+  assert_output_contains "application inaccessible" /tmp/jwebgen_case_out
 }
 
 case_http_port_conflict() {
@@ -39,7 +49,7 @@ case_http_port_conflict() {
   JWEBGEN_SHIM_HTTP_8080=0 \
   JWEBGEN_SHIM_PORT_8080_LISTEN=1 \
   bash -lc "cd \"$FIXTURE_TOMCAT\" && timeout 5 ./scripts/watch.sh" >/tmp/jwebgen_case_out 2>&1 || true
-  rg -F "Port HTTP 8080 déjà occupé" /tmp/jwebgen_case_out >/dev/null
+  assert_output_contains "Port HTTP 8080 déjà occupé" /tmp/jwebgen_case_out
 }
 
 case_wildfly_down() {
@@ -47,7 +57,7 @@ case_wildfly_down() {
   JWEBGEN_SHIM_WILDFLY_ACTIVE=0 \
   JWEBGEN_SHIM_WILDFLY_MGMT=0 \
   bash -lc "cd \"$FIXTURE_WILDFLY\" && JWEBGEN_SERVER_TARGET=wildfly timeout 5 ./scripts/watch.sh" >/tmp/jwebgen_case_out 2>&1 || true
-  rg -F "WildFly indisponible au lancement" /tmp/jwebgen_case_out >/dev/null
+  assert_output_contains "WildFly indisponible au lancement" /tmp/jwebgen_case_out
 }
 
 chmod +x "$SHIMS_DIR/"{systemctl,curl,ss} 2>/dev/null || true
