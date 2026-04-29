@@ -4,6 +4,12 @@ All notable changes to this project should be documented in this file.
 
 This project follows Semantic Versioning.
 
+## [1.0.3] - 2026-04-29
+
+- Add ESLint static checks into the default quality gate and CI workflow.
+- Extend unit coverage for Java/tooling input validation edge cases.
+- Document official compatibility matrix and new-machine onboarding checklist.
+
 ## [1.0.2] - 2026-04-29
 
 - Align package metadata with the next patch release tag.
