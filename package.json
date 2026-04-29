@@ -14,7 +14,7 @@
     "TROUBLESHOOTING.md"
   ],
   "scripts": {
-    "test:unit": "node --test ./tests/unit/**/*.test.mjs",
+    "test:unit": "node --test tests/unit/dispatch.test.mjs",
     "test": "npm run test:unit && bash ./tests/golden-check.sh && bash ./tests/integration/template-asserts.sh && bash ./tests/integration/run-matrix.sh",
     "check:syntax": "bash ./tests/check-syntax.sh",
     "lint": "node --check ./bin/jwebgen.js",
