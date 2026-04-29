@@ -4,6 +4,12 @@ All notable changes to this project should be documented in this file.
 
 This project follows Semantic Versioning.
 
+## [1.0.4] - 2026-04-29
+
+- Expand CLI regression coverage for dispatch, root discovery, and unknown-command exit behavior.
+- Remove deprecated `runCli.impl` shim and simplify CLI deprecation path.
+- Consolidate final hardening wave with stable lint/test/CI gates.
+
 ## [1.0.3] - 2026-04-29
 
 - Add ESLint static checks into the default quality gate and CI workflow.
