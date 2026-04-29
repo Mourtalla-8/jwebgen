@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+want_code=0
+url=""
+for ((i=1;i<=$#;i++)); do
+  arg="${!i}"
+  if [[ "$arg" == "-w" || "$arg" == "--write-out" ]]; then
+    want_code=1
+  fi
+  if [[ "$arg" == http*://* ]]; then
+    url="$arg"
+  fi
+done
+
+code="000"
+if [[ "$url" == "http://127.0.0.1:8080/" ]]; then
+  [[ "${JWEBGEN_SHIM_HTTP_8080:-0}" == "1" ]] && code="200"
+elif [[ "$url" =~ ^http://127\\.0\\.0\\.1:8080/[^/]+/?$ ]]; then
+  [[ "${JWEBGEN_SHIM_APP_OK:-0}" == "1" ]] && code="200" || code="404"
+elif [[ "$url" == "http://127.0.0.1:9990/" ]]; then
+  [[ "${JWEBGEN_SHIM_WILDFLY_MGMT:-0}" == "1" ]] && code="200"
+fi
+
+if [[ "$want_code" == "1" ]]; then
+  printf "%s" "$code"
+  exit 0
+fi
+
+[[ "$code" == "200" ]] && exit 0 || exit 7
+

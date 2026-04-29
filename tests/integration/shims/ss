@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${1:-}" == "-lnt" || "${1:-}" == "-lntp" ]]; then
+  echo "State Recv-Q Send-Q Local Address:Port Peer Address:Port"
+  if [[ "${JWEBGEN_SHIM_PORT_8080_LISTEN:-0}" == "1" ]]; then
+    if [[ "${1:-}" == "-lntp" ]]; then
+      echo "LISTEN 0 128 127.0.0.1:8080 0.0.0.0:* users:(('java',pid=1234,fd=99))"
+    else
+      echo "LISTEN 0 128 127.0.0.1:8080 0.0.0.0:*"
+    fi
+  fi
+  exit 0
+fi
+exit 0
+

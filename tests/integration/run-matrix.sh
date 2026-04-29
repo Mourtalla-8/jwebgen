@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$ROOT_DIR"
+
+SHIMS_DIR="$ROOT_DIR/tests/integration/shims"
+FIXTURE_TOMCAT="$ROOT_DIR/tests/fixtures-current/tomcat"
+FIXTURE_WILDFLY="$ROOT_DIR/tests/fixtures-current/wildfly"
+
+run_case() {
+  local name="$1"
+  shift
+  echo "[case] $name"
+  ( "$@" ) || { echo "FAIL: $name" >&2; exit 1; }
+}
+
+case_tomcat_down_noninteractive() {
+  PATH="$SHIMS_DIR:$PATH" \
+  JWEBGEN_SHIM_TOMCAT_ACTIVE=0 \
+  JWEBGEN_SHIM_HTTP_8080=0 \
+  JWEBGEN_SHIM_APP_OK=0 \
+  bash -lc "cd \"$FIXTURE_TOMCAT\" && timeout 5 ./scripts/watch.sh" >/tmp/jwebgen_case_out 2>&1 || true
+  rg -F "indisponible au lancement" /tmp/jwebgen_case_out >/dev/null
+}
+
+case_tomcat_engine_up_app_down() {
+  PATH="$SHIMS_DIR:$PATH" \
+  JWEBGEN_SHIM_TOMCAT_ACTIVE=1 \
+  JWEBGEN_SHIM_HTTP_8080=1 \
+  JWEBGEN_SHIM_APP_OK=0 \
+  bash -lc "cd \"$FIXTURE_TOMCAT\" && timeout 5 ./scripts/watch.sh" >/tmp/jwebgen_case_out 2>&1 || true
+  rg -F "application inaccessible" /tmp/jwebgen_case_out >/dev/null
+}
+
+case_http_port_conflict() {
+  PATH="$SHIMS_DIR:$PATH" \
+  JWEBGEN_SHIM_TOMCAT_ACTIVE=0 \
+  JWEBGEN_SHIM_HTTP_8080=0 \
+  JWEBGEN_SHIM_PORT_8080_LISTEN=1 \
+  bash -lc "cd \"$FIXTURE_TOMCAT\" && timeout 5 ./scripts/watch.sh" >/tmp/jwebgen_case_out 2>&1 || true
+  rg -F "Port HTTP 8080 déjà occupé" /tmp/jwebgen_case_out >/dev/null
+}
+
+case_wildfly_down() {
+  PATH="$SHIMS_DIR:$PATH" \
+  JWEBGEN_SHIM_WILDFLY_ACTIVE=0 \
+  JWEBGEN_SHIM_WILDFLY_MGMT=0 \
+  bash -lc "cd \"$FIXTURE_WILDFLY\" && JWEBGEN_SERVER_TARGET=wildfly timeout 5 ./scripts/watch.sh" >/tmp/jwebgen_case_out 2>&1 || true
+  rg -F "WildFly indisponible au lancement" /tmp/jwebgen_case_out >/dev/null
+}
+
+chmod +x "$SHIMS_DIR/"{systemctl,curl,ss} 2>/dev/null || true
+chmod +x "$ROOT_DIR/tests/integration/template-asserts.sh" 2>/dev/null || true
+
+run_case "tomcat_down_noninteractive" case_tomcat_down_noninteractive
+run_case "tomcat_engine_up_app_down" case_tomcat_engine_up_app_down
+run_case "http_port_conflict" case_http_port_conflict
+run_case "wildfly_down" case_wildfly_down
+run_case "template_asserts" "$ROOT_DIR/tests/integration/template-asserts.sh"
+
+echo "Integration matrix: OK"
+

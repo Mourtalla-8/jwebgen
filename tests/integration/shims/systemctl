@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cmd="${1:-}"
+unit="${2:-}"
+
+is_active() {
+  local name="$1"
+  if [[ "$name" == "tomcat10" || "$name" == "tomcat" ]]; then
+    [[ "${JWEBGEN_SHIM_TOMCAT_ACTIVE:-0}" == "1" ]]
+    return $?
+  fi
+  if [[ "$name" == "wildfly" ]]; then
+    [[ "${JWEBGEN_SHIM_WILDFLY_ACTIVE:-0}" == "1" ]]
+    return $?
+  fi
+  return 3
+}
+
+case "$cmd" in
+  is-active)
+    shift
+    if [[ "${1:-}" == "--quiet" ]]; then shift; fi
+    is_active "${1:-}" && exit 0 || exit 3
+    ;;
+  status)
+    is_active "$unit" && exit 0 || exit 3
+    ;;
+  start)
+    exit 0
+    ;;
+  show)
+    echo "loaded"
+    exit 0
+    ;;
+  *)
+    exit 0
+    ;;
+esac
+
