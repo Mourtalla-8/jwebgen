@@ -1,10 +1,8 @@
-import { runCli as runCliImpl } from './runCli.impl.js';
-
 export async function runCli() {
-  return await runCliImpl();
+  throw new Error('src/cli/runCli is deprecated. Use bin/jwebgen.js as the runtime entrypoint.');
 }
 
 export function isHandledError(error) {
-  return Boolean(error?.jwebgenHandled);
+  return !!error?.jwebgenHandled;
 }
 
