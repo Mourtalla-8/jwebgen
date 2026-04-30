@@ -1,7 +1,7 @@
 import pc from 'picocolors';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { rm, mkdir, readdir, readFile } from 'node:fs/promises';
+import { rm, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { execa } from 'execa';
 
 export async function runClean({ findProjectRoot }) {
@@ -144,7 +144,7 @@ export async function runMigrate({
   await writeFileSafe(path.join(projectRoot, 'scripts/watch.sh'), makeWatchScript());
   const basePackage = await inferBasePackage(projectRoot, appName);
   await writeFileSafe(path.join(projectRoot, 'scripts/add-servlet.sh'), makeAddServletScript({ basePackage }));
-  await writeFileSafe(path.join(projectRoot, '.jwebgenrc'), `export JWEBGEN_SERVER_TARGET="${serverTarget}"\n`);
+  await writeProjectConfigServerTarget(projectRoot, serverTarget);
 
   const legacyDeployPath = path.join(projectRoot, 'scripts', legacyDeployScript);
   if (existsSync(legacyDeployPath)) await rm(legacyDeployPath, { force: true });
@@ -183,4 +183,39 @@ async function inferBasePackage(projectRoot, appName) {
     }
   }
   return fallback;
+}
+
+async function writeProjectConfigServerTarget(projectRoot, detectedTarget) {
+  const cfgPath = path.join(projectRoot, '.jwebgenrc');
+  let raw = '';
+  if (existsSync(cfgPath)) {
+    try {
+      raw = await readFile(cfgPath, 'utf8');
+    } catch {
+      raw = '';
+    }
+  }
+
+  const existingTarget = extractServerTarget(raw);
+  const effectiveTarget = existingTarget || detectedTarget;
+  const line = `export JWEBGEN_SERVER_TARGET="${effectiveTarget}"`;
+  const hasServerLine = /^export\s+JWEBGEN_SERVER_TARGET=.*$/m.test(raw);
+
+  let nextRaw;
+  if (hasServerLine) {
+    nextRaw = raw.replace(/^export\s+JWEBGEN_SERVER_TARGET=.*$/m, line);
+  } else if (raw.trim().length === 0) {
+    nextRaw = `${line}\n`;
+  } else {
+    nextRaw = raw.endsWith('\n') ? `${raw}${line}\n` : `${raw}\n${line}\n`;
+  }
+
+  await writeFile(cfgPath, nextRaw, 'utf8');
+}
+
+function extractServerTarget(raw) {
+  const m = String(raw).match(/JWEBGEN_SERVER_TARGET\s*=\s*"?([a-zA-Z0-9_-]+)"?/);
+  const target = String(m?.[1] || '').trim();
+  if (target === 'tomcat' || target === 'wildfly') return target;
+  return '';
 }
