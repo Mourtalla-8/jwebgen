@@ -214,15 +214,11 @@ show_server_help() {
   fi
   if [[ -n "$DETECT_CONFLICT_PORT" ]]; then
     if [[ "$DETECT_REASON" =~ (non\ actif|arrêté|inactif|non\ détecté) ]]; then
-      if [[ -n "$DETECT_OWNER_PID" ]]; then
-        action_hint="[d] démarrer serveur  [i] inspecter  [k] kill pid $DETECT_OWNER_PID  [s] stop service  [f] refresh  [a] aide  [q] quit"
-      else
-        action_hint="[d] démarrer serveur  [i] inspecter  [x] kill port  [f] refresh  [a] aide  [q] quit"
-      fi
+      action_hint="[d] démarrer serveur  [f] refresh  [a] aide  [q] quit"
     elif [[ -n "$DETECT_OWNER_PID" ]]; then
-      action_hint="[k] kill pid $DETECT_OWNER_PID  [s] stop service  [c] change port  [f] refresh  [a] aide  [q] quit"
+      action_hint="[k] kill pid $DETECT_OWNER_PID  [s] stop service  [f] refresh  [a] aide  [q] quit"
     else
-      action_hint="[i] inspecter  [x] kill port  [c] change port  [f] refresh  [a] aide  [q] quit"
+      action_hint="[i] inspecter  [x] kill port  [f] refresh  [a] aide  [q] quit"
     fi
     ui_info "Actions auto: $action_hint"
     if [[ -z "$DETECT_OWNER_PID" ]]; then

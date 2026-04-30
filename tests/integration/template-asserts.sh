@@ -21,12 +21,18 @@ assertContains(watch, 'DEV_PID_FILE=', 'watch.sh');
 assertContains(watch, 'cleanup_orphan_dev_session', 'watch.sh');
 assertContains(watch, 'scripts/deploy.sh" --cleanup-dev', 'watch.sh');
 assertContains(watch, '"$UI_PAUSE_FILE" "$$"', 'watch worker/dashboard parent pid');
-assertContains(watch, '[i]inspecter / [x]kill port / [c]hange port / [f]refresh / [a]ide / [q]uit', 'watch staged kill options');
+assertContains(watch, '[i]inspecter / [x]kill port / [f]refresh / [a]ide / [q]uit', 'watch staged kill options');
 assertContains(watch, '[r]redéployer+redémarrer / [i]inspecter / [f]refresh / [a]ide / [q]uit', 'watch wildfly http000 restart-first options');
-assertContains(watch, 'Déploiement en erreur. [s]udo / [f]refresh / [a]ide / [q]uit', 'watch deploy sudo remediation options');
+assertContains(watch, 'Déploiement en erreur. [f]refresh / [a]ide / [q]uit', 'watch deploy remediation options');
 assertContains(watch, "Option non disponible dans ce menu.", 'watch strict key parser');
 if (String(watch).includes('[r]etester')) {
   throw new Error('unexpected retester option in watch.sh');
+}
+if (String(watch).includes('[c]hange port')) {
+  throw new Error('unexpected change port option in watch.sh');
+}
+if (String(watch).includes('[s]udo')) {
+  throw new Error('unexpected sudo menu option in watch.sh');
 }
 
 const deployTomcat = makeDeployServerScript({ appName: 'appx', serverTarget: 'tomcat' });

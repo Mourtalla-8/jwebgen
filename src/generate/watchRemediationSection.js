@@ -166,19 +166,13 @@ prompt_server_remediation() {
     fi
     if [[ -n "$DETECT_CONFLICT_PORT" ]]; then
       has_conflict=1
-      options="[f]refresh / [a]ide / [q]uit"
       if [[ "$start_needed" = "1" ]]; then
-        if [[ -n "$DETECT_OWNER_PID" ]]; then
-          has_pid_conflict=1
-          options="[\${primary_key}]\${primary_label} / [k]ill occupant / [s]top service / [f]refresh / [a]ide / [q]uit"
-        else
-          options="[\${primary_key}]\${primary_label} / [i]inspecter / [x]kill port / [f]refresh / [a]ide / [q]uit"
-        fi
+        options="[\${primary_key}]\${primary_label} / [f]refresh / [a]ide / [q]uit"
       elif [[ -n "$DETECT_OWNER_PID" ]]; then
         has_pid_conflict=1
-        options="[k]ill occupant / [s]top service / [c]hange port / [f]refresh / [a]ide / [q]uit"
+        options="[k]ill occupant / [s]top service / [f]refresh / [a]ide / [q]uit"
       else
-        options="[i]inspecter / [x]kill port / [c]hange port / [f]refresh / [a]ide / [q]uit"
+        options="[i]inspecter / [x]kill port / [f]refresh / [a]ide / [q]uit"
       fi
     elif [[ "$DETECT_REASON" == *"renvoie HTTP"* ]]; then
       app_down_like=1
@@ -410,17 +404,6 @@ prompt_server_remediation() {
           fi
         fi
         ;;
-      [Cc])
-        if [[ "$has_conflict" != "1" ]]; then
-          ui_warn "Option non disponible dans ce menu."
-          continue
-        fi
-        if apply_validated_http_port_fallback; then
-          resume_ui
-          start_dashboard
-          return 0
-        fi
-        ;;
       [Ff])
         printf "\\n" >&$TTY_OUT_FD
         restart_worker
@@ -513,7 +496,7 @@ prompt_deploy_remediation() {
   fi
   printf "\\n--- Remédiation déploiement ---\\n" >&$TTY_OUT_FD
   while true; do
-    printf "\\nDéploiement en erreur. [s]udo / [f]refresh / [a]ide / [q]uit ? " >&$TTY_OUT_FD
+    printf "\\nDéploiement en erreur. [f]refresh / [a]ide / [q]uit ? " >&$TTY_OUT_FD
     IFS= read -rsn1 answer <&$TTY_IN_FD || { resume_ui; start_dashboard; return 1; }
     if [[ "$answer" == $'\\e' ]]; then
       IFS= read -rsn2 -t 0.02 discard <&$TTY_IN_FD || true
@@ -522,16 +505,6 @@ prompt_deploy_remediation() {
     fi
     printf '\\r\\033[2K' >&$TTY_OUT_FD || true
     case "$answer" in
-      [Ss])
-        printf "\\nAuthentification sudo requise...\\n" >&$TTY_OUT_FD
-        if sudo -v <&$TTY_IN_FD 1>&$TTY_OUT_FD 2>&$TTY_OUT_FD; then
-          restart_worker
-          resume_ui
-          start_dashboard
-          return 0
-        fi
-        ui_err "Authentification sudo échouée."
-        ;;
       [Ff])
         restart_worker
         resume_ui
@@ -688,7 +661,7 @@ handle_events_loop() {
               resume_ui
               start_dashboard
             else
-              ui_err "Authentification sudo échouée. Utilise [s] dans la remédiation déploiement ou relance sudo -v."
+              ui_err "Authentification sudo échouée. Relance sudo -v puis refresh."
               resume_ui
               start_dashboard
             fi
