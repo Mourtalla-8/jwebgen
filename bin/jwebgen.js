@@ -10,7 +10,6 @@ import {
   note
 } from '@clack/prompts';
 import pc from 'picocolors';
-import path from 'node:path';
 import {
   gitignore,
   helloServlet,
@@ -66,13 +65,13 @@ import {
 import { runProjectScript as runProjectScriptImpl } from '../src/cli/projectRunner.js';
 import { runCreateCommand } from '../src/cli/createCommand.js';
 import { writeFileSafe, makeExecutable } from '../src/cli/fileUtils.js';
-import { readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import { jwebgenConfigPath, jwebgenMetaDir } from '../src/project/jwebgenLayout.js';
 
 const APP_NAME = 'jwebgen';
 const CANONICAL_DEPLOY_SCRIPT = 'deploy.sh';
 const LEGACY_DEPLOY_SCRIPT = 'deploy-tomcat.sh';
-const CONFIG_FILE = '.jwebgenrc';
 
 const SERVER_OPTIONS = [
   { value: 'tomcat', label: 'Tomcat' },
@@ -174,7 +173,7 @@ async function runMigrate() {
 }
 
 async function readConfiguredServerTarget(projectRoot) {
-  const cfgPath = path.join(projectRoot, CONFIG_FILE);
+  const cfgPath = jwebgenConfigPath(projectRoot);
   if (!existsSync(cfgPath)) return null;
   try {
     const raw = await readFile(cfgPath, 'utf8');
@@ -188,7 +187,8 @@ async function readConfiguredServerTarget(projectRoot) {
 }
 
 async function writeConfiguredServerTarget(projectRoot, target) {
-  const cfgPath = path.join(projectRoot, CONFIG_FILE);
+  await mkdir(jwebgenMetaDir(projectRoot), { recursive: true });
+  const cfgPath = jwebgenConfigPath(projectRoot);
   const content = `export JWEBGEN_SERVER_TARGET="${target}"\n`;
   await writeFile(cfgPath, content, 'utf8');
 }
@@ -202,7 +202,7 @@ async function ensureServerTarget({ projectRoot, requestedTarget }) {
   if (configured) return configured;
   if (!process.stdin.isTTY) {
     console.log(pc.red('Serveur cible non configuré.'));
-    console.log(pc.yellow('Passe --tomcat/--wildfly ou configure .jwebgenrc'));
+    console.log(pc.yellow('Passe --tomcat/--wildfly ou configure .jwebgen/.jwebgenrc'));
     process.exit(1);
   }
   const chosen = await select({

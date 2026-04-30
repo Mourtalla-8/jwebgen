@@ -3,7 +3,7 @@ export function makeBuildScript() {
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 JWEBGEN_VERBOSE="\${JWEBGEN_VERBOSE:-0}"
 MVN_COMMON_ARGS=(-DskipTests)
 

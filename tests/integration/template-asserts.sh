@@ -19,7 +19,7 @@ function assertContains(haystack, needle, label) {
 const watch = makeWatchScript();
 assertContains(watch, 'DEV_PID_FILE=', 'watch.sh');
 assertContains(watch, 'cleanup_orphan_dev_session', 'watch.sh');
-assertContains(watch, 'scripts/deploy.sh" --cleanup-dev', 'watch.sh');
+assertContains(watch, '.jwebgen/scripts/deploy.sh" --cleanup-dev', 'watch.sh');
 assertContains(watch, '"$UI_PAUSE_FILE" "$$"', 'watch worker/dashboard parent pid');
 assertContains(watch, '[i]inspecter / [x]kill port / [f]refresh / [a]ide / [q]uit', 'watch staged kill options');
 assertContains(watch, '[r]redéployer+redémarrer / [i]inspecter / [f]refresh / [a]ide / [q]uit', 'watch wildfly http000 restart-first options');

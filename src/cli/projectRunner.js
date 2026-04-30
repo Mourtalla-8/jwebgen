@@ -2,6 +2,7 @@ import pc from 'picocolors';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { execa } from 'execa';
+import { jwebgenScriptsDir } from '../project/jwebgenLayout.js';
 
 export async function runProjectScript(scriptName, args = [], options = {}, deps) {
   const {
@@ -17,7 +18,8 @@ export async function runProjectScript(scriptName, args = [], options = {}, deps
     process.exit(1);
   }
 
-  const scriptPath = path.join(projectRoot, 'scripts', scriptName);
+  const scriptsDir = jwebgenScriptsDir(projectRoot);
+  const scriptPath = path.join(scriptsDir, scriptName);
   const env = { ...process.env, ...(options.env || {}) };
   if (options.verbose !== undefined) env.JWEBGEN_VERBOSE = options.verbose ? '1' : '0';
 
@@ -35,7 +37,7 @@ export async function runProjectScript(scriptName, args = [], options = {}, deps
   }
 
   if (!existsSync(scriptPath)) {
-    console.error(pc.red(`Le script ${scriptName} est introuvable dans ${path.join(projectRoot, 'scripts')}.`));
+    console.error(pc.red(`Le script ${scriptName} est introuvable dans ${scriptsDir}.`));
     process.exit(1);
   }
 

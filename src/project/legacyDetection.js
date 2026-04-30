@@ -1,13 +1,14 @@
 import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
+import { jwebgenScriptsDir } from './jwebgenLayout.js';
 
 export async function detectLegacyProjectIssues(projectRoot, {
   canonicalDeployScript = 'deploy.sh',
   legacyDeployScript = 'deploy-tomcat.sh'
 } = {}) {
   const issues = [];
-  const scriptsDir = path.join(projectRoot, 'scripts');
+  const scriptsDir = jwebgenScriptsDir(projectRoot);
   const deployPath = path.join(scriptsDir, canonicalDeployScript);
   const legacyDeployPath = path.join(scriptsDir, legacyDeployScript);
   const watchPath = path.join(scriptsDir, 'watch.sh');
@@ -29,7 +30,7 @@ export async function detectLegacyProjectIssues(projectRoot, {
         issues.push("watch.sh contient un prompt ambigu legacy ([Nn] quitte aussi)");
       }
     } catch {
-      issues.push('impossible de lire scripts/watch.sh pour validation');
+      issues.push('impossible de lire .jwebgen/scripts/watch.sh pour validation');
     }
   }
   return issues;

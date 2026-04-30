@@ -52,12 +52,12 @@ jwebgen --new mon-webapp --yes
 With `--yes` and no server flag, jwebgen does not choose Tomcat/WildFly automatically.
 The first `jwebgen --dev` or `jwebgen --deploy` will prompt once and save your choice.
 
-Inside generated project:
+Inside a generated project, jwebgen tooling lives under `.jwebgen/` (scripts in `.jwebgen/scripts/`). The Maven root stays a normal webapp layout (`src/`, `pom.xml`, optional `.gitignore`, `target/` after build).
 
 ```bash
-./scripts/build.sh
-./scripts/deploy.sh
-./scripts/dev.sh
+./.jwebgen/scripts/build.sh
+./.jwebgen/scripts/deploy.sh
+./.jwebgen/scripts/dev.sh
 jwebgen --clean --deploy
 ```
 
@@ -66,8 +66,8 @@ jwebgen --clean --deploy
 ## Supported usage model
 
 - `create`, generation and project scaffolding: requires Node + Java + Maven.
-- Generated `build.sh`: requires Java + Maven.
-- Generated `dev.sh` and `watch.sh`: require Node and target app server tooling.
+- Generated `.jwebgen/scripts/build.sh`: requires Java + Maven.
+- Generated `.jwebgen/scripts/dev.sh` and `watch.sh`: require Node and target app server tooling.
 
 ## Port conflicts on the same machine
 
@@ -83,7 +83,7 @@ If Tomcat, WildFly, or another HTTP service is active on port `8080` at the same
 - `jwebgen --dev` (or `--watch`)
 - `jwebgen --new <name>`
 - `jwebgen --help` (or `jwebgen`)
-- Existing projects: run `jwebgen --migrate` to regenerate scripts and create `.jwebgenrc`.
+- Projects using the current layout: run `jwebgen --migrate` to regenerate `.jwebgen/scripts` and refresh `.jwebgen/.jwebgenrc` as needed.
 
 ## Machine compatibility
 

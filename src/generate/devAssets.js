@@ -107,7 +107,7 @@ if [[ ! "$CLASS_NAME" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 PACKAGE_DIR="$ROOT_DIR/src/main/java/${packagePath}"
 TARGET_FILE="$PACKAGE_DIR/$CLASS_NAME.java"
 
@@ -147,7 +147,7 @@ public class $CLASS_NAME extends HttpServlet {
 EOF
 
 echo "Servlet créée : $TARGET_FILE"
-echo "Pense à reconstruire puis redéployer : ./scripts/dev.sh"
+echo "Pense à reconstruire puis redéployer : ./.jwebgen/scripts/dev.sh"
 `;
 }
 
@@ -191,7 +191,7 @@ sudo systemctl start tomcat10
 - \`src/main/webapp/META-INF/context.xml\` active \`reloadable="true"\` pour aider Tomcat à recharger le contexte.`
       : serverTarget === 'wildfly'
         ? `- En dev, le script déploie le WAR vers le dossier deployments et déclenche \`.dodeploy\`.`
-        : `- En dev, le serveur cible sera sélectionné au premier lancement puis mémorisé dans \`.jwebgenrc\`.`;
+        : `- En dev, le serveur cible sera sélectionné au premier lancement puis mémorisé dans \`.jwebgen/.jwebgenrc\`.`;
 
   return `# Développement rapide
 
@@ -209,14 +209,14 @@ Ce template est Jakarta-only (Servlet API 6+).
 
 - Java (JDK) 11+
 - Maven (\`mvn\`)
-- Node.js (**uniquement** pour \`./scripts/dev.sh\` et le reload navigateur)
+- Node.js (**uniquement** pour \`./.jwebgen/scripts/dev.sh\` et le reload navigateur)
 
 Scripts générés :
 
-- \`./scripts/build.sh\` : compile le WAR
-- \`./scripts/deploy.sh\` : déploiement vers le serveur cible
-- \`./scripts/dev.sh\` : mode dev continu (watch + rebuild + deploy + reload navigateur)
-- \`./scripts/watch.sh\` : rebuild + redeploy automatique
+- \`./.jwebgen/scripts/build.sh\` : compile le WAR
+- \`./.jwebgen/scripts/deploy.sh\` : déploiement vers le serveur cible
+- \`./.jwebgen/scripts/dev.sh\` : mode dev continu (watch + rebuild + deploy + reload navigateur)
+- \`./.jwebgen/scripts/watch.sh\` : rebuild + redeploy automatique
 - \`jwebgen --servlet [NomClasse]\` : crée une servlet
 
 Contexte du projet :

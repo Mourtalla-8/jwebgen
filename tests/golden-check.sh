@@ -7,15 +7,15 @@ cd "$ROOT_DIR"
 fail() { echo "FAIL: $1" >&2; exit 1; }
 
 echo "[golden] ensure fixtures exist (tests/fixtures-current)"
-[[ -d "tests/fixtures-current/tomcat/scripts" ]] || fail "missing tests/fixtures-current/tomcat/scripts"
-[[ -d "tests/fixtures-current/wildfly/scripts" ]] || fail "missing tests/fixtures-current/wildfly/scripts"
+[[ -d "tests/fixtures-current/tomcat/.jwebgen/scripts" ]] || fail "missing tests/fixtures-current/tomcat/.jwebgen/scripts"
+[[ -d "tests/fixtures-current/wildfly/.jwebgen/scripts" ]] || fail "missing tests/fixtures-current/wildfly/.jwebgen/scripts"
 
 for env in tomcat wildfly; do
   echo "[golden] syntax checks for $env fixture"
-  bash -n "tests/fixtures-current/$env/scripts/build.sh"
-  bash -n "tests/fixtures-current/$env/scripts/deploy.sh"
-  bash -n "tests/fixtures-current/$env/scripts/dev.sh"
-  bash -n "tests/fixtures-current/$env/scripts/watch.sh"
+  bash -n "tests/fixtures-current/$env/.jwebgen/scripts/build.sh"
+  bash -n "tests/fixtures-current/$env/.jwebgen/scripts/deploy.sh"
+  bash -n "tests/fixtures-current/$env/.jwebgen/scripts/dev.sh"
+  bash -n "tests/fixtures-current/$env/.jwebgen/scripts/watch.sh"
 
   worker_tmp="$(mktemp --suffix=.mjs)"
   dashboard_tmp="$(mktemp --suffix=.mjs)"
@@ -24,12 +24,12 @@ for env in tomcat wildfly; do
     /cat > "\$DASHBOARD_SCRIPT" <<'\''EOF'\''/ { in_worker=0; in_dashboard=1; next }
     /^EOF$/ { if (in_dashboard) { in_dashboard=0; next } if (in_worker) { in_worker=0; next } }
     in_worker { print }
-  ' "tests/fixtures-current/$env/scripts/watch.sh" > "$worker_tmp"
+  ' "tests/fixtures-current/$env/.jwebgen/scripts/watch.sh" > "$worker_tmp"
   awk '
     /cat > "\$DASHBOARD_SCRIPT" <<'\''EOF'\''/ { in_dashboard=1; next }
     /^EOF$/ { if (in_dashboard) { in_dashboard=0; next } }
     in_dashboard { print }
-  ' "tests/fixtures-current/$env/scripts/watch.sh" > "$dashboard_tmp"
+  ' "tests/fixtures-current/$env/.jwebgen/scripts/watch.sh" > "$dashboard_tmp"
   node --check "$worker_tmp"
   node --check "$dashboard_tmp"
   rm -f "$worker_tmp" "$dashboard_tmp"

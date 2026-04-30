@@ -19,8 +19,9 @@ test('findProjectRoot resolves from nested path when pom.xml and scripts exist',
   const tmpRoot = await mkdtemp(path.join(os.tmpdir(), 'jwebgen-root-hit-'));
   try {
     await writeFile(path.join(tmpRoot, 'pom.xml'), '<project/>', 'utf8');
-    await mkdir(path.join(tmpRoot, 'scripts'), { recursive: true });
+    await mkdir(path.join(tmpRoot, '.jwebgen', 'scripts'), { recursive: true });
     await mkdir(path.join(tmpRoot, 'src', 'main', 'java', 'com', 'exo'), { recursive: true });
+    await writeFile(path.join(tmpRoot, '.jwebgen', 'scripts', 'watch.sh'), '#!/usr/bin/env bash\n', 'utf8');
     const nested = path.join(tmpRoot, 'src', 'main', 'java', 'com', 'exo');
     const result = findProjectRoot(nested);
     assert.equal(result, tmpRoot);

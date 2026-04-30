@@ -2,11 +2,16 @@ import pc from 'picocolors';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { jwebgenScriptsDir } from '../project/jwebgenLayout.js';
 
 export function findProjectRoot(startDir = process.cwd()) {
   let dir = path.resolve(startDir);
   while (true) {
-    if (existsSync(path.join(dir, 'pom.xml')) && existsSync(path.join(dir, 'scripts'))) return dir;
+    if (
+      existsSync(path.join(dir, 'pom.xml')) &&
+      existsSync(path.join(jwebgenScriptsDir(dir), 'watch.sh'))
+    )
+      return dir;
     const parent = path.dirname(dir);
     if (parent === dir) return null;
     dir = parent;
@@ -26,7 +31,7 @@ export function parseCliOptions(args = []) {
 }
 
 export function detectServerTargetFromProject(projectRoot) {
-  const devPath = path.join(projectRoot, 'scripts', 'dev.sh');
+  const devPath = path.join(jwebgenScriptsDir(projectRoot), 'dev.sh');
   if (!existsSync(devPath)) return 'tomcat';
   try {
     const raw = spawnSync(

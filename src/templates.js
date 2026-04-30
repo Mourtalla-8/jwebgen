@@ -265,14 +265,14 @@ export function readmeMd({
 }) {
   const deployHelp =
     serverTarget === 'tomcat'
-      ? `- Tomcat : déploiement via \`./scripts/deploy.sh\` (WAR ou explosé selon mode dev)`
+      ? `- Tomcat : déploiement via \`./.jwebgen/scripts/deploy.sh\` (WAR ou explosé selon mode dev)`
       : serverTarget === 'wildfly'
-        ? `- WildFly : déploiement via \`./scripts/deploy.sh\` (copie dans deployments + .dodeploy)`
+        ? `- WildFly : déploiement via \`./.jwebgen/scripts/deploy.sh\` (copie dans deployments + .dodeploy)`
         : `- Serveur non reconnu : vérifie la configuration du projet.`;
 
   return `# ${mdInline(projectName)}
 
-Projet généré par jwebgen.
+Projet généré par jwebgen (documentation outillage dans \`.jwebgen/\`).
 Ce générateur cible uniquement la stack Jakarta (Servlet API 6+).
 
 ## Informations
@@ -297,7 +297,7 @@ mvn clean package
 ${deployHelp}
 
 ## Mode dev
-- \`./scripts/dev.sh\` lance watch/build/deploy + LiveReload WebSocket.
+- \`./.jwebgen/scripts/dev.sh\` lance watch/build/deploy + LiveReload WebSocket.
 - Si le serveur cible est down, un prompt interactif propose \`Retry / Aide / Quit\` avec diagnostics.
 - Scripts de déploiement/dev orientés Linux (systemd) en priorité; hors Linux, adapter manuellement l'environnement serveur.
 `;
@@ -308,5 +308,13 @@ export function gitignore() {
 .vscode/
 .idea/
 *.iml
+
+# jwebgen — fichiers de session / générés en mode dev (pas les scripts versionnés)
+.jwebgen/.jwebgen-dev-state.json
+.jwebgen/.jwebgen-dev-events.jsonl
+.jwebgen/.jwebgen-ui-pause
+.jwebgen/.jwebgen-worker.mjs
+.jwebgen/.jwebgen-dashboard.mjs
+.jwebgen/.jwebgen-dev.pid
 `;
 }

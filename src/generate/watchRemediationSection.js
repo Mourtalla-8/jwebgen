@@ -37,7 +37,7 @@ owner_systemd_unit_from_pid() {
 
 persist_dev_http_port_if_possible() {
   local new_port="$1"
-  local cfg="$ROOT_DIR/.jwebgenrc"
+  local cfg="$ROOT_DIR/.jwebgen/.jwebgenrc"
   if [[ ! -f "$cfg" ]]; then
     return 1
   fi
@@ -711,8 +711,8 @@ cleanup() {
   CLEANUP_DONE=1
   resume_ui
   stop_all
-  if [[ -x "$ROOT_DIR/scripts/deploy.sh" ]]; then
-    if ! "$ROOT_DIR/scripts/deploy.sh" --cleanup-dev >/dev/null 2>&1; then
+  if [[ -x "$ROOT_DIR/.jwebgen/scripts/deploy.sh" ]]; then
+    if ! "$ROOT_DIR/.jwebgen/scripts/deploy.sh" --cleanup-dev >/dev/null 2>&1; then
       ui_warn "Nettoyage auto du déploiement échoué (non bloquant)."
     fi
   fi

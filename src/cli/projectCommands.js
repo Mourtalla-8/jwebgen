@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { rm, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { execa } from 'execa';
+import { jwebgenConfigPath, jwebgenMetaDir, jwebgenScriptsDir } from '../project/jwebgenLayout.js';
 
 export async function runClean({ findProjectRoot }) {
   const projectRoot = findProjectRoot();
@@ -33,7 +34,7 @@ export async function showStatus({ findProjectRoot }) {
   console.log(pc.cyan(`Racine : ${projectRoot}`));
 
   let serverTarget = '';
-  const cfgPath = path.join(projectRoot, '.jwebgenrc');
+  const cfgPath = jwebgenConfigPath(projectRoot);
   if (existsSync(cfgPath)) {
     try {
       const raw = await readFile(cfgPath, 'utf8');
@@ -126,24 +127,25 @@ export async function runMigrate({
     process.exit(1);
   }
 
-  await mkdir(path.join(projectRoot, 'scripts'), { recursive: true });
+  const scriptsDir = jwebgenScriptsDir(projectRoot);
+  await mkdir(scriptsDir, { recursive: true });
   const appName = path.basename(projectRoot);
   const serverTarget = detectServerTargetFromProject(projectRoot);
 
-  await writeFileSafe(path.join(projectRoot, 'scripts/build.sh'), makeBuildScript());
-  await writeFileSafe(path.join(projectRoot, 'scripts/deploy.sh'), makeDeploySelectorScript());
+  await writeFileSafe(path.join(scriptsDir, 'build.sh'), makeBuildScript());
+  await writeFileSafe(path.join(scriptsDir, 'deploy.sh'), makeDeploySelectorScript());
   await writeFileSafe(
-    path.join(projectRoot, 'scripts/deploy-tomcat.sh'),
+    path.join(scriptsDir, 'deploy-tomcat.sh'),
     makeDeployServerScript({ appName, serverTarget: 'tomcat' })
   );
   await writeFileSafe(
-    path.join(projectRoot, 'scripts/deploy-wildfly.sh'),
+    path.join(scriptsDir, 'deploy-wildfly.sh'),
     makeDeployServerScript({ appName, serverTarget: 'wildfly' })
   );
-  await writeFileSafe(path.join(projectRoot, 'scripts/dev.sh'), makeDevScript({ serverTarget }));
-  await writeFileSafe(path.join(projectRoot, 'scripts/watch.sh'), makeWatchScript());
+  await writeFileSafe(path.join(scriptsDir, 'dev.sh'), makeDevScript({ serverTarget }));
+  await writeFileSafe(path.join(scriptsDir, 'watch.sh'), makeWatchScript());
   const basePackage = await inferBasePackage(projectRoot, appName);
-  await writeFileSafe(path.join(projectRoot, 'scripts/add-servlet.sh'), makeAddServletScript({ basePackage }));
+  await writeFileSafe(path.join(scriptsDir, 'add-servlet.sh'), makeAddServletScript({ basePackage }));
   await writeProjectConfigServerTarget(projectRoot, serverTarget);
 
   const reservedScriptNames = new Set([
@@ -152,17 +154,17 @@ export async function runMigrate({
     'deploy-wildfly.sh'
   ]);
   if (!reservedScriptNames.has(String(legacyDeployScript || ''))) {
-    const legacyDeployPath = path.join(projectRoot, 'scripts', legacyDeployScript);
+    const legacyDeployPath = path.join(scriptsDir, legacyDeployScript);
     if (existsSync(legacyDeployPath)) await rm(legacyDeployPath, { force: true });
   }
 
-  await makeExecutable(path.join(projectRoot, 'scripts/build.sh'));
-  await makeExecutable(path.join(projectRoot, 'scripts/deploy.sh'));
-  await makeExecutable(path.join(projectRoot, 'scripts/deploy-tomcat.sh'));
-  await makeExecutable(path.join(projectRoot, 'scripts/deploy-wildfly.sh'));
-  await makeExecutable(path.join(projectRoot, 'scripts/dev.sh'));
-  await makeExecutable(path.join(projectRoot, 'scripts/watch.sh'));
-  await makeExecutable(path.join(projectRoot, 'scripts/add-servlet.sh'));
+  await makeExecutable(path.join(scriptsDir, 'build.sh'));
+  await makeExecutable(path.join(scriptsDir, 'deploy.sh'));
+  await makeExecutable(path.join(scriptsDir, 'deploy-tomcat.sh'));
+  await makeExecutable(path.join(scriptsDir, 'deploy-wildfly.sh'));
+  await makeExecutable(path.join(scriptsDir, 'dev.sh'));
+  await makeExecutable(path.join(scriptsDir, 'watch.sh'));
+  await makeExecutable(path.join(scriptsDir, 'add-servlet.sh'));
 
   console.log(pc.green('Migration terminée: scripts régénérés au format courant.'));
   console.log(pc.cyan('Tu peux relancer: jwebgen --dev'));
@@ -193,7 +195,8 @@ async function inferBasePackage(projectRoot, appName) {
 }
 
 async function writeProjectConfigServerTarget(projectRoot, detectedTarget) {
-  const cfgPath = path.join(projectRoot, '.jwebgenrc');
+  await mkdir(jwebgenMetaDir(projectRoot), { recursive: true });
+  const cfgPath = jwebgenConfigPath(projectRoot);
   let raw = '';
   if (existsSync(cfgPath)) {
     try {

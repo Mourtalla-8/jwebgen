@@ -4,6 +4,13 @@ All notable changes to this project should be documented in this file.
 
 This project follows Semantic Versioning.
 
+## [2.1.0] - 2026-04-30
+
+### Changed (generated projects)
+
+- **Layout:** Maven project root contains only standard WAR app files (`src/`, `pom.xml`, optional `.gitignore`, and `target/` after a build). Everything jwebgen-specific (shell scripts, generated `README.md` / `DEV.md`, `.jwebgenrc`, dev session files) lives under **`.jwebgen/`** — scripts in `.jwebgen/scripts/`, server config in `.jwebgen/.jwebgenrc`.
+- **CLI detection:** `findProjectRoot` requires `pom.xml` and `.jwebgen/scripts/watch.sh`. Projects that still keep `scripts/` at the repository root are no longer picked up as jwebgen projects.
+
 ## [2.0.0] - 2026-04-30
 
 ### Breaking

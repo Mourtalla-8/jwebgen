@@ -4,6 +4,7 @@ import path from 'node:path';
 import { cp, mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { execa } from 'execa';
+import { jwebgenScriptsDir } from '../project/jwebgenLayout.js';
 
 export async function runCreateCommand(deps) {
   const {
@@ -198,9 +199,10 @@ export async function runCreateCommand(deps) {
 
   try {
     const pkgPath = packageToPath(basePackage);
+    const scriptsDir = jwebgenScriptsDir(workDir);
     await mkdir(path.join(workDir, 'src/main/java', pkgPath), { recursive: true });
     await mkdir(path.join(workDir, 'src/main/webapp/WEB-INF'), { recursive: true });
-    await mkdir(path.join(workDir, 'scripts'), { recursive: true });
+    await mkdir(scriptsDir, { recursive: true });
 
     await writeFileSafe(
       path.join(workDir, 'pom.xml'),
@@ -224,7 +226,7 @@ export async function runCreateCommand(deps) {
     if (addGitignore) await writeFileSafe(path.join(workDir, '.gitignore'), gitignore());
 
     await writeFileSafe(
-      path.join(workDir, 'README.md'),
+      path.join(workDir, '.jwebgen', 'README.md'),
       readmeMd({
         projectName,
         artifactId,
@@ -240,32 +242,32 @@ export async function runCreateCommand(deps) {
         contextPath: deployedAppName
       })
     );
-    await writeFileSafe(path.join(workDir, 'DEV.md'), makeDevMd({ appName: deployedAppName, serverTarget: serverTarget || 'unset' }));
-    await writeFileSafe(path.join(workDir, 'scripts/build.sh'), makeBuildScript());
-    await writeFileSafe(path.join(workDir, 'scripts/deploy.sh'), makeDeploySelectorScript());
+    await writeFileSafe(path.join(workDir, '.jwebgen', 'DEV.md'), makeDevMd({ appName: deployedAppName, serverTarget: serverTarget || 'unset' }));
+    await writeFileSafe(path.join(scriptsDir, 'build.sh'), makeBuildScript());
+    await writeFileSafe(path.join(scriptsDir, 'deploy.sh'), makeDeploySelectorScript());
     await writeFileSafe(
-      path.join(workDir, 'scripts/deploy-tomcat.sh'),
+      path.join(scriptsDir, 'deploy-tomcat.sh'),
       makeDeployServerScript({ appName: deployedAppName, serverTarget: 'tomcat' })
     );
     await writeFileSafe(
-      path.join(workDir, 'scripts/deploy-wildfly.sh'),
+      path.join(scriptsDir, 'deploy-wildfly.sh'),
       makeDeployServerScript({ appName: deployedAppName, serverTarget: 'wildfly' })
     );
-    await writeFileSafe(path.join(workDir, 'scripts/dev.sh'), makeDevScript({ serverTarget }));
-    await writeFileSafe(path.join(workDir, 'scripts/watch.sh'), makeWatchScript());
-    if (addServlet) await writeFileSafe(path.join(workDir, 'scripts/add-servlet.sh'), makeAddServletScript({ basePackage }));
+    await writeFileSafe(path.join(scriptsDir, 'dev.sh'), makeDevScript({ serverTarget }));
+    await writeFileSafe(path.join(scriptsDir, 'watch.sh'), makeWatchScript());
+    if (addServlet) await writeFileSafe(path.join(scriptsDir, 'add-servlet.sh'), makeAddServletScript({ basePackage }));
     if (serverTarget === 'tomcat' || serverTarget === 'wildfly') {
-      await writeFileSafe(path.join(workDir, '.jwebgenrc'), `export JWEBGEN_SERVER_TARGET="${serverTarget}"\n`);
+      await writeFileSafe(path.join(workDir, '.jwebgen', '.jwebgenrc'), `export JWEBGEN_SERVER_TARGET="${serverTarget}"\n`);
     }
 
     const scriptFiles = [
-      'scripts/build.sh',
-      'scripts/deploy.sh',
-      'scripts/deploy-tomcat.sh',
-      'scripts/deploy-wildfly.sh',
-      'scripts/dev.sh',
-      'scripts/watch.sh',
-      addServlet ? 'scripts/add-servlet.sh' : null
+      '.jwebgen/scripts/build.sh',
+      '.jwebgen/scripts/deploy.sh',
+      '.jwebgen/scripts/deploy-tomcat.sh',
+      '.jwebgen/scripts/deploy-wildfly.sh',
+      '.jwebgen/scripts/dev.sh',
+      '.jwebgen/scripts/watch.sh',
+      addServlet ? '.jwebgen/scripts/add-servlet.sh' : null
     ].filter(Boolean);
     for (const relativePath of scriptFiles) await makeExecutable(path.join(workDir, relativePath));
     await mkdir(path.dirname(targetDir), { recursive: true });
@@ -301,10 +303,10 @@ export async function runCreateCommand(deps) {
   }
 
   console.log(pc.cyan('\nDéveloppement rapide :'));
-  console.log(pc.cyan('- ./scripts/build.sh'));
-  console.log(pc.cyan('- ./scripts/deploy.sh'));
-  console.log(pc.cyan('- ./scripts/dev.sh'));
-  console.log(pc.cyan('- ./scripts/watch.sh'));
+  console.log(pc.cyan('- ./.jwebgen/scripts/build.sh'));
+  console.log(pc.cyan('- ./.jwebgen/scripts/deploy.sh'));
+  console.log(pc.cyan('- ./.jwebgen/scripts/dev.sh'));
+  console.log(pc.cyan('- ./.jwebgen/scripts/watch.sh'));
   if (addServlet) console.log(pc.cyan('- jwebgen --servlet HelloServlet'));
   outro(pc.cyan('Terminé.'));
 }

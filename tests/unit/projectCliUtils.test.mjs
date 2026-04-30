@@ -19,7 +19,7 @@ test('detectServerTargetFromProject defaults to tomcat without dev script', () =
 test('detectServerTargetFromProject reads wildfly export from scripts/dev.sh', async () => {
   const tmpRoot = await mkdtemp(path.join(os.tmpdir(), 'jwebgen-cliutils-'));
   try {
-    const scriptsDir = path.join(tmpRoot, 'scripts');
+    const scriptsDir = path.join(tmpRoot, '.jwebgen', 'scripts');
     await mkdir(scriptsDir, { recursive: true });
     await writeFile(path.join(scriptsDir, 'dev.sh'), 'export JWEBGEN_SERVER_TARGET="wildfly"\n', 'utf8');
     const target = detectServerTargetFromProject(tmpRoot);

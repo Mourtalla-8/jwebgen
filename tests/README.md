@@ -16,9 +16,9 @@ Ce dossier contient le harness interne de validation du générateur, indépenda
 - `tests/fixtures-current/wildfly/`
 
 Chaque fixture contient au minimum:
-- `DEV.md`
-- `scripts/build.sh`
-- `scripts/deploy.sh`
-- `scripts/dev.sh`
-- `scripts/watch.sh`
+- `.jwebgen/DEV.md`
+- `.jwebgen/scripts/build.sh`
+- `.jwebgen/scripts/deploy.sh`
+- `.jwebgen/scripts/dev.sh`
+- `.jwebgen/scripts/watch.sh`
 

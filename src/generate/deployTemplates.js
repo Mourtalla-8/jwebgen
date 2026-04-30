@@ -20,7 +20,7 @@ NC='\\033[0m' # No Color
 
 APP_NAME=${shellQuote(appName)}
 SCRIPT_DIR="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TOMCAT_DIR="\${TOMCAT10:-}"
 if [[ -z "$TOMCAT_DIR" ]]; then
   for d in /var/lib/tomcat10 /var/lib/tomcat; do
@@ -200,7 +200,7 @@ fi
 
 APP_NAME=${shellQuote(appName)}
 SCRIPT_DIR="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 WAR_FILE=""
 if [[ -d "$ROOT_DIR/target" ]]; then
@@ -225,7 +225,7 @@ run_privileged() {
 }
 
 if [[ "$CLEANUP_DEV_MODE" = "0" && ( -z "$WAR_FILE" || ! -f "$WAR_FILE" ) ]]; then
-  echo "Aucun fichier WAR trouvé. Lance d'abord ./scripts/build.sh"
+  echo "Aucun fichier WAR trouvé. Lance d'abord ./.jwebgen/scripts/build.sh"
   echo "__JWEBGEN_EVENT__ deploy_error" >&2
   exit 1
 fi

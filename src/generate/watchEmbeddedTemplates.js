@@ -210,7 +210,7 @@ function walkAndWatch(dir) {
   let entries = [];
   try { entries = readdirSync(dir); } catch { return; }
   for (const name of entries) {
-    if (name === 'node_modules' || name === '.git' || name === 'target') continue;
+    if (name === 'node_modules' || name === '.git' || name === 'target' || name === '.jwebgen') continue;
     const full = path.join(dir, name);
     if (isDir(full)) walkAndWatch(full);
   }
@@ -218,7 +218,7 @@ function walkAndWatch(dir) {
 
 function runScript(script) {
   return new Promise((resolve, reject) => {
-    const p = spawn('./scripts/' + script, [], { cwd: root, stdio: verbose ? 'inherit' : ['ignore', 'pipe', 'pipe'], shell: false });
+    const p = spawn('./.jwebgen/scripts/' + script, [], { cwd: root, stdio: verbose ? 'inherit' : ['ignore', 'pipe', 'pipe'], shell: false });
     let logs = '';
     if (!verbose) {
       p.stdout?.on('data', (c) => { logs += String(c); if (logs.length > 20000) logs = logs.slice(-20000); });
