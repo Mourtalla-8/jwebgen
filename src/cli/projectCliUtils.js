@@ -68,6 +68,9 @@ Options:
 --clean
   Remove target/ in current project.
 
+--clean --deploy
+  Clean deployed app from server for current project only.
+
 --migrate, -m
   Upgrade a legacy jwebgen project.
 

@@ -32,6 +32,13 @@ test('parseFlags keeps server target unset when omitted', () => {
   assert.equal(parsed.flags.server, null);
 });
 
+test('parseFlags supports clean deploy combo as single action', () => {
+  const parsed = parseFlags(['--clean', '--deploy']);
+  assert.equal(parsed.flags.cleanDeploy, true);
+  assert.equal(parsed.action, 'clean');
+  assert.equal(parsed.actionCount, 1);
+});
+
 test('isLikelyLegacySubcommand detects old subcommand tokens', () => {
   assert.equal(isLikelyLegacySubcommand('dev'), true);
   assert.equal(isLikelyLegacySubcommand('--dev'), false);

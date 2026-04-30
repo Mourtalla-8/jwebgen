@@ -60,6 +60,14 @@ case_wildfly_down() {
   assert_output_contains "WildFly indisponible au lancement" /tmp/jwebgen_case_out
 }
 
+case_clean_deploy_flag_combo() {
+  bash -lc "cd \"$FIXTURE_TOMCAT\" && node \"$ROOT_DIR/bin/jwebgen.js\" --clean --deploy" >/tmp/jwebgen_case_out 2>&1 || true
+  if assert_output_contains "Une seule action principale est autorisée" /tmp/jwebgen_case_out; then
+    return 1
+  fi
+  return 0
+}
+
 chmod +x "$SHIMS_DIR/"{systemctl,curl,ss} 2>/dev/null || true
 chmod +x "$ROOT_DIR/tests/integration/template-asserts.sh" 2>/dev/null || true
 
@@ -67,6 +75,7 @@ run_case "tomcat_down_noninteractive" case_tomcat_down_noninteractive
 run_case "tomcat_engine_up_app_down" case_tomcat_engine_up_app_down
 run_case "http_port_conflict" case_http_port_conflict
 run_case "wildfly_down" case_wildfly_down
+run_case "clean_deploy_flag_combo" case_clean_deploy_flag_combo
 run_case "template_asserts" "$ROOT_DIR/tests/integration/template-asserts.sh"
 
 echo "Integration matrix: OK"

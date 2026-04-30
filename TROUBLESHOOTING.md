@@ -48,6 +48,12 @@ No global setup alternative:
   - `sudo -v`
 - Retry deployment.
 
+## Need to remove deployed app for current project
+
+- Manual cleanup from project root:
+  - `jwebgen --clean --deploy`
+- Auto cleanup also runs when leaving `jwebgen --dev` (best effort).
+
 ## Port already in use (`8080`, `9990`, live reload ports)
 
 - Check process owners:

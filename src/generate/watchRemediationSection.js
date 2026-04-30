@@ -700,7 +700,9 @@ cleanup() {
   resume_ui
   stop_all
   if [[ -x "$ROOT_DIR/scripts/deploy.sh" ]]; then
-    "$ROOT_DIR/scripts/deploy.sh" --cleanup-dev >/dev/null 2>&1 || true
+    if ! "$ROOT_DIR/scripts/deploy.sh" --cleanup-dev >/dev/null 2>&1; then
+      ui_warn "Nettoyage auto du déploiement échoué (non bloquant)."
+    fi
   fi
   if [[ "\${JWEBGEN_KEEP_DEV_FILES:-0}" != "1" ]]; then
     rm -f "$WORKER_SCRIPT" "$DASHBOARD_SCRIPT" "$STATE_FILE" "$EVENTS_FILE" "$UI_PAUSE_FILE" "$DEV_PID_FILE" 2>/dev/null || true

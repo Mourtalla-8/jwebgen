@@ -58,7 +58,10 @@ Inside generated project:
 ./scripts/build.sh
 ./scripts/deploy.sh
 ./scripts/dev.sh
+jwebgen --clean --deploy
 ```
+
+`jwebgen --dev` now auto-cleans the deployed app for the current project when dev stops.
 
 ## Supported usage model
 

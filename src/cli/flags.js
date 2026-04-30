@@ -25,6 +25,7 @@ export function parseFlags(argv = []) {
     build: false,
     deploy: false,
     clean: false,
+    cleanDeploy: false,
     migrate: false,
     servlet: false,
     create: false,
@@ -116,10 +117,18 @@ export function parseFlags(argv = []) {
     flags.create ? 'create' : null
   ].filter(Boolean);
 
+  if (flags.clean && flags.deploy) {
+    flags.cleanDeploy = true;
+  }
+
+  const effectiveActions = flags.cleanDeploy
+    ? actions.filter((a) => a !== 'deploy')
+    : actions;
+
   return {
     flags,
-    action: actions[0] || null,
-    actionCount: actions.length,
+    action: effectiveActions[0] || null,
+    actionCount: effectiveActions.length,
     unknown
   };
 }
@@ -150,6 +159,9 @@ Options:
 
 --clean
   Remove target/ in current project.
+
+--clean --deploy
+  Clean deployed app from server for current project only.
 
 --migrate, -m
   Upgrade a legacy jwebgen project.

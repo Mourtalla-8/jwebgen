@@ -255,7 +255,12 @@ async function runCli() {
   }
 
   if (action === 'status') return await showStatus();
-  if (action === 'clean') return await runClean();
+  if (action === 'clean') {
+    if (flags.cleanDeploy) {
+      return await runProjectScript('deploy.sh', ['--cleanup-dev']);
+    }
+    return await runClean();
+  }
   if (action === 'migrate') return await runMigrate();
   if (action === 'build') return await runProjectScript('build.sh', flags.args);
   if (action === 'deploy') {
