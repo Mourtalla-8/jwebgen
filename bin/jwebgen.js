@@ -48,14 +48,13 @@ import {
   makeDevScript as makeDevScriptImpl,
   makeWatchScript as makeWatchScriptImpl
 } from '../src/generate/scriptTemplates.js';
-import { dispatchCommand } from '../src/cli/dispatch.js';
+import { parseFlags, formatFlagsHelp, isLikelyLegacySubcommand } from '../src/cli/flags.js';
 import { detectLegacyProjectIssues as detectLegacyProjectIssuesModule } from '../src/project/legacyDetection.js';
 import {
   findProjectRoot as findProjectRootImpl,
   parseCliOptions as parseCliOptionsImpl,
   detectServerTargetFromProject as detectServerTargetFromProjectImpl,
-  showHelp as showHelpImpl,
-  printUnknownCommandAndExit
+  showHelp as showHelpImpl
 } from '../src/cli/projectCliUtils.js';
 import {
   runClean as runCleanImpl,
@@ -167,21 +166,67 @@ async function runMigrate() {
 }
 
 function showHelp() {
-  return showHelpImpl();
+  // Keep CLI help source centralized in flags formatting.
+  console.log(formatFlagsHelp({ appName: APP_NAME }));
 }
 
 async function runCli() {
-  const [, , command, ...args] = process.argv;
-  return await dispatchCommand(command, args, {
-    main,
-    showHelp,
-    parseCliOptions: parseCliOptionsImpl,
-    runProjectScript,
-    runMigrate,
-    runClean,
-    showStatus,
-    onUnknown: (unknown) => printUnknownCommandAndExit(unknown)
-  });
+  const [, , ...argv] = process.argv;
+  if (argv.length === 0) {
+    showHelp();
+    return;
+  }
+
+  if (isLikelyLegacySubcommand(argv[0])) {
+    console.log(pc.yellow('Ancien format de commande détecté (subcommands).'));
+    console.log(pc.yellow('Le nouveau CLI est flags-only. Exemple:'));
+    console.log(pc.cyan('  jwebgen --dev'));
+    console.log(pc.cyan('  jwebgen --new mon-webapp'));
+    console.log('');
+    showHelp();
+    process.exit(1);
+  }
+
+  const parsed = parseFlags(argv);
+  if (parsed.unknown.length > 0) {
+    console.log(pc.yellow(`Option inconnue: ${parsed.unknown.join(' ')}`));
+    showHelp();
+    process.exit(1);
+  }
+  if (parsed.actionCount > 1) {
+    console.log(pc.yellow('Une seule action principale est autorisée à la fois.'));
+    showHelp();
+    process.exit(1);
+  }
+
+  const { flags, action } = parsed;
+  if (flags.help || !action) {
+    showHelp();
+    return;
+  }
+
+  if (action === 'status') return await showStatus();
+  if (action === 'clean') return await runClean();
+  if (action === 'migrate') return await runMigrate();
+  if (action === 'build') return await runProjectScript('build.sh', flags.args);
+  if (action === 'deploy') return await runProjectScript('deploy.sh', flags.args);
+  if (action === 'dev') {
+    return await runProjectScript('dev.sh', flags.args, { verbose: flags.verbose });
+  }
+  if (action === 'servlet') {
+    if (flags.args.length === 0) {
+      console.log(pc.yellow('Usage: jwebgen --servlet <Name>'));
+      process.exit(1);
+    }
+    return await runProjectScript('add-servlet.sh', flags.args);
+  }
+  if (action === 'create') {
+    // Phase 2 will add --yes + non-interactive create path.
+    // For now: always interactive.
+    return await main();
+  }
+
+  showHelp();
 }
 
 runCli().catch((error) => {

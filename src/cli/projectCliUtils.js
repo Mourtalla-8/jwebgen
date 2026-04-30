@@ -43,22 +43,46 @@ export function detectServerTargetFromProject(projectRoot) {
 
 export function showHelp() {
   console.log(`
-Usage: jwebgen [commande] [args]
-
-Commandes:
-  create          Crée un nouveau projet interactif (par défaut)
-  dev             Démarre le mode dev en boucle dans le projet courant
-  build           Lance ./scripts/build.sh dans le projet courant
-  deploy          Lance ./scripts/deploy.sh dans le projet courant
-  migrate         Met à niveau un projet jwebgen legacy
-  watch           Lance ./scripts/watch.sh dans le projet courant
-  servlet         Lance ./scripts/add-servlet.sh [NomClasse]
-  clean           Nettoie le dossier target/
-  status          Affiche le statut du projet et de Tomcat
-  help            Affiche cette aide
+Usage: jwebgen [option]
 
 Options:
-  --verbose, -v   Active les logs détaillés (Maven + scripts)
+
+--help, -h
+  This help message.
+
+--status
+  Show project status.
+
+--dev
+  Start dev loop in current project.
+
+--watch
+  Alias for --dev.
+
+--build
+  Run project build script.
+
+--deploy
+  Run project deploy script.
+
+--clean
+  Remove target/ in current project.
+
+--migrate, -m
+  Upgrade a legacy jwebgen project.
+
+--servlet <Name>
+  Create a servlet (class name auto-normalized).
+
+--new, -n <projectName>
+--create, -c <projectName>
+  Create a new project (interactive by default).
+
+--yes, -y
+  Non-interactive mode for project creation (requires <projectName>).
+
+--tomcat, -t / --wildfly, -w
+  Choose server target.
 `);
 }
 
