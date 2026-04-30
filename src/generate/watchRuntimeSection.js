@@ -33,14 +33,18 @@ detect_server_state() {
       return 0
     fi
     if is_port_busy "$DEV_HTTP_PORT"; then
-      DETECT_CONFLICT_PORT="$DEV_HTTP_PORT"
       owner_line="$(port_owner_summary "$DEV_HTTP_PORT" || true)"
-      DETECT_OWNER="$owner_line"
-      DETECT_OWNER_PID="$(extract_pid_from_owner "$owner_line")"
       if [[ "$management_ok" = "1" ]]; then
+        # When Tomcat is active, HTTP 404/other app status is usually a deploy/context issue,
+        # not a port-conflict remediation scenario.
         DETECT_REASON="Tomcat répond mais l'URL de l'application renvoie HTTP \${app_status:-inconnu}"
         DETECT_ACTION="Vérifie le contexte /$APP_NAME/ (déploiement effectif) et les logs Tomcat."
+        DETECT_OWNER="$owner_line"
+        DETECT_OWNER_PID="$(extract_pid_from_owner "$owner_line")"
       else
+        DETECT_CONFLICT_PORT="$DEV_HTTP_PORT"
+        DETECT_OWNER="$owner_line"
+        DETECT_OWNER_PID="$(extract_pid_from_owner "$owner_line")"
         DETECT_REASON="Port HTTP $DEV_HTTP_PORT déjà occupé par un autre processus"
         DETECT_ACTION="Libère ce port ou stoppe le process occupant."
       fi
@@ -68,12 +72,21 @@ detect_server_state() {
     return 0
   fi
   if is_port_busy "$DEV_HTTP_PORT"; then
-    DETECT_CONFLICT_PORT="$DEV_HTTP_PORT"
     owner_line="$(port_owner_summary "$DEV_HTTP_PORT" || true)"
-    DETECT_OWNER="$owner_line"
-    DETECT_OWNER_PID="$(extract_pid_from_owner "$owner_line")"
-    DETECT_REASON="Port HTTP $DEV_HTTP_PORT déjà occupé par un autre processus"
-    DETECT_ACTION="Libère ce port ou stoppe le process occupant."
+    if [[ "$management_ok" = "1" ]]; then
+      # Same priority rule as Tomcat: when server engine is already up,
+      # app HTTP failures are handled as deploy/context issues first.
+      DETECT_REASON="WildFly répond mais l'URL de l'application renvoie HTTP \${app_status:-inconnu}"
+      DETECT_ACTION="Vérifie le contexte /$APP_NAME/ et les marqueurs deployments (.deployed/.failed)."
+      DETECT_OWNER="$owner_line"
+      DETECT_OWNER_PID="$(extract_pid_from_owner "$owner_line")"
+    else
+      DETECT_CONFLICT_PORT="$DEV_HTTP_PORT"
+      DETECT_OWNER="$owner_line"
+      DETECT_OWNER_PID="$(extract_pid_from_owner "$owner_line")"
+      DETECT_REASON="Port HTTP $DEV_HTTP_PORT déjà occupé par un autre processus"
+      DETECT_ACTION="Libère ce port ou stoppe le process occupant."
+    fi
     return 0
   fi
   if [[ "$management_ok" = "1" ]]; then
