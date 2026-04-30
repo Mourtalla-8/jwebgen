@@ -1,3 +1,5 @@
+import pc from 'picocolors';
+
 const ACTION_FLAGS = new Set([
   '--help',
   '--status',
@@ -134,51 +136,31 @@ export function parseFlags(argv = []) {
 }
 
 export function formatFlagsHelp({ appName = 'jwebgen' } = {}) {
-  return `
-Usage: ${appName} [option]
-
-Options:
-
---help, -h
-  This help message.
-
---status
-  Show project status.
-
---dev
-  Start dev loop in current project.
-
---watch
-  Alias for --dev.
-
---build
-  Run project build script.
-
---deploy
-  Run project deploy script.
-
---clean
-  Remove target/ in current project.
-
---clean --deploy
-  Clean deployed app from server for current project only.
-
---migrate, -m
-  Upgrade a legacy jwebgen project.
-
---servlet <Name>
-  Create a servlet (class name auto-normalized).
-
---new, -n <projectName>
---create, -c <projectName>
-  Create a new project (interactive by default).
-
---yes, -y
-  Non-interactive mode for project creation (requires <projectName>).
-
---tomcat, -t / --wildfly, -w
-  Choose server target (used during creation; and later in dev/deploy flows).
-`.trim();
+  const title = pc.bold(pc.cyan(`${appName} - Java Web CLI`));
+  const usage = `${pc.bold('Usage:')} ${appName} [option]`;
+  const cmd = (s) => pc.green(s.padEnd(33, ' '));
+  const desc = (s) => pc.white(s);
+  const section = (name) => `\n${pc.bold(pc.yellow(name))}`;
+  return [
+    title,
+    usage,
+    section('Main Commands'),
+    `  ${cmd('--help, -h')}${desc('Show this help message.')}`,
+    `  ${cmd('--status')}${desc('Show project status.')}`,
+    `  ${cmd('--dev')}${desc('Start dev loop in current project.')}`,
+    `  ${cmd('--watch')}${desc('Alias for --dev.')}`,
+    `  ${cmd('--build')}${desc('Run project build script.')}`,
+    `  ${cmd('--deploy')}${desc('Run project deploy script.')}`,
+    `  ${cmd('--clean')}${desc('Remove target/ in current project.')}`,
+    `  ${cmd('--clean --deploy')}${desc('Clean deployed app on selected server (current project only).')}`,
+    `  ${cmd('--migrate, -m')}${desc('Upgrade a legacy jwebgen project.')}`,
+    `  ${cmd('--servlet <Name>')}${desc('Create a servlet (class name auto-normalized).')}`,
+    section('Project Creation'),
+    `  ${cmd('--new, -n <projectName>')}${desc('Create a new project (interactive by default).')}`,
+    `  ${cmd('--create, -c <projectName>')}${desc('Alias for --new.')}`,
+    `  ${cmd('--yes, -y')}${desc('Non-interactive create mode (requires <projectName>).')}`,
+    `  ${cmd('--tomcat, -t / --wildfly, -w')}${desc('Choose server target for create/dev/deploy flows.')}`
+  ].join('\n');
 }
 
 export function isLikelyLegacySubcommand(token) {

@@ -312,13 +312,15 @@ function render() {
   const live = s.live?.startsWith('ready') ? color('0;34', s.live) : color('0;31', s.live ?? 'error');
   const url = color('0;32', s.url ?? '');
   const probe = color('2;37', s.serverCheckUrl ?? '');
-  const controls = color('2;37', 'cmd: [f] refresh');
+  const label = (k) => color('2;37', String(k).padEnd(8, ' '));
+  const kv = (k, v) => label(k) + ': ' + v;
+  const controls = color('2;37', '[f] refresh');
   const out = color('1;36', 'jwebgen --dev') + '  ' + phase + '\\n'
-    + '  build: ' + build + '   deploy: ' + deploy + '\\n'
-    + '  server: ' + server + '   app: ' + app + '   live: ' + live + '\\n'
-    + '  url: ' + url + '\\n'
-    + '  probe: ' + probe + '\\n'
-    + '  ' + controls;
+    + '  ' + kv('build', build) + '   ' + kv('deploy', deploy) + '\\n'
+    + '  ' + kv('server', server) + '   ' + kv('app', app) + '   ' + kv('live', live) + '\\n'
+    + '  ' + kv('url', url) + '\\n'
+    + '  ' + kv('probe', probe) + '\\n'
+    + '  ' + kv('cmd', controls);
   process.stderr.write('\\x1b[?1l\\x1b[?1049h\\x1b[?25l\\x1b[H\\x1b[2J' + out + '\\n');
 }
 process.on('exit', () => { process.stderr.write('\\x1b[?1l\\x1b[?25h\\x1b[?1049l'); });
