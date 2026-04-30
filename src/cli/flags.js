@@ -159,7 +159,11 @@ export function formatFlagsHelp({ appName = 'jwebgen' } = {}) {
     `  ${cmd('--new, -n <projectName>')}${desc('Create a new project (interactive by default).')}`,
     `  ${cmd('--create, -c <projectName>')}${desc('Alias for --new.')}`,
     `  ${cmd('--yes, -y')}${desc('Non-interactive create mode (requires <projectName>).')}`,
-    `  ${cmd('--tomcat, -t / --wildfly, -w')}${desc('Choose server target for create/dev/deploy flows.')}`
+    `  ${cmd('--tomcat, -t / --wildfly, -w')}${desc('Choose server target for create/dev/deploy flows.')}`,
+    section('Dev Note'),
+    `  ${desc('If multiple servers/services listen on port 8080 on the same machine,')}`,
+    `  ${desc('dev/deploy can fail with port conflicts. Keep only one HTTP server active')}`,
+    `  ${desc('or set another app port with JWEBGEN_HTTP_PORT.')}`
   ].join('\n');
 }
 

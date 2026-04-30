@@ -56,8 +56,12 @@ No global setup alternative:
 
 ## Port already in use (`8080`, `9990`, live reload ports)
 
+- Typical case:
+  - Tomcat + WildFly + another local HTTP service are active on the same machine.
+  - More than one service tries to bind `:8080`.
 - Check process owners:
   - `ss -lntp`
+- Keep only one HTTP server active on `8080` for the current project.
 - In `jwebgen --dev`, remediation now supports:
   - stopping the respawning systemd service that reclaims the port
   - validated HTTP port fallback (auto tries 8081..8090 and keeps it only if server/app become reachable)

@@ -69,6 +69,15 @@ jwebgen --clean --deploy
 - Generated `build.sh`: requires Java + Maven.
 - Generated `dev.sh` and `watch.sh`: require Node and target app server tooling.
 
+## Port conflicts on the same machine
+
+If Tomcat, WildFly, or another HTTP service is active on port `8080` at the same time, dev/deploy can fail.
+
+- Keep only one HTTP server active on `8080` for the current project.
+- Or run with another app port:
+  - `JWEBGEN_HTTP_PORT=8081 jwebgen --dev`
+- Use `jwebgen --status` to confirm the selected target server before starting dev.
+
 ## Migration (v2 flags-only CLI)
 
 - `jwebgen --dev` (or `--watch`)
