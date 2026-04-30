@@ -215,14 +215,14 @@ show_server_help() {
   if [[ -n "$DETECT_CONFLICT_PORT" ]]; then
     if [[ "$DETECT_REASON" =~ (non\ actif|arrêté|inactif|non\ détecté) ]]; then
       if [[ -n "$DETECT_OWNER_PID" ]]; then
-        action_hint="[d] démarrer serveur  [k] kill pid $DETECT_OWNER_PID  [s] stop service  [c] change port  [f] refresh  [a] aide  [q] quit"
+        action_hint="[d] démarrer serveur  [i] inspecter  [k] kill pid $DETECT_OWNER_PID  [s] stop service  [f] refresh  [a] aide  [q] quit"
       else
-        action_hint="[d] démarrer serveur  [p] inspecter  [x] kill port  [c] change port  [f] refresh  [a] aide  [q] quit"
+        action_hint="[d] démarrer serveur  [i] inspecter  [x] kill port  [f] refresh  [a] aide  [q] quit"
       fi
     elif [[ -n "$DETECT_OWNER_PID" ]]; then
       action_hint="[k] kill pid $DETECT_OWNER_PID  [s] stop service  [c] change port  [f] refresh  [a] aide  [q] quit"
     else
-      action_hint="[p] inspecter  [x] kill port  [c] change port  [f] refresh  [a] aide  [q] quit"
+      action_hint="[i] inspecter  [x] kill port  [c] change port  [f] refresh  [a] aide  [q] quit"
     fi
     ui_info "Actions auto: $action_hint"
     if [[ -z "$DETECT_OWNER_PID" ]]; then
@@ -241,7 +241,7 @@ show_server_help() {
     fi
   else
     if [[ "$DETECT_REASON" == *"renvoie HTTP"* ]]; then
-      action_hint="[d] redéployer  [i] inspecter  [f] refresh  [a] aide  [q] quit"
+      action_hint="[r] redéployer  [i] inspecter  [f] refresh  [a] aide  [q] quit"
       ui_info "Actions auto: $action_hint"
       ui_info "Contexte app: /$APP_NAME/"
     elif [[ "$SERVER_TARGET" = "wildfly" && "$DETECT_REASON" == *"HTTP 000"* ]]; then

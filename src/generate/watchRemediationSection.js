@@ -172,20 +172,20 @@ prompt_server_remediation() {
           has_pid_conflict=1
           options="[\${primary_key}]\${primary_label} / [k]ill occupant / [s]top service / [f]refresh / [a]ide / [q]uit"
         else
-          options="[\${primary_key}]\${primary_label} / [p]inspecter / [x]kill port / [f]refresh / [a]ide / [q]uit"
+          options="[\${primary_key}]\${primary_label} / [i]inspecter / [x]kill port / [f]refresh / [a]ide / [q]uit"
         fi
       elif [[ -n "$DETECT_OWNER_PID" ]]; then
         has_pid_conflict=1
         options="[k]ill occupant / [s]top service / [c]hange port / [f]refresh / [a]ide / [q]uit"
       else
-        options="[p]inspecter / [x]kill port / [c]hange port / [f]refresh / [a]ide / [q]uit"
+        options="[i]inspecter / [x]kill port / [c]hange port / [f]refresh / [a]ide / [q]uit"
       fi
     elif [[ "$DETECT_REASON" == *"renvoie HTTP"* ]]; then
       app_down_like=1
       if [[ "$wildfly_http000" = "1" ]]; then
-        options="[d]redéployer+redémarrer / [i]inspecter / [f]refresh / [a]ide / [q]uit"
+        options="[r]redéployer+redémarrer / [i]inspecter / [f]refresh / [a]ide / [q]uit"
       else
-        options="[d]redéployer / [i]inspecter / [f]refresh / [a]ide / [q]uit"
+        options="[r]redéployer / [i]inspecter / [f]refresh / [a]ide / [q]uit"
       fi
     fi
     if [[ -n "$DETECT_REASON" && "$DETECT_REASON" != "$last_reason_shown" ]]; then
@@ -268,7 +268,19 @@ prompt_server_remediation() {
           ui_info "Arrêt annulé."
         fi
         ;;
-      [Pp])
+      [Ii])
+        if [[ "$app_down_like" = "1" ]]; then
+          printf "\\nInspection rapide %s:\\n" "$(server_label)" >&$TTY_OUT_FD
+          if [[ "$SERVER_TARGET" = "wildfly" ]]; then
+            ui_info "Vérifie: ls -la \${WILDFLY_DEPLOYMENTS:-\${WILDFLY_HOME:-/opt/wildfly}/standalone/deployments} | rg '$APP_NAME|failed|deployed'"
+            ui_info "Vérifie: journalctl -u wildfly -n 120"
+          else
+            ui_info "Vérifie: ls -la \${TOMCAT10:-/var/lib/tomcat10}/webapps | rg '$APP_NAME'"
+            ui_info "Vérifie: journalctl -u $(server_unit_name) -n 120"
+          fi
+          ui_info "Ensuite: appuie sur [r] pour redéployer ou [f] pour refresh."
+          continue
+        fi
         if [[ "$has_conflict" != "1" || "$has_pid_conflict" = "1" ]]; then
           ui_warn "Option non disponible dans ce menu."
           continue
@@ -402,6 +414,23 @@ prompt_server_remediation() {
         fi
         ui_warn "Toujours inaccessible après refresh."
         ;;
+      [Rr])
+        if [[ "$app_down_like" != "1" ]]; then
+          ui_warn "Option non disponible dans ce menu."
+          continue
+        fi
+        ui_info "Tentative de redéploiement rapide..."
+        restart_worker
+        sleep 1
+        detect_server_state
+        if [[ "$DETECT_STATUS" = "up" ]]; then
+          resume_ui
+          start_dashboard
+          return 0
+        fi
+        ui_warn "Application toujours inaccessible après redéploiement."
+        continue
+        ;;
       [Dd])
         if [[ "$start_needed" = "1" ]]; then
           if [[ "$SERVER_TARGET" = "wildfly" ]]; then
@@ -435,35 +464,7 @@ prompt_server_remediation() {
           show_server_help
           continue
         fi
-        if [[ "$app_down_like" = "1" ]]; then
-          ui_info "Tentative de redéploiement rapide..."
-          restart_worker
-          sleep 1
-          detect_server_state
-          if [[ "$DETECT_STATUS" = "up" ]]; then
-            resume_ui
-            start_dashboard
-            return 0
-          fi
-          ui_warn "Application toujours inaccessible après redéploiement."
-          continue
-        fi
         ui_warn "Option non disponible dans ce menu."
-        ;;
-      [Ii])
-        if [[ "$app_down_like" != "1" ]]; then
-          ui_warn "Option non disponible dans ce menu."
-          continue
-        fi
-        printf "\\nInspection rapide %s:\\n" "$(server_label)" >&$TTY_OUT_FD
-        if [[ "$SERVER_TARGET" = "wildfly" ]]; then
-          ui_info "Vérifie: ls -la \${WILDFLY_DEPLOYMENTS:-\${WILDFLY_HOME:-/opt/wildfly}/standalone/deployments} | rg '$APP_NAME|failed|deployed'"
-          ui_info "Vérifie: journalctl -u wildfly -n 120"
-        else
-          ui_info "Vérifie: ls -la \${TOMCAT10:-/var/lib/tomcat10}/webapps | rg '$APP_NAME'"
-          ui_info "Vérifie: journalctl -u $(server_unit_name) -n 120"
-        fi
-        ui_info "Ensuite: appuie sur [d] pour redéployer ou [f] pour refresh."
         ;;
       [Aa])
         printf "\\n--- Aide %s ---\\n" "$(server_label)" >&$TTY_OUT_FD
