@@ -96,10 +96,10 @@ export function makeAddServletScript({ basePackage, appName }) {
   return `#!/usr/bin/env bash
 set -euo pipefail
 
-CLASS_NAME="${'{'}1:-HelloServlet{'}'}"
+CLASS_NAME="\${1:-HelloServlet}"
 BASE_NAME="$(printf '%s' "$CLASS_NAME" | sed -E 's/Servlet$//')"
 URL_SLUG="$(printf '%s' "$BASE_NAME" | sed -E 's/([A-Z])/-\\1/g' | tr '[:upper:]' '[:lower:]' | sed -E 's/^-+//; s/-+/-/g')"
-URL_PATTERN="/${'{'}URL_SLUG:-hello{'}'}"
+URL_PATTERN="/\${URL_SLUG:-hello}"
 
 if [[ ! "$CLASS_NAME" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
   echo "Nom de classe invalide. Exemple: HelloServlet"
