@@ -419,7 +419,21 @@ prompt_server_remediation() {
           ui_warn "Option non disponible dans ce menu."
           continue
         fi
-        ui_info "Tentative de redéploiement rapide..."
+        if [[ "$wildfly_http000" = "1" ]]; then
+          ui_info "Tentative de redéploiement + redémarrage serveur..."
+          printf "\\nAuthentification sudo requise...\\n" >&$TTY_OUT_FD
+          if ! sudo -v <&$TTY_IN_FD 1>&$TTY_OUT_FD 2>&$TTY_OUT_FD; then
+            ui_err "Authentification sudo échouée."
+            continue
+          fi
+          if ! start_server_noninteractive 1; then
+            ui_err "Redémarrage automatique impossible."
+            show_server_help
+            continue
+          fi
+        else
+          ui_info "Tentative de redéploiement rapide..."
+        fi
         restart_worker
         sleep 1
         detect_server_state
