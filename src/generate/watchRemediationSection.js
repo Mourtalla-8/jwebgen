@@ -170,9 +170,9 @@ prompt_server_remediation() {
       if [[ "$start_needed" = "1" ]]; then
         if [[ -n "$DETECT_OWNER_PID" ]]; then
           has_pid_conflict=1
-          options="[\${primary_key}]\${primary_label} / [k]ill occupant / [s]top service / [c]hange port / [f]refresh / [a]ide / [q]uit"
+          options="[\${primary_key}]\${primary_label} / [k]ill occupant / [s]top service / [f]refresh / [a]ide / [q]uit"
         else
-          options="[\${primary_key}]\${primary_label} / [p]inspecter / [x]kill port / [c]hange port / [f]refresh / [a]ide / [q]uit"
+          options="[\${primary_key}]\${primary_label} / [p]inspecter / [x]kill port / [f]refresh / [a]ide / [q]uit"
         fi
       elif [[ -n "$DETECT_OWNER_PID" ]]; then
         has_pid_conflict=1
@@ -403,7 +403,7 @@ prompt_server_remediation() {
         ui_warn "Toujours inaccessible après refresh."
         ;;
       [Dd])
-        if [[ "$start_needed" = "1" && "$has_conflict" != "1" ]]; then
+        if [[ "$start_needed" = "1" ]]; then
           if [[ "$SERVER_TARGET" = "wildfly" ]]; then
             local wf_load
             wf_load="$(systemctl show wildfly -p LoadState --value 2>/dev/null || echo not-found)"
