@@ -106,10 +106,10 @@ test('dispatches build command to build.sh with args', async () => {
   assert.deepEqual(scriptArgs, ['--skip']);
 });
 
-test('dispatches servlet command to add-servlet.sh with class name', async () => {
+test('dispatches servlet command and normalizes class name', async () => {
   let scriptName = '';
   let scriptArgs = [];
-  await dispatchCommand('servlet', ['HelloServlet'], {
+  await dispatchCommand('servlet', ['hello'], {
     main: async () => {},
     showHelp: () => {},
     parseCliOptions,

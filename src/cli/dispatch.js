@@ -10,6 +10,16 @@ export async function dispatchCommand(command, args, handlers) {
     onUnknown
   } = handlers;
 
+  const normalizeServletArgs = (rawArgs = []) => {
+    if (rawArgs.length === 0) return rawArgs;
+    const [rawName, ...rest] = rawArgs;
+    const trimmed = String(rawName || '').trim();
+    if (!trimmed) return rawArgs;
+    const pascal = trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+    const normalized = /Servlet$/.test(pascal) ? pascal : `${pascal}Servlet`;
+    return [normalized, ...rest];
+  };
+
   if (!command || command === 'create' || command === 'new') {
     return await main();
   }
@@ -35,9 +45,7 @@ export async function dispatchCommand(command, args, handlers) {
     case 'watch':
       return await runProjectScript('watch.sh', args);
     case 'servlet':
-      return await runProjectScript('add-servlet.sh', args);
-    case 'add-servlet':
-      return await runProjectScript('add-servlet.sh', args);
+      return await runProjectScript('add-servlet.sh', normalizeServletArgs(args));
     case 'clean':
       return await runClean();
     case 'status':
