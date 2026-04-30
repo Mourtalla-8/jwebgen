@@ -1,6 +1,6 @@
 {
   "name": "jwebgen",
-  "version": "1.0.4",
+  "version": "2.0.0",
   "description": "CLI generator for Java web projects (Servlet/JSP).",
   "type": "module",
   "bin": {

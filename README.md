@@ -61,6 +61,13 @@ Inside generated project:
 - Generated `build.sh`: requires Java + Maven.
 - Generated `dev.sh` and `watch.sh`: require Node and target app server tooling.
 
+## Migration (v2 flags-only CLI)
+
+- `jwebgen dev` → `jwebgen --dev` (or `--watch`)
+- `jwebgen create` → `jwebgen --new <name>`
+- `jwebgen help` → `jwebgen --help` (or `jwebgen`)
+- Existing projects: run `jwebgen --migrate` to regenerate scripts and create `.jwebgenrc`.
+
 ## Machine compatibility
 
 - Official target: Linux with systemd (best support for generated deploy/dev scripts).
