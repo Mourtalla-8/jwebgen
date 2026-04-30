@@ -261,8 +261,12 @@ if [[ "$CLEANUP_DEV_MODE" = "1" ]]; then
   if ! run_privileged rm -f \
     "$DEPLOY_DIR/$APP_NAME.war" \
     "$DEPLOY_DIR/$APP_NAME.war.deployed" \
+    "$DEPLOY_DIR/$APP_NAME.war.undeployed" \
     "$DEPLOY_DIR/$APP_NAME.war.failed" \
+    "$DEPLOY_DIR/$APP_NAME.war.skipdeploy" \
+    "$DEPLOY_DIR/$APP_NAME.war.pending" \
     "$DEPLOY_DIR/$APP_NAME.war.isdeploying" \
+    "$DEPLOY_DIR/$APP_NAME.war.isundeploying" \
     "$DEPLOY_DIR/$APP_NAME.war.status" \
     "$DEPLOY_DIR/$APP_NAME.war.dodeploy"; then
     echo "Permissions insuffisantes pour nettoyer $APP_NAME dans $DEPLOY_DIR."

@@ -32,15 +32,21 @@ export async function showStatus({ findProjectRoot }) {
   console.log(pc.cyan(`Projet : ${path.basename(projectRoot)}`));
   console.log(pc.cyan(`Racine : ${projectRoot}`));
 
-  let serverTarget = process.env.JWEBGEN_SERVER_TARGET || '';
+  let serverTarget = '';
   const cfgPath = path.join(projectRoot, '.jwebgenrc');
-  if (!serverTarget && existsSync(cfgPath)) {
+  if (existsSync(cfgPath)) {
     try {
       const raw = await readFile(cfgPath, 'utf8');
       const m = raw.match(/JWEBGEN_SERVER_TARGET\s*=\s*"?([a-zA-Z0-9_-]+)"?/);
       serverTarget = String(m?.[1] || '').trim();
     } catch {
       // ignore
+    }
+  }
+  if (!serverTarget) {
+    const envTarget = String(process.env.JWEBGEN_SERVER_TARGET || '').trim();
+    if (envTarget === 'tomcat' || envTarget === 'wildfly') {
+      serverTarget = envTarget;
     }
   }
   const hasConfiguredServer = serverTarget === 'tomcat' || serverTarget === 'wildfly';

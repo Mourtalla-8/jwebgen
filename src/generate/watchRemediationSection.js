@@ -196,10 +196,9 @@ prompt_server_remediation() {
     IFS= read -rsn1 answer <&$TTY_IN_FD || { resume_ui; start_dashboard; return 1; }
     if [[ "$answer" == $'\\e' ]]; then
       IFS= read -rsn2 -t 0.02 discard <&$TTY_IN_FD || true
-      printf '\\r\\033[2K' >&$TTY_OUT_FD || true
       continue
     fi
-    printf '\\r\\033[2K' >&$TTY_OUT_FD || true
+    printf "\\n" >&$TTY_OUT_FD
     case "$answer" in
       [Kk])
         if [[ "$has_conflict" != "1" || "$has_pid_conflict" != "1" ]]; then
@@ -500,10 +499,9 @@ prompt_deploy_remediation() {
     IFS= read -rsn1 answer <&$TTY_IN_FD || { resume_ui; start_dashboard; return 1; }
     if [[ "$answer" == $'\\e' ]]; then
       IFS= read -rsn2 -t 0.02 discard <&$TTY_IN_FD || true
-      printf '\\r\\033[2K' >&$TTY_OUT_FD || true
       continue
     fi
-    printf '\\r\\033[2K' >&$TTY_OUT_FD || true
+    printf "\\n" >&$TTY_OUT_FD
     case "$answer" in
       [Ff])
         restart_worker
@@ -556,12 +554,11 @@ poll_runtime_commands() {
   fi
   if [[ "$answer" == $'\\e' ]]; then
     IFS= read -rsn2 -t 0.02 discard <&$TTY_IN_FD || true
-    printf '\\r\\033[2K' >&$TTY_OUT_FD || true
     return 0
   fi
   case "$answer" in
     [Ff])
-      printf '\\r\\033[2K' >&$TTY_OUT_FD || true
+      printf "\\n" >&$TTY_OUT_FD
       manual_refresh || return 130
       ;;
     *)
