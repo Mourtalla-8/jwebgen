@@ -20,7 +20,7 @@ If `jwebgen` exists there, add this bin directory to your shell `PATH`:
   - `set -Ux fish_user_paths (npm config get prefix)/bin $fish_user_paths`
 
 No global setup alternative:
-- `npx jwebgen help`
+- `npx jwebgen --help`
 
 ## Node version error
 

@@ -23,7 +23,9 @@ npm i -g .
 Then verify:
 
 ```bash
-jwebgen help
+jwebgen --help
+# or just:
+jwebgen
 ```
 
 ### Quick test without global install (recommended first run)
@@ -34,13 +36,15 @@ Use this mode if you want zero shell/PATH setup:
 git clone https://github.com/Mourtalla-8/jwebgen
 cd jwebgen
 npm ci
-npx jwebgen help
+npx jwebgen --help
 ```
 
 ### First project
 
 ```bash
-jwebgen create
+jwebgen --new mon-webapp
+# fast (no prompts):
+jwebgen --new mon-webapp --yes --tomcat
 ```
 
 Inside generated project:
