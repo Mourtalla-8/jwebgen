@@ -81,7 +81,7 @@ async function ensureBuildTools() {
   };
 }
 
-async function main() {
+async function main(cli = {}) {
   return runCreateCommand({
     intro,
     outro,
@@ -121,7 +121,8 @@ async function main() {
     pomXml,
     readmeMd,
     tomcatContextXmlDev,
-    webXml
+    webXml,
+    cli
   });
 }
 
@@ -221,9 +222,16 @@ async function runCli() {
     return await runProjectScript('add-servlet.sh', flags.args);
   }
   if (action === 'create') {
-    // Phase 2 will add --yes + non-interactive create path.
-    // For now: always interactive.
-    return await main();
+    const projectName = flags.args[0] || '';
+    if (flags.yes && !projectName) {
+      console.log(pc.yellow('Usage: jwebgen --new <projectName> --yes'));
+      process.exit(1);
+    }
+    return await main({
+      projectName,
+      yes: flags.yes,
+      serverTarget: flags.server
+    });
   }
 
   showHelp();

@@ -45,7 +45,8 @@ export async function runCreateCommand(deps) {
     pomXml,
     readmeMd,
     tomcatContextXmlDev,
-    webXml
+    webXml,
+    cli = {}
   } = deps;
 
   function exitOnCancel(value) {
@@ -76,47 +77,61 @@ export async function runCreateCommand(deps) {
 
   intro(`${pc.cyan(appName)} — générateur Java Web (Servlet/JSP)`);
 
-  const projectName = await askText('Nom du projet', {
-    placeholder: 'mon-webapp',
-    defaultValue: 'mon-webapp',
-    transform: (value) => String(value).trim(),
-    validate: (value) => validateNonEmpty(value, 'Nom du projet')
-  });
+  const cliProjectName = String(cli?.projectName || '').trim();
+  const cliYes = Boolean(cli?.yes);
+  const cliServerTarget = cli?.serverTarget === 'wildfly' ? 'wildfly' : cli?.serverTarget === 'tomcat' ? 'tomcat' : null;
+
+  const projectName = cliYes
+    ? cliProjectName
+    : await askText('Nom du projet', {
+        placeholder: 'mon-webapp',
+        defaultValue: cliProjectName || 'mon-webapp',
+        transform: (value) => String(value).trim(),
+        validate: (value) => validateNonEmpty(value, 'Nom du projet')
+      });
 
   const defaultArtifactId = slugifyArtifactId(projectName) || 'mon-webapp';
-  const artifactId = await askText('Identifiant Maven (artifactId)', {
-    placeholder: defaultArtifactId,
-    defaultValue: defaultArtifactId,
-    transform: slugifyArtifactId,
-    validate: (value) => validateArtifactId(value)
-  });
+  const artifactId = cliYes
+    ? defaultArtifactId
+    : await askText('Identifiant Maven (artifactId)', {
+        placeholder: defaultArtifactId,
+        defaultValue: defaultArtifactId,
+        transform: slugifyArtifactId,
+        validate: (value) => validateArtifactId(value)
+      });
   const deployedAppName = artifactId;
 
-  const groupId = await askText('GroupId', {
-    placeholder: 'com.exo',
-    defaultValue: 'com.exo',
-    transform: normalizePackageCandidate,
-    validate: (value) => validateQualifiedName(value, { minSegments: 2, label: 'GroupId' })
-  });
+  const groupId = cliYes
+    ? 'com.exo'
+    : await askText('GroupId', {
+        placeholder: 'com.exo',
+        defaultValue: 'com.exo',
+        transform: normalizePackageCandidate,
+        validate: (value) => validateQualifiedName(value, { minSegments: 2, label: 'GroupId' })
+      });
 
   const defaultPackage = sanitizePackage(`${groupId}.${artifactPackagePart(artifactId)}`) || 'com.exo.app';
-  const basePackage = await askText('Package de base', {
-    placeholder: defaultPackage,
-    defaultValue: defaultPackage,
-    transform: sanitizePackage,
-    validate: (value) => validateQualifiedName(value, { minSegments: 2, label: 'Package de base' })
-  });
+  const basePackage = cliYes
+    ? defaultPackage
+    : await askText('Package de base', {
+        placeholder: defaultPackage,
+        defaultValue: defaultPackage,
+        transform: sanitizePackage,
+        validate: (value) => validateQualifiedName(value, { minSegments: 2, label: 'Package de base' })
+      });
 
   const defaultLocation = path.join(process.cwd(), artifactId);
-  const location = await askText('Emplacement du projet', {
-    placeholder: defaultLocation,
-    defaultValue: defaultLocation,
-    transform: (value) => path.resolve(expandHome(value)),
-    validate: (value) => validateLocation(value)
-  });
+  const location = cliYes
+    ? path.resolve(expandHome(defaultLocation))
+    : await askText('Emplacement du projet', {
+        placeholder: defaultLocation,
+        defaultValue: defaultLocation,
+        transform: (value) => path.resolve(expandHome(value)),
+        validate: (value) => validateLocation(value)
+      });
   const targetDir = location;
 
-  const serverTarget = exitOnCancel(await select({ message: 'Serveur cible', options: serverOptions }));
+  const serverTarget = cliServerTarget || (cliYes ? 'tomcat' : exitOnCancel(await select({ message: 'Serveur cible', options: serverOptions })));
   const javaDetection = detectJavaCompiler();
 
   if (!javaDetection.present) {
@@ -136,11 +151,11 @@ export async function runCreateCommand(deps) {
   }
 
   const javaRelease = javaDetection.majorRelease;
-  const addServlet = exitOnCancel(await confirm({ message: 'Créer une servlet d’exemple /hello ?', initialValue: true }));
-  const addJsp = exitOnCancel(await confirm({ message: 'Créer une page JSP index.jsp ?', initialValue: true }));
-  const addWebXml = exitOnCancel(await confirm({ message: 'Créer un web.xml ?', initialValue: false }));
-  const addGitignore = exitOnCancel(await confirm({ message: 'Créer un .gitignore ?', initialValue: true }));
-  const buildNow = exitOnCancel(await confirm({ message: 'Compiler le projet après création ?', initialValue: false }));
+  const addServlet = cliYes ? true : exitOnCancel(await confirm({ message: 'Créer une servlet d’exemple /hello ?', initialValue: true }));
+  const addJsp = cliYes ? true : exitOnCancel(await confirm({ message: 'Créer une page JSP index.jsp ?', initialValue: true }));
+  const addWebXml = cliYes ? false : exitOnCancel(await confirm({ message: 'Créer un web.xml ?', initialValue: false }));
+  const addGitignore = cliYes ? true : exitOnCancel(await confirm({ message: 'Créer un .gitignore ?', initialValue: true }));
+  const buildNow = cliYes ? false : exitOnCancel(await confirm({ message: 'Compiler le projet après création ?', initialValue: false }));
 
   if (existsSync(targetDir)) {
     console.log(pc.red(`Le dossier existe déjà : ${targetDir}`));
@@ -167,10 +182,12 @@ export async function runCreateCommand(deps) {
     'Résumé'
   );
 
-  const shouldCreate = exitOnCancel(await confirm({ message: `Créer le projet ici ?\n${targetDir}`, initialValue: true }));
-  if (!shouldCreate) {
-    console.log(pc.yellow('Annulé. Aucun fichier n’a été créé.'));
-    process.exit(0);
+  if (!cliYes) {
+    const shouldCreate = exitOnCancel(await confirm({ message: `Créer le projet ici ?\n${targetDir}`, initialValue: true }));
+    if (!shouldCreate) {
+      console.log(pc.yellow('Annulé. Aucun fichier n’a été créé.'));
+      process.exit(0);
+    }
   }
 
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'jwebgen-'));
