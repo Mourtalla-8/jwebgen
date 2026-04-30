@@ -43,8 +43,16 @@ export async function showStatus({ findProjectRoot }) {
       // ignore
     }
   }
-  if (serverTarget !== 'tomcat' && serverTarget !== 'wildfly') serverTarget = 'tomcat';
+  const hasConfiguredServer = serverTarget === 'tomcat' || serverTarget === 'wildfly';
+  if (!hasConfiguredServer) {
+    serverTarget = 'unset';
+  }
   console.log(pc.cyan(`Serveur : ${serverTarget}`));
+  if (!hasConfiguredServer) {
+    console.log(pc.yellow('Serveur non choisi (utilise jwebgen --dev ou --deploy pour le sélectionner).'));
+    console.log(pc.yellow('Déploiement : inconnu (en attente du choix serveur)'));
+    return;
+  }
 
   try {
     if (serverTarget === 'tomcat') {
