@@ -52,7 +52,7 @@ Commandes:
   deploy          Lance ./scripts/deploy.sh dans le projet courant
   migrate         Met à niveau un projet jwebgen legacy
   watch           Lance ./scripts/watch.sh dans le projet courant
-  add-servlet     Lance ./scripts/add-servlet.sh [NomClasse] [/url]
+  servlet         Lance ./scripts/add-servlet.sh [NomClasse]
   clean           Nettoie le dossier target/
   status          Affiche le statut du projet et de Tomcat
   help            Affiche cette aide

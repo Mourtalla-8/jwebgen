@@ -97,7 +97,9 @@ export function makeAddServletScript({ basePackage, appName }) {
 set -euo pipefail
 
 CLASS_NAME="${'{'}1:-HelloServlet{'}'}"
-URL_PATTERN="${'{'}2:-/hello{'}'}"
+BASE_NAME="$(printf '%s' "$CLASS_NAME" | sed -E 's/Servlet$//')"
+URL_SLUG="$(printf '%s' "$BASE_NAME" | sed -E 's/([A-Z])/-\\1/g' | tr '[:upper:]' '[:lower:]' | sed -E 's/^-+//; s/-+/-/g')"
+URL_PATTERN="/${'{'}URL_SLUG:-hello{'}'}"
 
 if [[ ! "$CLASS_NAME" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
   echo "Nom de classe invalide. Exemple: HelloServlet"
@@ -208,7 +210,7 @@ Scripts générés :
 - \`./scripts/deploy.sh\` : déploiement vers le serveur cible
 - \`./scripts/dev.sh\` : mode dev continu (watch + rebuild + deploy + reload navigateur)
 - \`./scripts/watch.sh\` : rebuild + redeploy automatique
-- \`./scripts/add-servlet.sh [NomClasse] [/url]\` : crée une servlet
+- \`jwebgen servlet [NomClasse]\` : crée une servlet
 
 Contexte du projet :
 

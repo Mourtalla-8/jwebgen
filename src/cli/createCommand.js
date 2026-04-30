@@ -268,6 +268,6 @@ export async function runCreateCommand(deps) {
   console.log(pc.cyan('- ./scripts/deploy.sh'));
   console.log(pc.cyan('- ./scripts/dev.sh'));
   console.log(pc.cyan('- ./scripts/watch.sh'));
-  if (addServlet) console.log(pc.cyan('- ./scripts/add-servlet.sh HelloServlet /hello'));
+  if (addServlet) console.log(pc.cyan('- jwebgen servlet HelloServlet'));
   outro(pc.cyan('Terminé.'));
 }

@@ -34,6 +34,8 @@ export async function dispatchCommand(command, args, handlers) {
       return await runMigrate();
     case 'watch':
       return await runProjectScript('watch.sh', args);
+    case 'servlet':
+      return await runProjectScript('add-servlet.sh', args);
     case 'add-servlet':
       return await runProjectScript('add-servlet.sh', args);
     case 'clean':
