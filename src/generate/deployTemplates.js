@@ -121,7 +121,12 @@ if ! run_privileged mkdir -p "$TOMCAT_DIR/webapps"; then
 fi
 
 if [[ "$CLEANUP_DEV_MODE" = "1" ]]; then
-  run_privileged rm -rf "$TOMCAT_DIR/webapps/$APP_NAME" "$TOMCAT_DIR/webapps/$APP_NAME.war" || true
+  if ! run_privileged rm -rf "$TOMCAT_DIR/webapps/$APP_NAME" "$TOMCAT_DIR/webapps/$APP_NAME.war"; then
+    log_error "Permissions insuffisantes pour nettoyer $APP_NAME dans $TOMCAT_DIR/webapps."
+    log_info "Lance 'sudo -v' puis relance."
+    echo "__JWEBGEN_EVENT__ deploy_sudo_required" >&2
+    exit 1
+  fi
   log_success "Nettoyage dev terminé pour $APP_NAME (Tomcat)."
   exit 0
 fi
@@ -197,7 +202,10 @@ APP_NAME=${shellQuote(appName)}
 SCRIPT_DIR="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-WAR_FILE="$(find "$ROOT_DIR/target" -maxdepth 1 -name '*.war' | sort | tail -n 1)"
+WAR_FILE=""
+if [[ -d "$ROOT_DIR/target" ]]; then
+  WAR_FILE="$(find "$ROOT_DIR/target" -maxdepth 1 -name '*.war' 2>/dev/null | sort | tail -n 1)" || true
+fi
 
 WILDFLY_HOME="\${WILDFLY_HOME:-/opt/wildfly}"
 DEPLOY_DIR="\${WILDFLY_DEPLOYMENTS:-$WILDFLY_HOME/standalone/deployments}"
@@ -250,13 +258,18 @@ if ! run_privileged mkdir -p "$DEPLOY_DIR"; then
   exit 1
 fi
 if [[ "$CLEANUP_DEV_MODE" = "1" ]]; then
-  run_privileged rm -f \
+  if ! run_privileged rm -f \
     "$DEPLOY_DIR/$APP_NAME.war" \
     "$DEPLOY_DIR/$APP_NAME.war.deployed" \
     "$DEPLOY_DIR/$APP_NAME.war.failed" \
     "$DEPLOY_DIR/$APP_NAME.war.isdeploying" \
     "$DEPLOY_DIR/$APP_NAME.war.status" \
-    "$DEPLOY_DIR/$APP_NAME.war.dodeploy" || true
+    "$DEPLOY_DIR/$APP_NAME.war.dodeploy"; then
+    echo "Permissions insuffisantes pour nettoyer $APP_NAME dans $DEPLOY_DIR."
+    echo "Lance 'sudo -v' puis relance."
+    echo "__JWEBGEN_EVENT__ deploy_sudo_required" >&2
+    exit 1
+  fi
   echo "Nettoyage dev terminé pour $APP_NAME (WildFly)."
   exit 0
 fi
