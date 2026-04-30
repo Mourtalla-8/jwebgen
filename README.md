@@ -68,9 +68,9 @@ Inside generated project:
 
 ## Migration (v2 flags-only CLI)
 
-- `jwebgen dev` → `jwebgen --dev` (or `--watch`)
-- `jwebgen create` → `jwebgen --new <name>`
-- `jwebgen help` → `jwebgen --help` (or `jwebgen`)
+- `jwebgen --dev` (or `--watch`)
+- `jwebgen --new <name>`
+- `jwebgen --help` (or `jwebgen`)
 - Existing projects: run `jwebgen --migrate` to regenerate scripts and create `.jwebgenrc`.
 
 ## Machine compatibility
@@ -90,7 +90,7 @@ javac -version
 mvn -version
 npm ci
 npm i -g .
-jwebgen help
+jwebgen --help
 ```
 
 ## Global install alternatives

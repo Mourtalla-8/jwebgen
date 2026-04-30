@@ -29,7 +29,7 @@ export async function runProjectScript(scriptName, args = [], options = {}, deps
     if (issues.length > 0) {
       console.error(pc.red('Projet détecté comme legacy/incompatible avec cette version de jwebgen.'));
       for (const issue of issues) console.error(pc.yellow(`- ${issue}`));
-      console.error(pc.cyan('Exécute d\'abord: jwebgen migrate'));
+      console.error(pc.cyan('Exécute d\'abord: jwebgen --migrate'));
       process.exit(1);
     }
   }

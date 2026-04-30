@@ -152,7 +152,7 @@ export async function runMigrate({
   await makeExecutable(path.join(projectRoot, 'scripts/add-servlet.sh'));
 
   console.log(pc.green('Migration terminée: scripts régénérés au format courant.'));
-  console.log(pc.cyan('Tu peux relancer: jwebgen dev'));
+  console.log(pc.cyan('Tu peux relancer: jwebgen --dev'));
 }
 
 async function inferBasePackage(projectRoot, appName) {

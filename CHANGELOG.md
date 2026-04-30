@@ -21,9 +21,9 @@ This project follows Semantic Versioning.
 
 ### Migration
 
-- Old: `jwebgen dev` → New: `jwebgen --dev` (or `--watch`)
-- Old: `jwebgen create` → New: `jwebgen --new <name>` (fast: `--yes`)
-- Old: `jwebgen help` → New: `jwebgen --help` (or `jwebgen`)
+- `jwebgen --dev` (or `--watch`)
+- `jwebgen --new <name>` (fast: `--yes`)
+- `jwebgen --help` (or `jwebgen`)
 - For existing projects, run `jwebgen --migrate` to regenerate scripts and create `.jwebgenrc`.
 
 ## [1.0.4] - 2026-04-29

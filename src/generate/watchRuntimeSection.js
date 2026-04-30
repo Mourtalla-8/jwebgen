@@ -39,14 +39,14 @@ detect_server_state() {
         # not a port-conflict remediation scenario.
         DETECT_REASON="Tomcat répond mais l'URL de l'application renvoie HTTP \${app_status:-inconnu}"
         DETECT_ACTION="Vérifie le contexte /$APP_NAME/ (déploiement effectif) et les logs Tomcat."
-        DETECT_OWNER="$owner_line"
-        DETECT_OWNER_PID="$(extract_pid_from_owner "$owner_line")"
+        DETECT_OWNER=""
+        DETECT_OWNER_PID=""
       else
         DETECT_CONFLICT_PORT="$DEV_HTTP_PORT"
         DETECT_OWNER="$owner_line"
         DETECT_OWNER_PID="$(extract_pid_from_owner "$owner_line")"
-        DETECT_REASON="Port HTTP $DEV_HTTP_PORT déjà occupé par un autre processus"
-        DETECT_ACTION="Libère ce port ou stoppe le process occupant."
+        DETECT_REASON="Tomcat non actif (port HTTP $DEV_HTTP_PORT occupé)"
+        DETECT_ACTION="Démarre Tomcat puis traite l'occupant du port si nécessaire."
       fi
       return 0
     fi
@@ -78,14 +78,14 @@ detect_server_state() {
       # app HTTP failures are handled as deploy/context issues first.
       DETECT_REASON="WildFly répond mais l'URL de l'application renvoie HTTP \${app_status:-inconnu}"
       DETECT_ACTION="Vérifie le contexte /$APP_NAME/ et les marqueurs deployments (.deployed/.failed)."
-      DETECT_OWNER="$owner_line"
-      DETECT_OWNER_PID="$(extract_pid_from_owner "$owner_line")"
+      DETECT_OWNER=""
+      DETECT_OWNER_PID=""
     else
       DETECT_CONFLICT_PORT="$DEV_HTTP_PORT"
       DETECT_OWNER="$owner_line"
       DETECT_OWNER_PID="$(extract_pid_from_owner "$owner_line")"
-      DETECT_REASON="Port HTTP $DEV_HTTP_PORT déjà occupé par un autre processus"
-      DETECT_ACTION="Libère ce port ou stoppe le process occupant."
+      DETECT_REASON="WildFly non actif (port HTTP $DEV_HTTP_PORT occupé)"
+      DETECT_ACTION="Démarre WildFly puis traite l'occupant du port si nécessaire."
     fi
     return 0
   fi
@@ -213,7 +213,13 @@ show_server_help() {
     ui_info "Action suggérée: $DETECT_ACTION"
   fi
   if [[ -n "$DETECT_CONFLICT_PORT" ]]; then
-    if [[ -n "$DETECT_OWNER_PID" ]]; then
+    if [[ "$DETECT_REASON" =~ (non\ actif|arrêté|inactif|non\ détecté) ]]; then
+      if [[ -n "$DETECT_OWNER_PID" ]]; then
+        action_hint="[d] démarrer serveur  [k] kill pid $DETECT_OWNER_PID  [s] stop service  [c] change port  [f] refresh  [a] aide  [q] quit"
+      else
+        action_hint="[d] démarrer serveur  [p] inspecter  [x] kill port  [c] change port  [f] refresh  [a] aide  [q] quit"
+      fi
+    elif [[ -n "$DETECT_OWNER_PID" ]]; then
       action_hint="[k] kill pid $DETECT_OWNER_PID  [s] stop service  [c] change port  [f] refresh  [a] aide  [q] quit"
     else
       action_hint="[p] inspecter  [x] kill port  [c] change port  [f] refresh  [a] aide  [q] quit"
@@ -234,7 +240,11 @@ show_server_help() {
       ui_info "Commande: sudo systemctl start $unit"
     fi
   else
-    if [[ "$SERVER_TARGET" = "wildfly" && "$DETECT_REASON" == *"HTTP 000"* ]]; then
+    if [[ "$DETECT_REASON" == *"renvoie HTTP"* ]]; then
+      action_hint="[d] redéployer  [i] inspecter  [f] refresh  [a] aide  [q] quit"
+      ui_info "Actions auto: $action_hint"
+      ui_info "Contexte app: /$APP_NAME/"
+    elif [[ "$SERVER_TARGET" = "wildfly" && "$DETECT_REASON" == *"HTTP 000"* ]]; then
       action_hint="[d] redémarrer serveur  [f] refresh  [a] aide  [q] quit"
       ui_info "Actions auto: $action_hint"
       ui_info "Commande: sudo systemctl restart wildfly"

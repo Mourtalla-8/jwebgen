@@ -13,7 +13,7 @@ Optional global CLI for local manual testing:
 
 ```bash
 npm i -g .
-jwebgen help
+jwebgen --help
 ```
 
 ## Quality gate

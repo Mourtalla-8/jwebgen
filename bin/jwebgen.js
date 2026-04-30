@@ -227,8 +227,8 @@ async function runCli() {
   }
 
   if (isLikelyLegacySubcommand(argv[0])) {
-    console.log(pc.yellow('Ancien format de commande détecté (subcommands).'));
-    console.log(pc.yellow('Le nouveau CLI est flags-only. Exemple:'));
+    console.log(pc.yellow('Commande non supportée sous cette forme.'));
+    console.log(pc.yellow('Utilise une option:'));
     console.log(pc.cyan('  jwebgen --dev'));
     console.log(pc.cyan('  jwebgen --new mon-webapp'));
     console.log('');

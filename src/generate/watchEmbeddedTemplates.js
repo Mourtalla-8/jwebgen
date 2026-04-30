@@ -313,7 +313,7 @@ function render() {
   const url = color('0;32', s.url ?? '');
   const probe = color('2;37', s.serverCheckUrl ?? '');
   const controls = color('2;37', 'cmd: [f] refresh');
-  const out = color('1;36', 'jwebgen dev') + '  ' + phase + '\\n'
+  const out = color('1;36', 'jwebgen --dev') + '  ' + phase + '\\n'
     + '  build: ' + build + '   deploy: ' + deploy + '\\n'
     + '  server: ' + server + '   app: ' + app + '   live: ' + live + '\\n'
     + '  url: ' + url + '\\n'

@@ -217,7 +217,7 @@ Scripts générés :
 - \`./scripts/deploy.sh\` : déploiement vers le serveur cible
 - \`./scripts/dev.sh\` : mode dev continu (watch + rebuild + deploy + reload navigateur)
 - \`./scripts/watch.sh\` : rebuild + redeploy automatique
-- \`jwebgen servlet [NomClasse]\` : crée une servlet
+- \`jwebgen --servlet [NomClasse]\` : crée une servlet
 
 Contexte du projet :
 
