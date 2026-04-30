@@ -243,7 +243,14 @@ prompt_server_remediation() {
             ui_info "Processus $DETECT_OWNER_PID arrêté avec sudo."
             killed_ok=1
           else
-            ui_err "Impossible d'arrêter le processus $DETECT_OWNER_PID."
+            printf "\\nPermissions root requises pour arrêter %s. Authentifier sudo maintenant ? [y/N] " "$DETECT_OWNER_PID" >&$TTY_OUT_FD
+            IFS= read -r confirm <&$TTY_IN_FD || { ui_warn "Confirmation annulée."; continue; }
+            if [[ "$confirm" =~ ^[Yy]$ ]] && sudo -v <&$TTY_IN_FD 1>&$TTY_OUT_FD 2>&$TTY_OUT_FD && sudo kill "$DETECT_OWNER_PID" 2>/dev/null; then
+              ui_info "Processus $DETECT_OWNER_PID arrêté avec sudo."
+              killed_ok=1
+            else
+              ui_err "Impossible d'arrêter le processus $DETECT_OWNER_PID."
+            fi
           fi
           if [[ "$killed_ok" = "1" ]]; then
           if ! wait_for_port_release "$DETECT_CONFLICT_PORT"; then
@@ -320,8 +327,15 @@ prompt_server_remediation() {
           ui_info "Port $DETECT_CONFLICT_PORT libéré avec sudo."
           killed_port_ok=1
         else
-          ui_err "Impossible de libérer le port $DETECT_CONFLICT_PORT."
-          ui_info "Essaye: sudo fuser -k -n tcp $DETECT_CONFLICT_PORT"
+          printf "\\nPermissions root requises pour libérer le port %s. Authentifier sudo maintenant ? [y/N] " "$DETECT_CONFLICT_PORT" >&$TTY_OUT_FD
+          IFS= read -r confirm <&$TTY_IN_FD || { ui_warn "Confirmation annulée."; continue; }
+          if [[ "$confirm" =~ ^[Yy]$ ]] && sudo -v <&$TTY_IN_FD 1>&$TTY_OUT_FD 2>&$TTY_OUT_FD && sudo fuser -k -n tcp "$DETECT_CONFLICT_PORT" >/dev/null 2>&1; then
+            ui_info "Port $DETECT_CONFLICT_PORT libéré avec sudo."
+            killed_port_ok=1
+          else
+            ui_err "Impossible de libérer le port $DETECT_CONFLICT_PORT."
+            ui_info "Essaye: sudo fuser -k -n tcp $DETECT_CONFLICT_PORT"
+          fi
         fi
         if [[ "$killed_port_ok" = "1" ]]; then
           if ! wait_for_port_release "$DETECT_CONFLICT_PORT"; then
@@ -372,9 +386,13 @@ prompt_server_remediation() {
           continue
         fi
         if ! sudo -n systemctl stop "$conflict_unit" 2>/dev/null; then
-          ui_err "Impossible d'arrêter $conflict_unit."
-          ui_info "Commande: sudo systemctl stop $conflict_unit"
-          continue
+          printf "\\nPermissions root requises pour stopper %s. Authentifier sudo maintenant ? [y/N] " "$conflict_unit" >&$TTY_OUT_FD
+          IFS= read -r confirm <&$TTY_IN_FD || { ui_warn "Confirmation annulée."; continue; }
+          if [[ ! "$confirm" =~ ^[Yy]$ ]] || ! sudo -v <&$TTY_IN_FD 1>&$TTY_OUT_FD 2>&$TTY_OUT_FD || ! sudo systemctl stop "$conflict_unit" 2>/dev/null; then
+            ui_err "Impossible d'arrêter $conflict_unit."
+            ui_info "Commande: sudo systemctl stop $conflict_unit"
+            continue
+          fi
         fi
         ui_info "Service arrêté: $conflict_unit"
         if ! wait_for_port_release "$DETECT_CONFLICT_PORT"; then
@@ -495,7 +513,7 @@ prompt_deploy_remediation() {
   fi
   printf "\\n--- Remédiation déploiement ---\\n" >&$TTY_OUT_FD
   while true; do
-    printf "\\nDéploiement en erreur. [f]refresh / [a]ide / [q]uit ? " >&$TTY_OUT_FD
+    printf "\\nDéploiement en erreur. [s]udo / [f]refresh / [a]ide / [q]uit ? " >&$TTY_OUT_FD
     IFS= read -rsn1 answer <&$TTY_IN_FD || { resume_ui; start_dashboard; return 1; }
     if [[ "$answer" == $'\\e' ]]; then
       IFS= read -rsn2 -t 0.02 discard <&$TTY_IN_FD || true
@@ -504,6 +522,16 @@ prompt_deploy_remediation() {
     fi
     printf '\\r\\033[2K' >&$TTY_OUT_FD || true
     case "$answer" in
+      [Ss])
+        printf "\\nAuthentification sudo requise...\\n" >&$TTY_OUT_FD
+        if sudo -v <&$TTY_IN_FD 1>&$TTY_OUT_FD 2>&$TTY_OUT_FD; then
+          restart_worker
+          resume_ui
+          start_dashboard
+          return 0
+        fi
+        ui_err "Authentification sudo échouée."
+        ;;
       [Ff])
         restart_worker
         resume_ui
@@ -660,7 +688,7 @@ handle_events_loop() {
               resume_ui
               start_dashboard
             else
-              ui_err "Authentification sudo échouée. Lance 'sudo -v' puis relance."
+              ui_err "Authentification sudo échouée. Utilise [s] dans la remédiation déploiement ou relance sudo -v."
               resume_ui
               start_dashboard
             fi
