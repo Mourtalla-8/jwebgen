@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import os from 'node:os';
+import { existsSync } from 'node:fs';
 import { mkdtemp, mkdir, writeFile, readFile } from 'node:fs/promises';
 import { runMigrate } from '../../src/cli/projectCommands.js';
 
@@ -54,4 +55,24 @@ test('runMigrate writes detected target when .jwebgenrc is missing', async () =>
 
   const cfg = await readFile(path.join(projectRoot, '.jwebgenrc'), 'utf8');
   assert.match(cfg, /export JWEBGEN_SERVER_TARGET="wildfly"/);
+});
+
+test('runMigrate does not delete generated deploy-tomcat.sh', async () => {
+  const projectRoot = await setupProjectRoot('demoapp3');
+  await runMigrate(makeMigrateDeps(projectRoot, 'tomcat'));
+  assert.equal(existsSync(path.join(projectRoot, 'scripts', 'deploy-tomcat.sh')), true);
+});
+
+test('runMigrate deletes only dedicated legacy deploy script', async () => {
+  const projectRoot = await setupProjectRoot('demoapp4');
+  const legacyName = 'deploy-legacy.sh';
+  await writeFile(path.join(projectRoot, 'scripts', legacyName), '#!/usr/bin/env bash\necho old\n', 'utf8');
+
+  await runMigrate({
+    ...makeMigrateDeps(projectRoot, 'tomcat'),
+    legacyDeployScript: legacyName
+  });
+
+  assert.equal(existsSync(path.join(projectRoot, 'scripts', legacyName)), false);
+  assert.equal(existsSync(path.join(projectRoot, 'scripts', 'deploy-tomcat.sh')), true);
 });

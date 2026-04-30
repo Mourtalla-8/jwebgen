@@ -146,8 +146,15 @@ export async function runMigrate({
   await writeFileSafe(path.join(projectRoot, 'scripts/add-servlet.sh'), makeAddServletScript({ basePackage }));
   await writeProjectConfigServerTarget(projectRoot, serverTarget);
 
-  const legacyDeployPath = path.join(projectRoot, 'scripts', legacyDeployScript);
-  if (existsSync(legacyDeployPath)) await rm(legacyDeployPath, { force: true });
+  const reservedScriptNames = new Set([
+    'deploy.sh',
+    'deploy-tomcat.sh',
+    'deploy-wildfly.sh'
+  ]);
+  if (!reservedScriptNames.has(String(legacyDeployScript || ''))) {
+    const legacyDeployPath = path.join(projectRoot, 'scripts', legacyDeployScript);
+    if (existsSync(legacyDeployPath)) await rm(legacyDeployPath, { force: true });
+  }
 
   await makeExecutable(path.join(projectRoot, 'scripts/build.sh'));
   await makeExecutable(path.join(projectRoot, 'scripts/deploy.sh'));
