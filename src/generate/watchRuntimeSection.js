@@ -32,7 +32,7 @@ detect_server_state() {
       DETECT_REASON="Tomcat répond et l'application est accessible"
       return 0
     fi
-    if [[ "$app_status" =~ ^(4|5) ]]; then
+    if [[ "$management_ok" = "1" && "$app_status" =~ ^(4|5) ]]; then
       DETECT_REASON="Tomcat répond mais l'URL de l'application renvoie HTTP \${app_status:-inconnu}"
       DETECT_ACTION="Vérifie le contexte /$APP_NAME/ (déploiement effectif) et les logs Tomcat."
       return 0
@@ -76,7 +76,7 @@ detect_server_state() {
     DETECT_REASON="WildFly répond et l'application est accessible"
     return 0
   fi
-  if [[ "$app_status" =~ ^(4|5) ]]; then
+  if [[ "$management_ok" = "1" && "$app_status" =~ ^(4|5) ]]; then
     DETECT_REASON="WildFly répond mais l'URL de l'application renvoie HTTP \${app_status:-inconnu}"
     DETECT_ACTION="Vérifie le contexte /$APP_NAME/ et les marqueurs deployments (.deployed/.failed)."
     return 0
