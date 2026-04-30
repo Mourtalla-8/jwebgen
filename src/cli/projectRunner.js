@@ -18,7 +18,7 @@ export async function runProjectScript(scriptName, args = [], options = {}, deps
   }
 
   const scriptPath = path.join(projectRoot, 'scripts', scriptName);
-  const env = { ...process.env };
+  const env = { ...process.env, ...(options.env || {}) };
   if (options.verbose !== undefined) env.JWEBGEN_VERBOSE = options.verbose ? '1' : '0';
 
   if (scriptName === 'dev.sh' || scriptName === 'watch.sh' || scriptName === canonicalDeployScript) {

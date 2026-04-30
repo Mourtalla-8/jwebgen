@@ -34,6 +34,7 @@ export async function runCreateCommand(deps) {
     makeDevMd,
     makeBuildScript,
     makeDeployServerScript,
+    makeDeploySelectorScript,
     makeDevScript,
     makeWatchScript,
     makeAddServletScript,
@@ -241,12 +242,29 @@ export async function runCreateCommand(deps) {
     );
     await writeFileSafe(path.join(workDir, 'DEV.md'), makeDevMd({ appName: deployedAppName, serverTarget }));
     await writeFileSafe(path.join(workDir, 'scripts/build.sh'), makeBuildScript());
-    await writeFileSafe(path.join(workDir, 'scripts/deploy.sh'), makeDeployServerScript({ appName: deployedAppName, serverTarget }));
+    await writeFileSafe(path.join(workDir, 'scripts/deploy.sh'), makeDeploySelectorScript());
+    await writeFileSafe(
+      path.join(workDir, 'scripts/deploy-tomcat.sh'),
+      makeDeployServerScript({ appName: deployedAppName, serverTarget: 'tomcat' })
+    );
+    await writeFileSafe(
+      path.join(workDir, 'scripts/deploy-wildfly.sh'),
+      makeDeployServerScript({ appName: deployedAppName, serverTarget: 'wildfly' })
+    );
     await writeFileSafe(path.join(workDir, 'scripts/dev.sh'), makeDevScript({ serverTarget }));
     await writeFileSafe(path.join(workDir, 'scripts/watch.sh'), makeWatchScript());
     if (addServlet) await writeFileSafe(path.join(workDir, 'scripts/add-servlet.sh'), makeAddServletScript({ basePackage }));
+    await writeFileSafe(path.join(workDir, '.jwebgenrc'), `export JWEBGEN_SERVER_TARGET="${serverTarget}"\n`);
 
-    const scriptFiles = ['scripts/build.sh', 'scripts/deploy.sh', 'scripts/dev.sh', 'scripts/watch.sh', addServlet ? 'scripts/add-servlet.sh' : null].filter(Boolean);
+    const scriptFiles = [
+      'scripts/build.sh',
+      'scripts/deploy.sh',
+      'scripts/deploy-tomcat.sh',
+      'scripts/deploy-wildfly.sh',
+      'scripts/dev.sh',
+      'scripts/watch.sh',
+      addServlet ? 'scripts/add-servlet.sh' : null
+    ].filter(Boolean);
     for (const relativePath of scriptFiles) await makeExecutable(path.join(workDir, relativePath));
     await mkdir(path.dirname(targetDir), { recursive: true });
     await cp(workDir, targetDir, { recursive: true, force: true });

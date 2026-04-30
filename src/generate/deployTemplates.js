@@ -313,3 +313,34 @@ echo "Cibles supportées: tomcat, wildfly"
 exit 1
 `;
 }
+
+export function makeDeploySelectorScript() {
+  return `#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
+TARGET="\${JWEBGEN_SERVER_TARGET:-}"
+
+if [[ -z "$TARGET" && -f "$SCRIPT_DIR/../.jwebgenrc" ]]; then
+  # shellcheck disable=SC1091
+  source "$SCRIPT_DIR/../.jwebgenrc" 2>/dev/null || true
+  TARGET="\${JWEBGEN_SERVER_TARGET:-}"
+fi
+
+TARGET="\${TARGET:-tomcat}"
+
+case "$TARGET" in
+  tomcat)
+    exec "$SCRIPT_DIR/deploy-tomcat.sh" "$@"
+    ;;
+  wildfly)
+    exec "$SCRIPT_DIR/deploy-wildfly.sh" "$@"
+    ;;
+  *)
+    echo "Serveur cible non supporté: $TARGET"
+    echo "Cibles supportées: tomcat, wildfly"
+    exit 1
+    ;;
+esac
+`;
+}

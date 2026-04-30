@@ -10,6 +10,7 @@ import {
   note
 } from '@clack/prompts';
 import pc from 'picocolors';
+import path from 'node:path';
 import {
   gitignore,
   helloServlet,
@@ -45,6 +46,7 @@ import {
   makeBuildScript as makeBuildScriptImpl,
   makeDeployTomcatScript as makeDeployTomcatScriptImpl,
   makeDeployServerScript as makeDeployServerScriptImpl,
+  makeDeploySelectorScript as makeDeploySelectorScriptImpl,
   makeDevScript as makeDevScriptImpl,
   makeWatchScript as makeWatchScriptImpl
 } from '../src/generate/scriptTemplates.js';
@@ -64,10 +66,13 @@ import {
 import { runProjectScript as runProjectScriptImpl } from '../src/cli/projectRunner.js';
 import { runCreateCommand } from '../src/cli/createCommand.js';
 import { writeFileSafe, makeExecutable } from '../src/cli/fileUtils.js';
+import { readFile, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 
 const APP_NAME = 'jwebgen';
 const CANONICAL_DEPLOY_SCRIPT = 'deploy.sh';
 const LEGACY_DEPLOY_SCRIPT = 'deploy-tomcat.sh';
+const CONFIG_FILE = '.jwebgenrc';
 
 const SERVER_OPTIONS = [
   { value: 'tomcat', label: 'Tomcat' },
@@ -110,6 +115,7 @@ async function main(cli = {}) {
     makeDevMd: makeDevMdImpl,
     makeBuildScript: makeBuildScriptImpl,
     makeDeployServerScript: makeDeployServerScriptImpl,
+    makeDeploySelectorScript: makeDeploySelectorScriptImpl,
     makeDevScript: makeDevScriptImpl,
     makeWatchScript: makeWatchScriptImpl,
     makeAddServletScript: ({ basePackage }) => makeAddServletScriptImpl({ basePackage, appName: APP_NAME }),
@@ -158,12 +164,54 @@ async function runMigrate() {
     writeFileSafe,
     makeBuildScript: makeBuildScriptImpl,
     makeDeployServerScript: makeDeployServerScriptImpl,
+    makeDeploySelectorScript: makeDeploySelectorScriptImpl,
     makeDevScript: makeDevScriptImpl,
     makeWatchScript: makeWatchScriptImpl,
     makeAddServletScript: ({ basePackage }) => makeAddServletScriptImpl({ basePackage, appName: APP_NAME }),
     makeExecutable,
     legacyDeployScript: LEGACY_DEPLOY_SCRIPT
   });
+}
+
+async function readConfiguredServerTarget(projectRoot) {
+  const cfgPath = path.join(projectRoot, CONFIG_FILE);
+  if (!existsSync(cfgPath)) return null;
+  try {
+    const raw = await readFile(cfgPath, 'utf8');
+    const m = raw.match(/JWEBGEN_SERVER_TARGET\s*=\s*"?([a-zA-Z0-9_-]+)"?/);
+    const v = String(m?.[1] || '').trim();
+    if (v === 'tomcat' || v === 'wildfly') return v;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function writeConfiguredServerTarget(projectRoot, target) {
+  const cfgPath = path.join(projectRoot, CONFIG_FILE);
+  const content = `export JWEBGEN_SERVER_TARGET="${target}"\n`;
+  await writeFile(cfgPath, content, 'utf8');
+}
+
+async function ensureServerTarget({ projectRoot, requestedTarget }) {
+  if (requestedTarget === 'tomcat' || requestedTarget === 'wildfly') {
+    await writeConfiguredServerTarget(projectRoot, requestedTarget);
+    return requestedTarget;
+  }
+  const configured = await readConfiguredServerTarget(projectRoot);
+  if (configured) return configured;
+  if (!process.stdin.isTTY) {
+    console.log(pc.red('Serveur cible non configuré.'));
+    console.log(pc.yellow('Passe --tomcat/--wildfly ou configure .jwebgenrc'));
+    process.exit(1);
+  }
+  const chosen = await select({
+    message: 'Serveur cible',
+    options: SERVER_OPTIONS
+  });
+  if (isCancel(chosen)) process.exit(0);
+  await writeConfiguredServerTarget(projectRoot, chosen);
+  return chosen;
 }
 
 function showHelp() {
@@ -210,9 +258,23 @@ async function runCli() {
   if (action === 'clean') return await runClean();
   if (action === 'migrate') return await runMigrate();
   if (action === 'build') return await runProjectScript('build.sh', flags.args);
-  if (action === 'deploy') return await runProjectScript('deploy.sh', flags.args);
+  if (action === 'deploy') {
+    const projectRoot = findProjectRoot();
+    if (!projectRoot) {
+      console.error(pc.red('Aucun projet jwebgen détecté.'));
+      process.exit(1);
+    }
+    const target = await ensureServerTarget({ projectRoot, requestedTarget: flags.server });
+    return await runProjectScript('deploy.sh', flags.args, { env: { JWEBGEN_SERVER_TARGET: target } });
+  }
   if (action === 'dev') {
-    return await runProjectScript('dev.sh', flags.args, { verbose: flags.verbose });
+    const projectRoot = findProjectRoot();
+    if (!projectRoot) {
+      console.error(pc.red('Aucun projet jwebgen détecté.'));
+      process.exit(1);
+    }
+    const target = await ensureServerTarget({ projectRoot, requestedTarget: flags.server });
+    return await runProjectScript('dev.sh', flags.args, { verbose: flags.verbose, env: { JWEBGEN_SERVER_TARGET: target } });
   }
   if (action === 'servlet') {
     if (flags.args.length === 0) {

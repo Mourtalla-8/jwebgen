@@ -12,7 +12,7 @@ SCRIPT_DIR="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
 
 export JWEBGEN_DEV=1
 export JWEBGEN_VERBOSE="\${JWEBGEN_VERBOSE:-0}"
-export JWEBGEN_SERVER_TARGET="${serverTarget}"
+export JWEBGEN_SERVER_TARGET="\${JWEBGEN_SERVER_TARGET:-${serverTarget}}"
 exec "$SCRIPT_DIR/watch.sh"
 `;
 }
