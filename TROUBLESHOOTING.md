@@ -52,4 +52,9 @@ No global setup alternative:
 
 - Check process owners:
   - `ss -lntp`
-- Stop conflicting process or change environment ports (`JWEBGEN_HTTP_PORT`, `JWEBGEN_LIVE_PORT`).
+- In `jwebgen --dev`, remediation now supports:
+  - stopping the respawning systemd service that reclaims the port
+  - validated HTTP port fallback (auto tries 8081..8090 and keeps it only if server/app become reachable)
+- You can still force ports manually with:
+  - `JWEBGEN_HTTP_PORT=8081 jwebgen --dev`
+  - `JWEBGEN_LIVE_PORT=35731 jwebgen --dev`

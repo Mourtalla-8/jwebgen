@@ -21,7 +21,7 @@ assertContains(watch, 'DEV_PID_FILE=', 'watch.sh');
 assertContains(watch, 'cleanup_orphan_dev_session', 'watch.sh');
 assertContains(watch, 'scripts/deploy.sh" --cleanup-dev', 'watch.sh');
 assertContains(watch, '"$UI_PAUSE_FILE" "$$"', 'watch worker/dashboard parent pid');
-assertContains(watch, '[p]inspecter / [x]kill port / [f]refresh / [a]ide / [q]uit', 'watch staged kill options');
+assertContains(watch, '[p]inspecter / [x]kill port / [c]hange port / [f]refresh / [a]ide / [q]uit', 'watch staged kill options');
 assertContains(watch, '[d]redémarrer serveur / [f]refresh / [a]ide / [q]uit', 'watch wildfly http000 restart-first options');
 assertContains(watch, "Option non disponible dans ce menu.", 'watch strict key parser');
 if (String(watch).includes('[r]etester')) {

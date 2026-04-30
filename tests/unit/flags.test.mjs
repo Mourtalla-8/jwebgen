@@ -26,6 +26,12 @@ test('parseFlags parses create-related flags and options', () => {
   assert.deepEqual(parsed.flags.args, ['my-app']);
 });
 
+test('parseFlags keeps server target unset when omitted', () => {
+  const parsed = parseFlags(['--new', '--yes', 'my-app']);
+  assert.equal(parsed.action, 'create');
+  assert.equal(parsed.flags.server, null);
+});
+
 test('isLikelyLegacySubcommand detects old subcommand tokens', () => {
   assert.equal(isLikelyLegacySubcommand('dev'), true);
   assert.equal(isLikelyLegacySubcommand('--dev'), false);

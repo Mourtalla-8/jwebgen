@@ -201,9 +201,9 @@ show_server_help() {
   fi
   if [[ -n "$DETECT_CONFLICT_PORT" ]]; then
     if [[ -n "$DETECT_OWNER_PID" ]]; then
-      action_hint="[k] kill pid $DETECT_OWNER_PID  [f] refresh  [a] aide  [q] quit"
+      action_hint="[k] kill pid $DETECT_OWNER_PID  [s] stop service  [c] change port  [f] refresh  [a] aide  [q] quit"
     else
-      action_hint="[p] inspecter  [x] kill port  [f] refresh  [a] aide  [q] quit"
+      action_hint="[p] inspecter  [x] kill port  [c] change port  [f] refresh  [a] aide  [q] quit"
     fi
     ui_info "Actions auto: $action_hint"
     if [[ -z "$DETECT_OWNER_PID" ]]; then

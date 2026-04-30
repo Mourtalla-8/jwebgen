@@ -173,18 +173,25 @@ Sur Arch :
 sudo pacman -S tomcat10
 sudo systemctl start tomcat10
 \`\`\``
-      : `## Prérequis (WildFly)
+      : serverTarget === 'wildfly'
+        ? `## Prérequis (WildFly)
 
 - WildFly installé et démarré
 - Variables utiles :
   - \`WILDFLY_HOME\` (par défaut \`/opt/wildfly\`)
-  - \`WILDFLY_DEPLOYMENTS\` (par défaut \`$WILDFLY_HOME/standalone/deployments\`)`;
+  - \`WILDFLY_DEPLOYMENTS\` (par défaut \`$WILDFLY_HOME/standalone/deployments\`)`
+        : `## Prérequis (serveur à choisir)
+
+- Aucun serveur n'a été défini pendant la création rapide.
+- Au premier \`jwebgen --dev\` ou \`jwebgen --deploy\`, jwebgen te demandera Tomcat ou WildFly puis enregistrera le choix.`;
 
   const devNotes =
     serverTarget === 'tomcat'
       ? `- En dev, le déploiement est **explosé** + sync incrémental (rsync si dispo), sans redémarrage Tomcat.
 - \`src/main/webapp/META-INF/context.xml\` active \`reloadable="true"\` pour aider Tomcat à recharger le contexte.`
-      : `- En dev, le script déploie le WAR vers le dossier deployments et déclenche \`.dodeploy\`.`;
+      : serverTarget === 'wildfly'
+        ? `- En dev, le script déploie le WAR vers le dossier deployments et déclenche \`.dodeploy\`.`
+        : `- En dev, le serveur cible sera sélectionné au premier lancement puis mémorisé dans \`.jwebgenrc\`.`;
 
   return `# Développement rapide
 

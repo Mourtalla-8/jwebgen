@@ -132,7 +132,7 @@ export async function runCreateCommand(deps) {
       });
   const targetDir = location;
 
-  const serverTarget = cliServerTarget || (cliYes ? 'tomcat' : exitOnCancel(await select({ message: 'Serveur cible', options: serverOptions })));
+  const serverTarget = cliServerTarget || (cliYes ? null : exitOnCancel(await select({ message: 'Serveur cible', options: serverOptions })));
   const javaDetection = detectJavaCompiler();
 
   if (!javaDetection.present) {
@@ -171,7 +171,7 @@ export async function runCreateCommand(deps) {
       `Emplacement : ${targetDir}`,
       `groupId : ${groupId}`,
       `package : ${basePackage}`,
-      `serveur : ${serverTarget}`,
+      `serveur : ${serverTarget || 'non défini (sera demandé au 1er --dev/--deploy)'}`,
       `Java détecté : ${javaDetection.display}`,
       `Version Java : ${javaRelease}`,
       `Servlet : ${addServlet ? 'oui' : 'non'}`,
@@ -232,7 +232,7 @@ export async function runCreateCommand(deps) {
         basePackage,
         location: targetDir,
         stackMode: 'modern',
-        serverTarget,
+        serverTarget: serverTarget || 'unset',
         javaRelease,
         hasServlet: addServlet,
         hasJsp: addJsp,
@@ -240,7 +240,7 @@ export async function runCreateCommand(deps) {
         contextPath: deployedAppName
       })
     );
-    await writeFileSafe(path.join(workDir, 'DEV.md'), makeDevMd({ appName: deployedAppName, serverTarget }));
+    await writeFileSafe(path.join(workDir, 'DEV.md'), makeDevMd({ appName: deployedAppName, serverTarget: serverTarget || 'unset' }));
     await writeFileSafe(path.join(workDir, 'scripts/build.sh'), makeBuildScript());
     await writeFileSafe(path.join(workDir, 'scripts/deploy.sh'), makeDeploySelectorScript());
     await writeFileSafe(
@@ -254,7 +254,9 @@ export async function runCreateCommand(deps) {
     await writeFileSafe(path.join(workDir, 'scripts/dev.sh'), makeDevScript({ serverTarget }));
     await writeFileSafe(path.join(workDir, 'scripts/watch.sh'), makeWatchScript());
     if (addServlet) await writeFileSafe(path.join(workDir, 'scripts/add-servlet.sh'), makeAddServletScript({ basePackage }));
-    await writeFileSafe(path.join(workDir, '.jwebgenrc'), `export JWEBGEN_SERVER_TARGET="${serverTarget}"\n`);
+    if (serverTarget === 'tomcat' || serverTarget === 'wildfly') {
+      await writeFileSafe(path.join(workDir, '.jwebgenrc'), `export JWEBGEN_SERVER_TARGET="${serverTarget}"\n`);
+    }
 
     const scriptFiles = [
       'scripts/build.sh',

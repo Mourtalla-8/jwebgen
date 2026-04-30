@@ -2,6 +2,84 @@ export const WATCH_REMEDIATION_SECTION = `needs_server_start() {
   [[ "$DETECT_REASON" =~ (non\ actif|arrêté|inactif|non\ détecté) ]]
 }
 
+wait_for_port_release() {
+  local port="$1"
+  local tries=3
+  while (( tries > 0 )); do
+    if ! is_port_busy "$port"; then
+      return 0
+    fi
+    sleep 1
+    tries=$((tries - 1))
+  done
+  return 1
+}
+
+owner_systemd_unit_from_pid() {
+  local pid="$1"
+  local line=""
+  local unit=""
+  if [[ -z "$pid" ]] || ! command -v systemctl >/dev/null 2>&1; then
+    return 1
+  fi
+  line="$(systemctl --no-pager --plain status "$pid" 2>/dev/null | sed -n 's/.*CGroup: .*\\/\\([^/[:space:]]\\+\\.service\\).*/\\1/p' | head -n 1)"
+  unit="$(printf '%s' "$line" | tr -d '[:space:]')"
+  if [[ -z "$unit" ]]; then
+    line="$(systemctl status "$pid" 2>/dev/null | sed -n 's/.*Loaded: .*\\([^/[:space:]]\\+\\.service\\).*/\\1/p' | head -n 1)"
+    unit="$(printf '%s' "$line" | tr -d '[:space:]')"
+  fi
+  if [[ -n "$unit" ]]; then
+    printf '%s' "$unit"
+    return 0
+  fi
+  return 1
+}
+
+persist_dev_http_port_if_possible() {
+  local new_port="$1"
+  local cfg="$ROOT_DIR/.jwebgenrc"
+  if [[ ! -f "$cfg" ]]; then
+    return 1
+  fi
+  if rg -q '^export JWEBGEN_HTTP_PORT=' "$cfg" 2>/dev/null; then
+    sed -i -E "s/^export JWEBGEN_HTTP_PORT=.*/export JWEBGEN_HTTP_PORT=\\"$new_port\\"/" "$cfg" 2>/dev/null || true
+  else
+    printf 'export JWEBGEN_HTTP_PORT="%s"\\n' "$new_port" >> "$cfg"
+  fi
+  return 0
+}
+
+apply_validated_http_port_fallback() {
+  local old_port="$DEV_HTTP_PORT"
+  local candidate
+  local switched=0
+  for candidate in 8081 8082 8083 8084 8085 8086 8087 8088 8089 8090; do
+    if is_port_busy "$candidate"; then
+      continue
+    fi
+    DEV_HTTP_PORT="$candidate"
+    export JWEBGEN_HTTP_PORT="$candidate"
+    detect_server_state
+    if start_server_noninteractive 1 || start_server_noninteractive; then
+      restart_worker
+      detect_server_state
+      if [[ "$DETECT_STATUS" = "up" ]]; then
+        switched=1
+        ui_info "Port HTTP changé et validé: $old_port -> $candidate"
+        persist_dev_http_port_if_possible "$candidate" || true
+        break
+      fi
+    fi
+  done
+  if [[ "$switched" = "1" ]]; then
+    return 0
+  fi
+  DEV_HTTP_PORT="$old_port"
+  export JWEBGEN_HTTP_PORT="$old_port"
+  ui_warn "Impossible de valider un fallback de port HTTP."
+  return 1
+}
+
 compact_cause_label() {
   if [[ -n "$DETECT_CONFLICT_PORT" ]]; then
     printf 'PORT_CONFLICT'
@@ -43,6 +121,7 @@ prompt_server_remediation() {
   local primary_label="refresh"
   local start_needed=0
   local prompt_subject=""
+  local conflict_unit=""
   pause_ui
   stop_dashboard
   if [[ "$TTY_IN_FD" -ne 3 ]]; then
@@ -90,9 +169,9 @@ prompt_server_remediation() {
       options="[f]refresh / [a]ide / [q]uit"
       if [[ -n "$DETECT_OWNER_PID" ]]; then
         has_pid_conflict=1
-        options="[k]ill occupant / [f]refresh / [a]ide / [q]uit"
+        options="[k]ill occupant / [s]top service / [c]hange port / [f]refresh / [a]ide / [q]uit"
       else
-        options="[p]inspecter / [x]kill port / [f]refresh / [a]ide / [q]uit"
+        options="[p]inspecter / [x]kill port / [c]hange port / [f]refresh / [a]ide / [q]uit"
       fi
     elif [[ "$DETECT_REASON" == *"renvoie HTTP"* ]]; then
       app_down_like=1
@@ -160,6 +239,14 @@ prompt_server_remediation() {
             ui_err "Impossible d'arrêter le processus $DETECT_OWNER_PID."
           fi
           if [[ "$killed_ok" = "1" ]]; then
+          if ! wait_for_port_release "$DETECT_CONFLICT_PORT"; then
+            detect_server_state
+            ui_warn "Le port $DETECT_CONFLICT_PORT est repris automatiquement."
+            if [[ -n "$DETECT_OWNER" ]]; then
+              ui_info "Nouveau process occupant: $DETECT_OWNER"
+            fi
+            continue
+          fi
             if start_server_noninteractive 1 || start_server_noninteractive; then
               restart_worker
               detect_server_state
@@ -218,6 +305,14 @@ prompt_server_remediation() {
           ui_info "Essaye: sudo fuser -k -n tcp $DETECT_CONFLICT_PORT"
         fi
         if [[ "$killed_port_ok" = "1" ]]; then
+          if ! wait_for_port_release "$DETECT_CONFLICT_PORT"; then
+            detect_server_state
+            ui_warn "Le port $DETECT_CONFLICT_PORT est repris automatiquement."
+            if [[ -n "$DETECT_OWNER" ]]; then
+              ui_info "Nouveau process occupant: $DETECT_OWNER"
+            fi
+            continue
+          fi
           if start_server_noninteractive 1 || start_server_noninteractive; then
             restart_worker
             detect_server_state
@@ -227,6 +322,66 @@ prompt_server_remediation() {
               return 0
             fi
           fi
+        fi
+        ;;
+      [Ss])
+        if [[ "$has_conflict" != "1" || "$has_pid_conflict" != "1" ]]; then
+          ui_warn "Option non disponible dans ce menu."
+          continue
+        fi
+        detect_server_state
+        if [[ -z "$DETECT_OWNER_PID" ]]; then
+          ui_warn "PID occupant introuvable."
+          continue
+        fi
+        conflict_unit="$(owner_systemd_unit_from_pid "$DETECT_OWNER_PID" || true)"
+        if [[ -z "$conflict_unit" ]]; then
+          ui_warn "Impossible d'identifier un service systemd pour ce PID."
+          if [[ -n "$DETECT_OWNER" ]]; then
+            ui_info "Occupant: $DETECT_OWNER"
+          fi
+          continue
+        fi
+        if [[ "$conflict_unit" = "$(server_unit_name).service" || "$conflict_unit" = "$(server_unit_name)" ]]; then
+          ui_warn "Le service détecté est le serveur cible lui-même: $conflict_unit"
+          continue
+        fi
+        printf "\\nConfirmer stop du service %s ? [y/N] " "$conflict_unit" >&$TTY_OUT_FD
+        IFS= read -r confirm <&$TTY_IN_FD || { ui_warn "Confirmation annulée."; continue; }
+        if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+          ui_info "Stop service annulé."
+          continue
+        fi
+        if ! sudo -n systemctl stop "$conflict_unit" 2>/dev/null; then
+          ui_err "Impossible d'arrêter $conflict_unit."
+          ui_info "Commande: sudo systemctl stop $conflict_unit"
+          continue
+        fi
+        ui_info "Service arrêté: $conflict_unit"
+        if ! wait_for_port_release "$DETECT_CONFLICT_PORT"; then
+          detect_server_state
+          ui_warn "Le port reste occupé après stop de $conflict_unit."
+          continue
+        fi
+        if start_server_noninteractive 1 || start_server_noninteractive; then
+          restart_worker
+          detect_server_state
+          if [[ "$DETECT_STATUS" = "up" ]]; then
+            resume_ui
+            start_dashboard
+            return 0
+          fi
+        fi
+        ;;
+      [Cc])
+        if [[ "$has_conflict" != "1" ]]; then
+          ui_warn "Option non disponible dans ce menu."
+          continue
+        fi
+        if apply_validated_http_port_fallback; then
+          resume_ui
+          start_dashboard
+          return 0
         fi
         ;;
       [Ff])

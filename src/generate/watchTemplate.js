@@ -5,6 +5,10 @@ import {
 import { WATCH_RUNTIME_SECTION } from './watchRuntimeSection.js';
 
 export function makeDevScript({ serverTarget }) {
+  const exportTargetLine =
+    serverTarget === 'tomcat' || serverTarget === 'wildfly'
+      ? `export JWEBGEN_SERVER_TARGET="\${JWEBGEN_SERVER_TARGET:-${serverTarget}}"`
+      : `export JWEBGEN_SERVER_TARGET="\${JWEBGEN_SERVER_TARGET:-}"`;
   return `#!/usr/bin/env bash
 set -euo pipefail
 
@@ -12,7 +16,7 @@ SCRIPT_DIR="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
 
 export JWEBGEN_DEV=1
 export JWEBGEN_VERBOSE="\${JWEBGEN_VERBOSE:-0}"
-export JWEBGEN_SERVER_TARGET="\${JWEBGEN_SERVER_TARGET:-${serverTarget}}"
+${exportTargetLine}
 exec "$SCRIPT_DIR/watch.sh"
 `;
 }
