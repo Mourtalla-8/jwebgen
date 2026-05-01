@@ -24,7 +24,7 @@
     "release:verify": "npm pack --dry-run >/dev/null && npm run check"
   },
   "engines": {
-    "node": ">=18.19.0"
+    "node": ">=20.12.0"
   },
   "dependencies": {
     "@clack/prompts": "^1.2.0",

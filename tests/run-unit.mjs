@@ -10,6 +10,11 @@ const files = readdirSync(unitDir)
   .sort()
   .map((name) => join(unitDir, name));
 
+if (files.length === 0) {
+  console.error(`run-unit: no *.test.mjs files found in ${unitDir}`);
+  process.exit(1);
+}
+
 const result = spawnSync(process.execPath, ['--test', ...files], {
   stdio: 'inherit',
   shell: false,
