@@ -24,18 +24,47 @@ Before opening a PR:
 npm run check
 ```
 
-## Release process
+## Branch model (GitFlow)
 
-1. Ensure `package.json` version and `CHANGELOG.md` are aligned.
-2. Push changes to `main`.
-3. Create and push a SemVer tag:
+- Long-lived branches:
+  - `main`: production-ready history only
+  - `develop`: integration branch for upcoming release
+- Working branches:
+  - `feature/<topic>` from `develop`
+  - `hotfix/<topic>` from `main`
+  - `release/<x.y.z>` from `develop`
+- Branch protections are enabled on `main` and `develop`:
+  - direct pushes disabled
+  - pull request required
+  - at least 1 approval required
+
+Typical feature flow:
 
 ```bash
+git checkout develop
+git pull
+git checkout -b feature/my-change
+# ...work...
+npm run check
+git push -u origin feature/my-change
+# open PR: feature/my-change -> develop
+```
+
+## Release process
+
+1. Ensure `package.json` version and `CHANGELOG.md` are aligned on `develop`.
+2. Create `release/<x.y.z>` from `develop` and run final checks.
+3. Open PR `release/<x.y.z>` -> `main` and merge.
+4. Tag the merge commit on `main` and push the SemVer tag:
+
+```bash
+git checkout main
+git pull
 git tag vX.Y.Z
 git push origin vX.Y.Z
 ```
 
-4. GitHub Release workflow runs automatically on tag push.
+5. GitHub Release workflow runs automatically on tag push.
 
 ## Optional npm publication
 
