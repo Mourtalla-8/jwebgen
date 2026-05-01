@@ -79,8 +79,170 @@ await run(mavenExecutable, args, { cwd: rootDir });
 }
 
 export function makeNodeDeployScript() {
-  // Temporary bridge: delegate to bash deploy selector on Unix.
-  return `${scriptHeader({ name: 'deploy' })}${delegateToBash({ bashName: 'deploy.sh' })}`;
+  // Cross-platform deploy entrypoint. This is the first step to replace bash deploy scripts.
+  return `${scriptHeader({ name: 'deploy' })}
+import path from 'node:path';
+import { existsSync } from 'node:fs';
+import { cp, mkdir, rm, writeFile, readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const rootDir = path.resolve(__dirname, '../..');
+const scriptsDir = __dirname;
+const appName = path.basename(rootDir);
+
+function parseExports(text) {
+  const env = {};
+  for (const rawLine of String(text || '').split(/\\r?\\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) continue;
+    const m = line.match(/^export\\s+([A-Z0-9_]+)=(.*)$/);
+    if (!m) continue;
+    const key = m[1];
+    let value = m[2].trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith(\"'\") && value.endsWith(\"'\"))) {
+      value = value.slice(1, -1);
+    }
+    env[key] = value;
+  }
+  return env;
+}
+
+async function loadProjectConfig() {
+  const cfgPath = path.join(rootDir, '.jwebgen', '.jwebgenrc');
+  if (!existsSync(cfgPath)) return {};
+  try {
+    const raw = await readFile(cfgPath, 'utf8');
+    return parseExports(raw);
+  } catch {
+    return {};
+  }
+}
+
+function resolveServerTarget({ cfg }) {
+  const v = String(process.env.JWEBGEN_SERVER_TARGET || cfg.JWEBGEN_SERVER_TARGET || '').trim();
+  if (v === 'tomcat' || v === 'wildfly') return v;
+  return 'tomcat';
+}
+
+function isDevMode() {
+  return String(process.env.JWEBGEN_DEV || '') === '1';
+}
+
+async function ensureDir(p) {
+  await mkdir(p, { recursive: true });
+}
+
+async function deployTomcat({ cfg, cleanupOnly }) {
+  const tomcatHome = String(process.env.TOMCAT_HOME || process.env.TOMCAT10 || cfg.TOMCAT_HOME || cfg.TOMCAT10 || '').trim();
+  const defaultHome = process.platform === 'win32' ? '' : '/var/lib/tomcat10';
+  const home = tomcatHome || defaultHome;
+  if (!home) {
+    console.error('Tomcat home is not configured. Set TOMCAT_HOME (or TOMCAT10) in your environment or .jwebgen/.jwebgenrc.');
+    process.exit(1);
+  }
+  const webapps = path.join(home, 'webapps');
+  const destExploded = path.join(webapps, appName);
+  const destWar = path.join(webapps, appName + '.war');
+
+  await ensureDir(webapps);
+
+  if (cleanupOnly) {
+    await rm(destExploded, { recursive: true, force: true });
+    await rm(destWar, { force: true });
+    console.log('Tomcat cleanup complete: ' + appName);
+    return;
+  }
+
+  if (isDevMode()) {
+    const explodedSrc = path.join(rootDir, 'target', appName);
+    if (!existsSync(explodedSrc)) {
+      console.error('Build required: missing ' + explodedSrc);
+      process.exit(1);
+    }
+    await rm(destWar, { force: true });
+    await rm(destExploded, { recursive: true, force: true });
+    await cp(explodedSrc, destExploded, { recursive: true, force: true });
+    // Best-effort touch for Tomcat reloadable context
+    const ctx = path.join(destExploded, 'META-INF', 'context.xml');
+    if (existsSync(ctx)) await writeFile(ctx, await readFile(ctx));
+    console.log('Deployed to Tomcat (exploded): ' + destExploded);
+    return;
+  }
+
+  const targetDir = path.join(rootDir, 'target');
+  if (!existsSync(targetDir)) {
+    console.error('Build required: target/ directory is missing.');
+    process.exit(1);
+  }
+  // Find newest WAR in target/
+  const entries = await (await import('node:fs/promises')).readdir(targetDir);
+  const wars = entries.filter((e) => e.endsWith('.war')).sort();
+  const warFile = wars[wars.length - 1] ? path.join(targetDir, wars[wars.length - 1]) : '';
+  if (!warFile || !existsSync(warFile)) {
+    console.error('WAR file not found in target/. Run build first.');
+    process.exit(1);
+  }
+  await rm(destExploded, { recursive: true, force: true });
+  await rm(destWar, { force: true });
+  await cp(warFile, destWar, { force: true });
+  console.log('Deployed to Tomcat: ' + destWar);
+}
+
+async function deployWildfly({ cfg, cleanupOnly }) {
+  const wildflyHome = String(process.env.WILDFLY_HOME || cfg.WILDFLY_HOME || '/opt/wildfly').trim();
+  const deployments = String(process.env.WILDFLY_DEPLOYMENTS || cfg.WILDFLY_DEPLOYMENTS || path.join(wildflyHome, 'standalone', 'deployments')).trim();
+  const destWar = path.join(deployments, appName + '.war');
+
+  await ensureDir(deployments);
+
+  const markers = [
+    destWar,
+    destWar + '.deployed',
+    destWar + '.undeployed',
+    destWar + '.failed',
+    destWar + '.skipdeploy',
+    destWar + '.pending',
+    destWar + '.isdeploying',
+    destWar + '.isundeploying',
+    destWar + '.status',
+    destWar + '.dodeploy'
+  ];
+
+  if (cleanupOnly) {
+    await Promise.all(markers.map((p) => rm(p, { force: true })));
+    console.log('WildFly cleanup complete: ' + appName);
+    return;
+  }
+
+  const targetDir = path.join(rootDir, 'target');
+  if (!existsSync(targetDir)) {
+    console.error('Build required: target/ directory is missing.');
+    process.exit(1);
+  }
+  const entries = await (await import('node:fs/promises')).readdir(targetDir);
+  const wars = entries.filter((e) => e.endsWith('.war')).sort();
+  const warFile = wars[wars.length - 1] ? path.join(targetDir, wars[wars.length - 1]) : '';
+  if (!warFile || !existsSync(warFile)) {
+    console.error('WAR file not found in target/. Run build first.');
+    process.exit(1);
+  }
+  await cp(warFile, destWar, { force: true });
+  await writeFile(destWar + '.dodeploy', '');
+  console.log('Deployed to WildFly: ' + destWar);
+}
+
+const cfg = await loadProjectConfig();
+const target = resolveServerTarget({ cfg });
+const cleanupOnly = process.argv.includes('--cleanup-dev');
+
+if (target === 'tomcat') {
+  await deployTomcat({ cfg, cleanupOnly });
+} else {
+  await deployWildfly({ cfg, cleanupOnly });
+}
+`;
 }
 
 export function makeNodeDevScript() {
