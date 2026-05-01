@@ -47,7 +47,11 @@ import {
   makeDeployServerScript as makeDeployServerScriptImpl,
   makeDeploySelectorScript as makeDeploySelectorScriptImpl,
   makeDevScript as makeDevScriptImpl,
-  makeWatchScript as makeWatchScriptImpl
+  makeWatchScript as makeWatchScriptImpl,
+  makeNodeBuildScript as makeNodeBuildScriptImpl,
+  makeNodeDeployScript as makeNodeDeployScriptImpl,
+  makeNodeDevScript as makeNodeDevScriptImpl,
+  makeNodeWatchScript as makeNodeWatchScriptImpl
 } from '../src/generate/scriptTemplates.js';
 import { parseFlags, formatFlagsHelp, isLikelyLegacySubcommand } from '../src/cli/flags.js';
 import { detectLegacyProjectIssues as detectLegacyProjectIssuesModule } from '../src/project/legacyDetection.js';
@@ -117,6 +121,10 @@ async function main(cli = {}) {
     makeDeploySelectorScript: makeDeploySelectorScriptImpl,
     makeDevScript: makeDevScriptImpl,
     makeWatchScript: makeWatchScriptImpl,
+    makeNodeBuildScript: makeNodeBuildScriptImpl,
+    makeNodeDeployScript: makeNodeDeployScriptImpl,
+    makeNodeDevScript: makeNodeDevScriptImpl,
+    makeNodeWatchScript: makeNodeWatchScriptImpl,
     makeAddServletScript: ({ basePackage }) => makeAddServletScriptImpl({ basePackage, appName: APP_NAME }),
     makeExecutable,
     ensureBuildTools,
@@ -166,6 +174,10 @@ async function runMigrate() {
     makeDeploySelectorScript: makeDeploySelectorScriptImpl,
     makeDevScript: makeDevScriptImpl,
     makeWatchScript: makeWatchScriptImpl,
+    makeNodeBuildScript: makeNodeBuildScriptImpl,
+    makeNodeDeployScript: makeNodeDeployScriptImpl,
+    makeNodeDevScript: makeNodeDevScriptImpl,
+    makeNodeWatchScript: makeNodeWatchScriptImpl,
     makeAddServletScript: ({ basePackage }) => makeAddServletScriptImpl({ basePackage, appName: APP_NAME }),
     makeExecutable,
     legacyDeployScript: LEGACY_DEPLOY_SCRIPT

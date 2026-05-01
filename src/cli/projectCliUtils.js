@@ -9,7 +9,8 @@ export function findProjectRoot(startDir = process.cwd()) {
   while (true) {
     if (
       existsSync(path.join(dir, 'pom.xml')) &&
-      existsSync(path.join(jwebgenScriptsDir(dir), 'watch.sh'))
+      (existsSync(path.join(jwebgenScriptsDir(dir), 'watch.mjs')) ||
+        existsSync(path.join(jwebgenScriptsDir(dir), 'watch.sh')))
     )
       return dir;
     const parent = path.dirname(dir);
@@ -31,7 +32,11 @@ export function parseCliOptions(args = []) {
 }
 
 export function detectServerTargetFromProject(projectRoot) {
-  const devPath = path.join(jwebgenScriptsDir(projectRoot), 'dev.sh');
+  const scriptsDir = jwebgenScriptsDir(projectRoot);
+  const devMjs = path.join(scriptsDir, 'dev.mjs');
+  const devPath = path.join(scriptsDir, 'dev.sh');
+  // If only node scripts exist, default to tomcat until deploy adapters land.
+  if (existsSync(devMjs) && !existsSync(devPath)) return 'tomcat';
   if (!existsSync(devPath)) return 'tomcat';
   try {
     const raw = spawnSync(

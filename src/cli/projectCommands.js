@@ -117,6 +117,10 @@ export async function runMigrate({
   makeDeploySelectorScript,
   makeDevScript,
   makeWatchScript,
+  makeNodeBuildScript,
+  makeNodeDeployScript,
+  makeNodeDevScript,
+  makeNodeWatchScript,
   makeAddServletScript,
   makeExecutable,
   legacyDeployScript
@@ -144,6 +148,20 @@ export async function runMigrate({
   );
   await writeFileSafe(path.join(scriptsDir, 'dev.sh'), makeDevScript({ serverTarget }));
   await writeFileSafe(path.join(scriptsDir, 'watch.sh'), makeWatchScript());
+
+  // Cross-platform Node entrypoints (preferred by the CLI when present).
+  if (typeof makeNodeBuildScript === 'function') {
+    await writeFileSafe(path.join(scriptsDir, 'build.mjs'), makeNodeBuildScript());
+  }
+  if (typeof makeNodeDeployScript === 'function') {
+    await writeFileSafe(path.join(scriptsDir, 'deploy.mjs'), makeNodeDeployScript());
+  }
+  if (typeof makeNodeDevScript === 'function') {
+    await writeFileSafe(path.join(scriptsDir, 'dev.mjs'), makeNodeDevScript());
+  }
+  if (typeof makeNodeWatchScript === 'function') {
+    await writeFileSafe(path.join(scriptsDir, 'watch.mjs'), makeNodeWatchScript());
+  }
   const basePackage = await inferBasePackage(projectRoot, appName);
   await writeFileSafe(path.join(scriptsDir, 'add-servlet.sh'), makeAddServletScript({ basePackage }));
   await writeProjectConfigServerTarget(projectRoot, serverTarget);
@@ -165,6 +183,11 @@ export async function runMigrate({
   await makeExecutable(path.join(scriptsDir, 'dev.sh'));
   await makeExecutable(path.join(scriptsDir, 'watch.sh'));
   await makeExecutable(path.join(scriptsDir, 'add-servlet.sh'));
+
+  if (typeof makeNodeBuildScript === 'function') await makeExecutable(path.join(scriptsDir, 'build.mjs'));
+  if (typeof makeNodeDeployScript === 'function') await makeExecutable(path.join(scriptsDir, 'deploy.mjs'));
+  if (typeof makeNodeDevScript === 'function') await makeExecutable(path.join(scriptsDir, 'dev.mjs'));
+  if (typeof makeNodeWatchScript === 'function') await makeExecutable(path.join(scriptsDir, 'watch.mjs'));
 
   console.log(pc.green('Migration complete: scripts regenerated to current format.'));
   console.log(pc.cyan('You can run again: jwebgen --dev'));
