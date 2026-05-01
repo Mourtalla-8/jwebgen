@@ -13,7 +13,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        node-version: [18, 20]
+        node-version: ["18", "20"]
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -47,6 +47,6 @@ jobs:
         run: node bin/jwebgen.js --help
 
       - name: CLI new smoke (macOS/Windows, Node 20 only)
-        if: runner.os != 'Linux' && matrix.node-version == 20
+        if: runner.os != 'Linux' && matrix.node-version == '20'
         run: |
           node -e "const fs=require('node:fs'); const os=require('node:os'); const path=require('node:path'); const cp=require('node:child_process'); const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'jwebgen-smoke-')); cp.execFileSync(process.execPath,[path.join(process.cwd(),'bin','jwebgen.js'),'--new','myapp','--yes'],{cwd:tmp,stdio:'inherit'});"
