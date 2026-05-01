@@ -21,10 +21,10 @@ assertContains(watch, 'DEV_PID_FILE=', 'watch.sh');
 assertContains(watch, 'cleanup_orphan_dev_session', 'watch.sh');
 assertContains(watch, '.jwebgen/scripts/deploy.sh" --cleanup-dev', 'watch.sh');
 assertContains(watch, '"$UI_PAUSE_FILE" "$$"', 'watch worker/dashboard parent pid');
-assertContains(watch, '[i]inspecter / [x]kill port / [f]refresh / [a]ide / [q]uit', 'watch staged kill options');
-assertContains(watch, '[r]redéployer+redémarrer / [i]inspecter / [f]refresh / [a]ide / [q]uit', 'watch wildfly http000 restart-first options');
-assertContains(watch, 'Déploiement en erreur. [f]refresh / [a]ide / [q]uit', 'watch deploy remediation options');
-assertContains(watch, "Option non disponible dans ce menu.", 'watch strict key parser');
+assertContains(watch, '[i]nspect / [x]kill port / [f]refresh / [a]help / [q]uit', 'watch staged kill options');
+assertContains(watch, '[r]edeploy+restart / [i]nspect / [f]refresh / [a]help / [q]uit', 'watch wildfly http000 restart-first options');
+assertContains(watch, 'Deployment failed. [f]refresh / [a]help / [q]uit', 'watch deploy remediation options');
+assertContains(watch, "Option is not available in this menu.", 'watch strict key parser');
 if (String(watch).includes('[r]etester')) {
   throw new Error('unexpected retester option in watch.sh');
 }

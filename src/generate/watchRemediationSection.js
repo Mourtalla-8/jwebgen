@@ -1,5 +1,5 @@
 export const WATCH_REMEDIATION_SECTION = `needs_server_start() {
-  [[ "$DETECT_REASON" =~ (non\ actif|arrêté|inactif|non\ détecté) ]]
+  [[ "$DETECT_REASON" =~ (is\ not\ running|stopped|inactive|not\ detected) ]]
 }
 
 wait_for_port_release() {
@@ -65,7 +65,7 @@ apply_validated_http_port_fallback() {
       detect_server_state
       if [[ "$DETECT_STATUS" = "up" ]]; then
         switched=1
-        ui_info "Port HTTP changé et validé: $old_port -> $candidate"
+        ui_info "HTTP port changed and validated: $old_port -> $candidate"
         persist_dev_http_port_if_possible "$candidate" || true
         break
       fi
@@ -76,7 +76,7 @@ apply_validated_http_port_fallback() {
   fi
   DEV_HTTP_PORT="$old_port"
   export JWEBGEN_HTTP_PORT="$old_port"
-  ui_warn "Impossible de valider un fallback de port HTTP."
+  ui_warn "Unable to validate an HTTP port fallback."
   return 1
 }
 
@@ -97,7 +97,7 @@ compact_cause_label() {
     printf 'APP_HTTP_000'
     return 0
   fi
-  if [[ "$DETECT_REASON" == *"renvoie HTTP"* ]]; then
+  if [[ "$DETECT_REASON" == *"returns HTTP"* ]]; then
     printf 'APP_HTTP_OTHER'
     return 0
   fi
@@ -111,7 +111,7 @@ prompt_server_remediation() {
   local force_kill_confirm
   local last_reason_shown=""
   local cause_label=""
-  local options="[f]refresh / [a]ide / [q]uit"
+  local options="[f]refresh / [a]help / [q]uit"
   local has_conflict=0
   local has_pid_conflict=0
   local app_down_like=0
@@ -125,7 +125,7 @@ prompt_server_remediation() {
   pause_ui
   stop_dashboard
   if [[ "$TTY_IN_FD" -ne 3 ]]; then
-    ui_warn "Mode non-interactif: impossible d'ouvrir /dev/tty pour le prompt."
+    ui_warn "Non-interactive mode: unable to open /dev/tty for prompt."
     show_server_help
     resume_ui
     start_dashboard
@@ -139,7 +139,7 @@ prompt_server_remediation() {
       return 0
     fi
     if [[ "$header_shown" = "0" ]]; then
-      printf "\\n--- Remédiation %s ---\\n" "$(server_label)" >&$TTY_OUT_FD
+      printf "\\n--- %s remediation ---\\n" "$(server_label)" >&$TTY_OUT_FD
       header_shown=1
     fi
     has_conflict=0
@@ -152,45 +152,45 @@ prompt_server_remediation() {
     if needs_server_start; then
       start_needed=1
       primary_key="d"
-      primary_label="démarrer"
+      primary_label="start"
     elif [[ "$SERVER_TARGET" = "wildfly" && "$DETECT_REASON" == *"HTTP 000"* ]]; then
       wildfly_http000=1
       start_needed=1
       primary_key="d"
-      primary_label="redémarrer"
+      primary_label="restart"
     fi
     if [[ "$primary_key" = "f" ]]; then
-      options="[f]refresh / [a]ide / [q]uit"
+      options="[f]refresh / [a]help / [q]uit"
     else
-      options="[\${primary_key}]\${primary_label} / [f]refresh / [a]ide / [q]uit"
+      options="[\${primary_key}]\${primary_label} / [f]refresh / [a]help / [q]uit"
     fi
     if [[ -n "$DETECT_CONFLICT_PORT" ]]; then
       has_conflict=1
       if [[ "$start_needed" = "1" ]]; then
-        options="[\${primary_key}]\${primary_label} / [f]refresh / [a]ide / [q]uit"
+        options="[\${primary_key}]\${primary_label} / [f]refresh / [a]help / [q]uit"
       elif [[ -n "$DETECT_OWNER_PID" ]]; then
         has_pid_conflict=1
-        options="[k]ill occupant / [s]top service / [f]refresh / [a]ide / [q]uit"
+        options="[k]ill owner / [s]top service / [f]refresh / [a]help / [q]uit"
       else
-        options="[i]inspecter / [x]kill port / [f]refresh / [a]ide / [q]uit"
+        options="[i]nspect / [x]kill port / [f]refresh / [a]help / [q]uit"
       fi
-    elif [[ "$DETECT_REASON" == *"renvoie HTTP"* ]]; then
+    elif [[ "$DETECT_REASON" == *"returns HTTP"* ]]; then
       app_down_like=1
       if [[ "$wildfly_http000" = "1" ]]; then
-        options="[r]redéployer+redémarrer / [i]inspecter / [f]refresh / [a]ide / [q]uit"
+        options="[r]edeploy+restart / [i]nspect / [f]refresh / [a]help / [q]uit"
       else
-        options="[r]redéployer / [i]inspecter / [f]refresh / [a]ide / [q]uit"
+        options="[r]edeploy / [i]nspect / [f]refresh / [a]help / [q]uit"
       fi
     fi
     if [[ -n "$DETECT_REASON" && "$DETECT_REASON" != "$last_reason_shown" ]]; then
       cause_label="$(compact_cause_label)"
       ui_warn "Cause: $cause_label"
-      ui_info "Pourquoi: $DETECT_REASON"
+      ui_info "Why: $DETECT_REASON"
       last_reason_shown="$DETECT_REASON"
     fi
-    prompt_subject="$(server_label) indisponible"
-    if [[ "$DETECT_REASON" == *"renvoie HTTP"* ]]; then
-      prompt_subject="Application inaccessible (/$APP_NAME/)"
+    prompt_subject="$(server_label) unavailable"
+    if [[ "$DETECT_REASON" == *"returns HTTP"* ]]; then
+      prompt_subject="Application unreachable (/$APP_NAME/)"
     fi
     printf "\\n%s. %s ? " "$prompt_subject" "$options" >&$TTY_OUT_FD
     IFS= read -rsn1 answer <&$TTY_IN_FD || { resume_ui; start_dashboard; return 1; }
@@ -202,55 +202,55 @@ prompt_server_remediation() {
     case "$answer" in
       [Kk])
         if [[ "$has_conflict" != "1" || "$has_pid_conflict" != "1" ]]; then
-          ui_warn "Option non disponible dans ce menu."
+          ui_warn "Option is not available in this menu."
           continue
         fi
         detect_server_state
         if [[ -z "$DETECT_CONFLICT_PORT" ]]; then
-          ui_warn "Aucun conflit de port détecté actuellement."
+          ui_warn "No port conflict detected right now."
           continue
         fi
         if [[ -z "$DETECT_OWNER_PID" ]]; then
-          ui_warn "PID non identifié pour le port $DETECT_CONFLICT_PORT."
-          ui_info "Inspecte avec: ss -lntp | rg ':$DETECT_CONFLICT_PORT'"
+          ui_warn "PID not identified for port $DETECT_CONFLICT_PORT."
+          ui_info "Inspect with: ss -lntp | rg ':$DETECT_CONFLICT_PORT'"
           continue
         fi
         if [[ -f "$STATE_FILE" ]]; then
           if ! rg -q "\"pid\"\\s*:\\s*\${DETECT_OWNER_PID}" "$STATE_FILE" 2>/dev/null; then
-            ui_warn "Refus: ce PID n'appartient pas à jwebgen (sécurité)."
-            ui_info "Stoppe-le manuellement si tu es sûr, ou utilise un autre port."
+            ui_warn "Denied: this PID does not belong to jwebgen (safety)."
+            ui_info "Stop it manually if you are sure, or use another port."
             continue
           fi
         else
-          ui_warn "Refus: état jwebgen absent, impossible de vérifier la propriété du PID."
+          ui_warn "Denied: jwebgen state is missing, unable to verify PID ownership."
           continue
         fi
-        printf "\\nConfirmer l'arrêt du PID %s sur port %s ? [y/N] " "$DETECT_OWNER_PID" "$DETECT_CONFLICT_PORT" >&$TTY_OUT_FD
-        IFS= read -r confirm <&$TTY_IN_FD || { ui_warn "Confirmation annulée."; continue; }
+        printf "\\nConfirm stopping PID %s on port %s? [y/N] " "$DETECT_OWNER_PID" "$DETECT_CONFLICT_PORT" >&$TTY_OUT_FD
+        IFS= read -r confirm <&$TTY_IN_FD || { ui_warn "Confirmation cancelled."; continue; }
         if [[ "$confirm" =~ ^[Yy]$ ]]; then
           local killed_ok=0
           if kill "$DETECT_OWNER_PID" 2>/dev/null; then
-            ui_info "Processus $DETECT_OWNER_PID arrêté."
+            ui_info "Process $DETECT_OWNER_PID stopped."
             killed_ok=1
           elif sudo -n kill "$DETECT_OWNER_PID" 2>/dev/null; then
-            ui_info "Processus $DETECT_OWNER_PID arrêté avec sudo."
+            ui_info "Process $DETECT_OWNER_PID stopped with sudo."
             killed_ok=1
           else
-            printf "\\nPermissions root requises pour arrêter %s. Authentifier sudo maintenant ? [y/N] " "$DETECT_OWNER_PID" >&$TTY_OUT_FD
-            IFS= read -r confirm <&$TTY_IN_FD || { ui_warn "Confirmation annulée."; continue; }
+            printf "\\nRoot permission required to stop %s. Authenticate sudo now? [y/N] " "$DETECT_OWNER_PID" >&$TTY_OUT_FD
+            IFS= read -r confirm <&$TTY_IN_FD || { ui_warn "Confirmation cancelled."; continue; }
             if [[ "$confirm" =~ ^[Yy]$ ]] && sudo -v <&$TTY_IN_FD 1>&$TTY_OUT_FD 2>&$TTY_OUT_FD && sudo kill "$DETECT_OWNER_PID" 2>/dev/null; then
-              ui_info "Processus $DETECT_OWNER_PID arrêté avec sudo."
+              ui_info "Process $DETECT_OWNER_PID stopped with sudo."
               killed_ok=1
             else
-              ui_err "Impossible d'arrêter le processus $DETECT_OWNER_PID."
+              ui_err "Unable to stop process $DETECT_OWNER_PID."
             fi
           fi
           if [[ "$killed_ok" = "1" ]]; then
           if ! wait_for_port_release "$DETECT_CONFLICT_PORT"; then
             detect_server_state
-            ui_warn "Le port $DETECT_CONFLICT_PORT est repris automatiquement."
+            ui_warn "Port $DETECT_CONFLICT_PORT is being reclaimed automatically."
             if [[ -n "$DETECT_OWNER" ]]; then
-              ui_info "Nouveau process occupant: $DETECT_OWNER"
+              ui_info "New owner process: $DETECT_OWNER"
             fi
             continue
           fi
@@ -265,77 +265,77 @@ prompt_server_remediation() {
             fi
           fi
         else
-          ui_info "Arrêt annulé."
+          ui_info "Stop cancelled."
         fi
         ;;
       [Ii])
         if [[ "$app_down_like" = "1" ]]; then
-          printf "\\nInspection rapide %s:\\n" "$(server_label)" >&$TTY_OUT_FD
+          printf "\\nQuick inspection %s:\\n" "$(server_label)" >&$TTY_OUT_FD
           if [[ "$SERVER_TARGET" = "wildfly" ]]; then
-            ui_info "Vérifie: ls -la \${WILDFLY_DEPLOYMENTS:-\${WILDFLY_HOME:-/opt/wildfly}/standalone/deployments} | rg '$APP_NAME|failed|deployed'"
-            ui_info "Vérifie: journalctl -u wildfly -n 120"
+            ui_info "Check: ls -la \${WILDFLY_DEPLOYMENTS:-\${WILDFLY_HOME:-/opt/wildfly}/standalone/deployments} | rg '$APP_NAME|failed|deployed'"
+            ui_info "Check: journalctl -u wildfly -n 120"
           else
-            ui_info "Vérifie: ls -la \${TOMCAT10:-/var/lib/tomcat10}/webapps | rg '$APP_NAME'"
-            ui_info "Vérifie: journalctl -u $(server_unit_name) -n 120"
+            ui_info "Check: ls -la \${TOMCAT10:-/var/lib/tomcat10}/webapps | rg '$APP_NAME'"
+            ui_info "Check: journalctl -u $(server_unit_name) -n 120"
           fi
-          ui_info "Ensuite: appuie sur [r] pour redéployer ou [f] pour refresh."
+          ui_info "Then press [r] to redeploy or [f] to refresh."
           continue
         fi
         if [[ "$has_conflict" != "1" || "$has_pid_conflict" = "1" ]]; then
-          ui_warn "Option non disponible dans ce menu."
+          ui_warn "Option is not available in this menu."
           continue
         fi
         detect_server_state
         if [[ -z "$DETECT_CONFLICT_PORT" ]]; then
-          ui_warn "Aucun conflit de port détecté actuellement."
+          ui_warn "No port conflict detected right now."
           continue
         fi
         if [[ -n "$DETECT_OWNER" ]]; then
-          ui_info "Occupant actuel: $DETECT_OWNER"
+          ui_info "Current owner: $DETECT_OWNER"
         else
-          ui_warn "Occupant toujours non identifié pour le port $DETECT_CONFLICT_PORT."
+          ui_warn "Owner is still not identified for port $DETECT_CONFLICT_PORT."
         fi
         ;;
       [Xx])
         if [[ "$has_conflict" != "1" || "$has_pid_conflict" = "1" ]]; then
-          ui_warn "Option non disponible dans ce menu."
+          ui_warn "Option is not available in this menu."
           continue
         fi
         detect_server_state
         if [[ -z "$DETECT_CONFLICT_PORT" ]]; then
-          ui_warn "Aucun conflit de port détecté actuellement."
+          ui_warn "No port conflict detected right now."
           continue
         fi
-        printf "\\nConfirmer kill du port %s via fuser -k ? [y/N] " "$DETECT_CONFLICT_PORT" >&$TTY_OUT_FD
-        IFS= read -r force_kill_confirm <&$TTY_IN_FD || { ui_warn "Confirmation annulée."; continue; }
+        printf "\\nConfirm killing port %s with fuser -k? [y/N] " "$DETECT_CONFLICT_PORT" >&$TTY_OUT_FD
+        IFS= read -r force_kill_confirm <&$TTY_IN_FD || { ui_warn "Confirmation cancelled."; continue; }
         if [[ ! "$force_kill_confirm" =~ ^[Yy]$ ]]; then
-          ui_info "Kill port annulé."
+          ui_info "Kill port cancelled."
           continue
         fi
         local killed_port_ok=0
         if fuser -k -n tcp "$DETECT_CONFLICT_PORT" >/dev/null 2>&1; then
-          ui_info "Port $DETECT_CONFLICT_PORT libéré."
+          ui_info "Port $DETECT_CONFLICT_PORT released."
           killed_port_ok=1
         elif sudo -n fuser -k -n tcp "$DETECT_CONFLICT_PORT" >/dev/null 2>&1; then
-          ui_info "Port $DETECT_CONFLICT_PORT libéré avec sudo."
+          ui_info "Port $DETECT_CONFLICT_PORT released with sudo."
           killed_port_ok=1
         else
-          printf "\\nPermissions root requises pour libérer le port %s. Authentifier sudo maintenant ? [y/N] " "$DETECT_CONFLICT_PORT" >&$TTY_OUT_FD
-          IFS= read -r confirm <&$TTY_IN_FD || { ui_warn "Confirmation annulée."; continue; }
+          printf "\\nRoot permission required to release port %s. Authenticate sudo now? [y/N] " "$DETECT_CONFLICT_PORT" >&$TTY_OUT_FD
+          IFS= read -r confirm <&$TTY_IN_FD || { ui_warn "Confirmation cancelled."; continue; }
           if [[ "$confirm" =~ ^[Yy]$ ]] && sudo -v <&$TTY_IN_FD 1>&$TTY_OUT_FD 2>&$TTY_OUT_FD && sudo fuser -k -n tcp "$DETECT_CONFLICT_PORT" >/dev/null 2>&1; then
-            ui_info "Port $DETECT_CONFLICT_PORT libéré avec sudo."
+            ui_info "Port $DETECT_CONFLICT_PORT released with sudo."
             killed_port_ok=1
           else
-            ui_err "Impossible de libérer le port $DETECT_CONFLICT_PORT."
-            ui_info "Essaye: sudo fuser -k -n tcp $DETECT_CONFLICT_PORT"
+            ui_err "Unable to release port $DETECT_CONFLICT_PORT."
+            ui_info "Try: sudo fuser -k -n tcp $DETECT_CONFLICT_PORT"
           fi
         fi
         if [[ "$killed_port_ok" = "1" ]]; then
           if ! wait_for_port_release "$DETECT_CONFLICT_PORT"; then
             detect_server_state
-            ui_warn "Le port $DETECT_CONFLICT_PORT est repris automatiquement."
+            ui_warn "Port $DETECT_CONFLICT_PORT is being reclaimed automatically."
             if [[ -n "$DETECT_OWNER" ]]; then
-              ui_info "Nouveau process occupant: $DETECT_OWNER"
+              ui_info "New owner process: $DETECT_OWNER"
             fi
             continue
           fi
@@ -352,45 +352,45 @@ prompt_server_remediation() {
         ;;
       [Ss])
         if [[ "$has_conflict" != "1" || "$has_pid_conflict" != "1" ]]; then
-          ui_warn "Option non disponible dans ce menu."
+          ui_warn "Option is not available in this menu."
           continue
         fi
         detect_server_state
         if [[ -z "$DETECT_OWNER_PID" ]]; then
-          ui_warn "PID occupant introuvable."
+          ui_warn "Owner PID not found."
           continue
         fi
         conflict_unit="$(owner_systemd_unit_from_pid "$DETECT_OWNER_PID" || true)"
         if [[ -z "$conflict_unit" ]]; then
-          ui_warn "Impossible d'identifier un service systemd pour ce PID."
+          ui_warn "Unable to identify a systemd service for this PID."
           if [[ -n "$DETECT_OWNER" ]]; then
-            ui_info "Occupant: $DETECT_OWNER"
+            ui_info "Owner: $DETECT_OWNER"
           fi
           continue
         fi
         if [[ "$conflict_unit" = "$(server_unit_name).service" || "$conflict_unit" = "$(server_unit_name)" ]]; then
-          ui_warn "Le service détecté est le serveur cible lui-même: $conflict_unit"
+          ui_warn "Detected service is the target server itself: $conflict_unit"
           continue
         fi
-        printf "\\nConfirmer stop du service %s ? [y/N] " "$conflict_unit" >&$TTY_OUT_FD
-        IFS= read -r confirm <&$TTY_IN_FD || { ui_warn "Confirmation annulée."; continue; }
+        printf "\\nConfirm stopping service %s? [y/N] " "$conflict_unit" >&$TTY_OUT_FD
+        IFS= read -r confirm <&$TTY_IN_FD || { ui_warn "Confirmation cancelled."; continue; }
         if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
-          ui_info "Stop service annulé."
+          ui_info "Service stop cancelled."
           continue
         fi
         if ! sudo -n systemctl stop "$conflict_unit" 2>/dev/null; then
-          printf "\\nPermissions root requises pour stopper %s. Authentifier sudo maintenant ? [y/N] " "$conflict_unit" >&$TTY_OUT_FD
-          IFS= read -r confirm <&$TTY_IN_FD || { ui_warn "Confirmation annulée."; continue; }
+          printf "\\nRoot permission required to stop %s. Authenticate sudo now? [y/N] " "$conflict_unit" >&$TTY_OUT_FD
+          IFS= read -r confirm <&$TTY_IN_FD || { ui_warn "Confirmation cancelled."; continue; }
           if [[ ! "$confirm" =~ ^[Yy]$ ]] || ! sudo -v <&$TTY_IN_FD 1>&$TTY_OUT_FD 2>&$TTY_OUT_FD || ! sudo systemctl stop "$conflict_unit" 2>/dev/null; then
-            ui_err "Impossible d'arrêter $conflict_unit."
-            ui_info "Commande: sudo systemctl stop $conflict_unit"
+            ui_err "Unable to stop $conflict_unit."
+            ui_info "Command: sudo systemctl stop $conflict_unit"
             continue
           fi
         fi
-        ui_info "Service arrêté: $conflict_unit"
+        ui_info "Service stopped: $conflict_unit"
         if ! wait_for_port_release "$DETECT_CONFLICT_PORT"; then
           detect_server_state
-          ui_warn "Le port reste occupé après stop de $conflict_unit."
+          ui_warn "Port remains busy after stopping $conflict_unit."
           continue
         fi
         if start_server_noninteractive 1 || start_server_noninteractive; then
@@ -412,27 +412,27 @@ prompt_server_remediation() {
           start_dashboard
           return 0
         fi
-        ui_warn "Toujours inaccessible après refresh."
+        ui_warn "Still unreachable after refresh."
         ;;
       [Rr])
         if [[ "$app_down_like" != "1" ]]; then
-          ui_warn "Option non disponible dans ce menu."
+          ui_warn "Option is not available in this menu."
           continue
         fi
         if [[ "$wildfly_http000" = "1" ]]; then
-          ui_info "Tentative de redéploiement + redémarrage serveur..."
-          printf "\\nAuthentification sudo requise...\\n" >&$TTY_OUT_FD
+          ui_info "Trying redeploy + server restart..."
+          printf "\\nSudo authentication is required...\\n" >&$TTY_OUT_FD
           if ! sudo -v <&$TTY_IN_FD 1>&$TTY_OUT_FD 2>&$TTY_OUT_FD; then
-            ui_err "Authentification sudo échouée."
+            ui_err "Sudo authentication failed."
             continue
           fi
           if ! start_server_noninteractive 1; then
-            ui_err "Redémarrage automatique impossible."
+            ui_err "Automatic restart failed."
             show_server_help
             continue
           fi
         else
-          ui_info "Tentative de redéploiement rapide..."
+          ui_info "Trying quick redeploy..."
         fi
         restart_worker
         sleep 1
@@ -442,7 +442,7 @@ prompt_server_remediation() {
           start_dashboard
           return 0
         fi
-        ui_warn "Application toujours inaccessible après redéploiement."
+        ui_warn "Application still unreachable after redeploy."
         continue
         ;;
       [Dd])
@@ -453,19 +453,19 @@ prompt_server_remediation() {
             if [[ "$wf_load" != "not-found" ]]; then
               true
             elif [[ -n "\${WILDFLY_HOME:-}" && -x "\${WILDFLY_HOME}/bin/standalone.sh" ]]; then
-              ui_warn "WildFly détecté via WILDFLY_HOME, mais le redémarrage auto utilise systemd."
-              ui_info "Lance manuellement: \${WILDFLY_HOME}/bin/standalone.sh -b 0.0.0.0"
+              ui_warn "WildFly detected via WILDFLY_HOME, but automatic restart uses systemd."
+              ui_info "Start manually: \${WILDFLY_HOME}/bin/standalone.sh -b 0.0.0.0"
               continue
             else
-              ui_warn "WildFly non détecté: redémarrage automatique impossible."
+              ui_warn "WildFly not detected: automatic restart is unavailable."
               show_server_help
               continue
             fi
           fi
 
-          printf "\\nAuthentification sudo requise...\\n" >&$TTY_OUT_FD
+          printf "\\nSudo authentication is required...\\n" >&$TTY_OUT_FD
           if ! sudo -v <&$TTY_IN_FD 1>&$TTY_OUT_FD 2>&$TTY_OUT_FD; then
-            ui_err "Authentification sudo échouée."
+            ui_err "Sudo authentication failed."
             continue
           fi
           if start_server_noninteractive "$wildfly_http000"; then
@@ -474,14 +474,14 @@ prompt_server_remediation() {
             start_dashboard
             return 0
           fi
-          ui_err "Démarrage automatique impossible."
+          ui_err "Automatic start failed."
           show_server_help
           continue
         fi
-        ui_warn "Option non disponible dans ce menu."
+        ui_warn "Option is not available in this menu."
         ;;
       [Aa])
-        printf "\\n--- Aide %s ---\\n" "$(server_label)" >&$TTY_OUT_FD
+        printf "\\n--- Help %s ---\\n" "$(server_label)" >&$TTY_OUT_FD
         show_server_help
         ;;
       [Qq])
@@ -489,7 +489,7 @@ prompt_server_remediation() {
         return 1
         ;;
       *)
-        ui_warn "Option non disponible dans ce menu."
+        ui_warn "Option is not available in this menu."
         ;;
     esac
   done
@@ -501,15 +501,15 @@ prompt_deploy_remediation() {
   pause_ui
   stop_dashboard
   if [[ "$TTY_IN_FD" -ne 3 ]]; then
-    ui_warn "Mode non-interactif: impossible d'ouvrir /dev/tty pour le prompt."
+    ui_warn "Non-interactive mode: unable to open /dev/tty for prompt."
     show_deploy_help
     resume_ui
     start_dashboard
     return 1
   fi
-  printf "\\n--- Remédiation déploiement ---\\n" >&$TTY_OUT_FD
+  printf "\\n--- Deployment remediation ---\\n" >&$TTY_OUT_FD
   while true; do
-    printf "\\nDéploiement en erreur. [f]refresh / [a]ide / [q]uit ? " >&$TTY_OUT_FD
+    printf "\\nDeployment failed. [f]refresh / [a]help / [q]uit ? " >&$TTY_OUT_FD
     IFS= read -rsn1 answer <&$TTY_IN_FD || { resume_ui; start_dashboard; return 1; }
     if [[ "$answer" == $'\\e' ]]; then
       IFS= read -rsn2 -t 0.02 discard <&$TTY_IN_FD || true
@@ -524,7 +524,7 @@ prompt_deploy_remediation() {
         return 0
         ;;
       [Aa])
-        printf "\\n--- Aide déploiement ---\\n" >&$TTY_OUT_FD
+        printf "\\n--- Deployment help ---\\n" >&$TTY_OUT_FD
         show_deploy_help
         ;;
       [Qq])
@@ -533,21 +533,21 @@ prompt_deploy_remediation() {
         return 1
         ;;
       *)
-        ui_warn "Option non disponible dans ce menu."
+        ui_warn "Option is not available in this menu."
         ;;
     esac
   done
 }
 
 manual_refresh() {
-  ui_info "Refresh manuel: revalidation de l'état dev..."
+  ui_info "Manual refresh: revalidating dev state..."
   detect_server_state
   restart_worker
   if [[ "$DETECT_STATUS" = "up" ]]; then
-    ui_info "État OK: $(server_label) et application accessibles."
+    ui_info "State OK: $(server_label) and application are reachable."
     return 0
   fi
-  ui_warn "Refresh: anomalie détectée après revalidation."
+  ui_warn "Refresh: anomaly detected after revalidation."
   show_server_help
   if ! prompt_server_remediation; then
     ui_warn "dev:stop (refresh unresolved)"
@@ -647,17 +647,17 @@ handle_events_loop() {
           elif [[ "$line" == *'"type":"live_port_busy"'* ]]; then
             ev_port="$(printf '%s' "$line" | sed -n 's/.*"port":\\([0-9][0-9]*\\).*/\\1/p')"
             ev_owner="$(printf '%s' "$line" | sed -n 's/.*"owner":"\\([^"]*\\)".*/\\1/p')"
-            ui_warn "LiveReload port occupé: \${ev_port:-$LIVE_PORT}"
+            ui_warn "LiveReload port busy: \${ev_port:-$LIVE_PORT}"
             if [[ -n "$ev_owner" ]]; then
               ui_info "Occupant: $ev_owner"
             fi
           elif [[ "$line" == *'"type":"live_port_fallback"'* ]]; then
             ev_from="$(printf '%s' "$line" | sed -n 's/.*"fromPort":\\([0-9][0-9]*\\).*/\\1/p')"
             ev_to="$(printf '%s' "$line" | sed -n 's/.*"toPort":\\([0-9][0-9]*\\).*/\\1/p')"
-            ui_info "LiveReload: fallback auto \${ev_from:-$LIVE_PORT} -> \${ev_to:-inconnu}"
+            ui_info "LiveReload: automatic fallback \${ev_from:-$LIVE_PORT} -> \${ev_to:-unknown}"
           elif [[ "$line" == *'"type":"app_unreachable"'* ]]; then
-            ui_warn "Serveur actif mais application inaccessible sur /$APP_NAME/."
-            ui_info "Vérifie le déploiement puis relance [f]refresh si nécessaire."
+            ui_warn "Server is running but application is unreachable on /$APP_NAME/."
+            ui_info "Check deployment, then run [f]refresh if needed."
           elif [[ "$line" == *'"type":"deploy_sudo_required"'* ]]; then
             now_ts="$(date +%s 2>/dev/null || echo 0)"
             if (( now_ts - last_deploy_sudo_ts < 8 )); then
@@ -666,13 +666,13 @@ handle_events_loop() {
             last_deploy_sudo_ts="$now_ts"
             pause_ui
             stop_dashboard
-            printf "\nDéploiement: permissions insuffisantes. Authentification sudo requise...\n" >&$TTY_OUT_FD
+            printf "\nDeployment: insufficient permissions. Sudo authentication is required...\n" >&$TTY_OUT_FD
             if sudo -v <&$TTY_IN_FD 1>&$TTY_OUT_FD 2>&$TTY_OUT_FD; then
               restart_worker
               resume_ui
               start_dashboard
             else
-              ui_err "Authentification sudo échouée. Relance sudo -v puis refresh."
+              ui_err "Sudo authentication failed. Run sudo -v then refresh."
               resume_ui
               start_dashboard
             fi
@@ -713,7 +713,7 @@ cleanup() {
   stop_all
   if [[ -x "$ROOT_DIR/.jwebgen/scripts/deploy.sh" ]]; then
     if ! "$ROOT_DIR/.jwebgen/scripts/deploy.sh" --cleanup-dev >/dev/null 2>&1; then
-      ui_warn "Nettoyage auto du déploiement échoué (non bloquant)."
+      ui_warn "Automatic deployment cleanup failed (non-blocking)."
     fi
   fi
   if [[ "\${JWEBGEN_KEEP_DEV_FILES:-0}" != "1" ]]; then
@@ -723,7 +723,7 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
-trap 'if [[ "$STOP_MSG_DONE" = "0" ]]; then STOP_MSG_DONE=1; echo >&2; ui_info "arrêt du mode dev"; fi; exit 130' INT TERM
+trap 'if [[ "$STOP_MSG_DONE" = "0" ]]; then STOP_MSG_DONE=1; echo >&2; ui_info "stopping dev mode"; fi; exit 130' INT TERM
 
 require_node
 cd "$ROOT_DIR"

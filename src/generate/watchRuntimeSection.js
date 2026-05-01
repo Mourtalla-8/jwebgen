@@ -77,8 +77,8 @@ detect_server_state() {
     return 0
   fi
   if [[ "$management_ok" = "1" && "$app_status" =~ ^(4|5) ]]; then
-    DETECT_REASON="WildFly répond mais l'URL de l'application renvoie HTTP \${app_status:-inconnu}"
-    DETECT_ACTION="Vérifie le contexte /$APP_NAME/ et les marqueurs deployments (.deployed/.failed)."
+    DETECT_REASON="WildFly is responding but the application URL returns HTTP \${app_status:-unknown}"
+    DETECT_ACTION="Check /$APP_NAME/ context path and deployment markers (.deployed/.failed)."
     return 0
   fi
   if is_port_busy "$DEV_HTTP_PORT"; then
@@ -86,50 +86,50 @@ detect_server_state() {
     if [[ "$management_ok" = "1" ]]; then
       # Same priority rule as Tomcat: when server engine is already up,
       # app HTTP failures are handled as deploy/context issues first.
-      DETECT_REASON="WildFly répond mais l'URL de l'application renvoie HTTP \${app_status:-inconnu}"
-      DETECT_ACTION="Vérifie le contexte /$APP_NAME/ et les marqueurs deployments (.deployed/.failed)."
+      DETECT_REASON="WildFly is responding but the application URL returns HTTP \${app_status:-unknown}"
+      DETECT_ACTION="Check /$APP_NAME/ context path and deployment markers (.deployed/.failed)."
       DETECT_OWNER=""
       DETECT_OWNER_PID=""
     else
       DETECT_CONFLICT_PORT="$DEV_HTTP_PORT"
       DETECT_OWNER="$owner_line"
       DETECT_OWNER_PID="$(extract_pid_from_owner "$owner_line")"
-      DETECT_REASON="WildFly non actif (port HTTP $DEV_HTTP_PORT occupé)"
-      DETECT_ACTION="Démarre WildFly puis traite l'occupant du port si nécessaire."
+      DETECT_REASON="WildFly is not running (HTTP port $DEV_HTTP_PORT is busy)"
+      DETECT_ACTION="Start WildFly, then handle the port owner if needed."
     fi
     return 0
   fi
   if [[ "$management_ok" = "1" ]]; then
-    DETECT_REASON="WildFly répond mais l'URL de l'application renvoie HTTP \${app_status:-inconnu}"
-    DETECT_ACTION="Vérifie le contexte /$APP_NAME/ et les marqueurs deployments (.deployed/.failed)."
+    DETECT_REASON="WildFly is responding but the application URL returns HTTP \${app_status:-unknown}"
+    DETECT_ACTION="Check /$APP_NAME/ context path and deployment markers (.deployed/.failed)."
     return 0
   fi
   if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet wildfly 2>/dev/null; then
-    DETECT_REASON="service WildFly actif mais endpoint 9990 indisponible"
-    DETECT_ACTION="Vérifie bind/ports (9990/$DEV_HTTP_PORT) et les logs: sudo journalctl -u wildfly -n 200"
+    DETECT_REASON="WildFly service is active but endpoint 9990 is unavailable"
+    DETECT_ACTION="Check binds/ports (9990/$DEV_HTTP_PORT) and logs: sudo journalctl -u wildfly -n 200"
     return 0
   fi
   if command -v systemctl >/dev/null 2>&1; then
     local wf_load
     wf_load="$(systemctl show wildfly -p LoadState --value 2>/dev/null || echo "")"
     if [[ -n "$wf_load" && "$wf_load" != "not-found" ]] && ! systemctl is-active --quiet wildfly 2>/dev/null; then
-      DETECT_REASON="WildFly installé (unité systemd wildfly) mais arrêté"
+      DETECT_REASON="WildFly is installed (systemd unit wildfly) but stopped"
       DETECT_ACTION="sudo systemctl start wildfly"
       return 0
     fi
   fi
   if command -v pgrep >/dev/null 2>&1 && pgrep -f "standalone.sh|org.jboss.as.standalone" >/dev/null 2>&1; then
-    DETECT_REASON="process WildFly détecté mais endpoint 9990 indisponible"
-    DETECT_ACTION="Vérifie bind/ports (9990/8080) et les logs WildFly."
+    DETECT_REASON="WildFly process detected but endpoint 9990 is unavailable"
+    DETECT_ACTION="Check binds/ports (9990/8080) and WildFly logs."
     return 0
   fi
   if [[ -n "\${WILDFLY_HOME:-}" && -x "\${WILDFLY_HOME}/bin/standalone.sh" ]]; then
-    DETECT_REASON="WildFly installé mais inactif"
-    DETECT_ACTION="Démarre WildFly: sudo systemctl start wildfly ou \${WILDFLY_HOME}/bin/standalone.sh -b 0.0.0.0"
+    DETECT_REASON="WildFly is installed but inactive"
+    DETECT_ACTION="Start WildFly: sudo systemctl start wildfly or \${WILDFLY_HOME}/bin/standalone.sh -b 0.0.0.0"
     return 0
   fi
-  DETECT_REASON="WildFly non détecté (ni service, ni endpoint 9990)"
-  DETECT_ACTION="Installe/configure WildFly puis démarre le service wildfly."
+  DETECT_REASON="WildFly not detected (neither service nor endpoint 9990)"
+  DETECT_ACTION="Install/configure WildFly and then start the wildfly service."
   return 0
 }
 
@@ -159,8 +159,8 @@ start_server_noninteractive() {
   local restart_mode="\${1:-0}"
   unit="$(server_unit_name)"
   if ! command -v systemctl >/dev/null 2>&1; then
-    DETECT_REASON="systemctl indisponible"
-    DETECT_ACTION="Démarre le serveur manuellement puis relance dev/watch."
+    DETECT_REASON="systemctl unavailable"
+    DETECT_ACTION="Start the server manually, then rerun dev/watch."
     return 1
   fi
   if [[ "$restart_mode" = "1" ]]; then
@@ -176,7 +176,7 @@ start_server_noninteractive() {
     while (( waited < max_wait )); do
       if command -v curl >/dev/null 2>&1 && curl -sS --max-time 2 http://127.0.0.1:9990 >/dev/null 2>&1; then
         DETECT_STATUS="up"
-        DETECT_REASON="endpoint management WildFly actif (9990)"
+        DETECT_REASON="WildFly management endpoint is active (9990)"
         return 0
       fi
       sleep 2
@@ -213,49 +213,49 @@ show_server_help() {
     elif [[ -n "$owner_name" ]]; then
       owner_compact="cmd=$owner_name"
     elif [[ -n "$owner_port" ]]; then
-      owner_compact="port=$owner_port (pid inconnu)"
+      owner_compact="port=$owner_port (unknown pid)"
     else
-      owner_compact="processus non identifié"
+      owner_compact="unidentified process"
     fi
     ui_info "Occupant: $owner_compact"
   fi
   if [[ -n "$DETECT_ACTION" ]]; then
-    ui_info "Action suggérée: $DETECT_ACTION"
+    ui_info "Suggested action: $DETECT_ACTION"
   fi
   if [[ -n "$DETECT_CONFLICT_PORT" ]]; then
-    if [[ "$DETECT_REASON" =~ (non\ actif|arrêté|inactif|non\ détecté) ]]; then
-      action_hint="[d] démarrer serveur  [f] refresh  [a] aide  [q] quit"
+    if [[ "$DETECT_REASON" =~ (is\ not\ running|stopped|inactive|not\ detected) ]]; then
+      action_hint="[d] start server  [f] refresh  [a] help  [q] quit"
     elif [[ -n "$DETECT_OWNER_PID" ]]; then
-      action_hint="[k] kill pid $DETECT_OWNER_PID  [s] stop service  [f] refresh  [a] aide  [q] quit"
+      action_hint="[k] kill pid $DETECT_OWNER_PID  [s] stop service  [f] refresh  [a] help  [q] quit"
     else
-      action_hint="[i] inspecter  [x] kill port  [f] refresh  [a] aide  [q] quit"
+      action_hint="[i] inspect  [x] kill port  [f] refresh  [a] help  [q] quit"
     fi
     ui_info "Actions auto: $action_hint"
     if [[ -z "$DETECT_OWNER_PID" ]]; then
-      ui_info "Kill progressif: inspecter puis kill port avec confirmation."
+    ui_info "Progressive kill: inspect first, then kill port with confirmation."
     fi
-    ui_info "Inspecter: ss -lntp | rg ':$DETECT_CONFLICT_PORT'"
+    ui_info "Inspect: ss -lntp | rg ':$DETECT_CONFLICT_PORT'"
     return 0
   fi
-  if [[ "$DETECT_REASON" =~ (non\ actif|arrêté|inactif|non\ détecté) ]]; then
-    action_hint="[d] démarrer serveur  [f] refresh  [a] aide  [q] quit"
+  if [[ "$DETECT_REASON" =~ (is\ not\ running|stopped|inactive|not\ detected) ]]; then
+    action_hint="[d] start server  [f] refresh  [a] help  [q] quit"
     ui_info "Actions auto: $action_hint"
     if [[ "$SERVER_TARGET" = "wildfly" ]]; then
-      ui_info "Commande: sudo systemctl start wildfly"
+      ui_info "Command: sudo systemctl start wildfly"
     else
-      ui_info "Commande: sudo systemctl start $unit"
+      ui_info "Command: sudo systemctl start $unit"
     fi
   else
-    if [[ "$DETECT_REASON" == *"renvoie HTTP"* ]]; then
-      action_hint="[r] redéployer  [i] inspecter  [f] refresh  [a] aide  [q] quit"
+    if [[ "$DETECT_REASON" == *"returns HTTP"* ]]; then
+      action_hint="[r] redeploy  [i] inspect  [f] refresh  [a] help  [q] quit"
       ui_info "Actions auto: $action_hint"
       ui_info "Contexte app: /$APP_NAME/"
     elif [[ "$SERVER_TARGET" = "wildfly" && "$DETECT_REASON" == *"HTTP 000"* ]]; then
-      action_hint="[d] redémarrer serveur  [f] refresh  [a] aide  [q] quit"
+      action_hint="[d] restart server  [f] refresh  [a] help  [q] quit"
       ui_info "Actions auto: $action_hint"
-      ui_info "Commande: sudo systemctl restart wildfly"
+      ui_info "Command: sudo systemctl restart wildfly"
     else
-      action_hint="[f] refresh  [a] aide  [q] quit"
+      action_hint="[f] refresh  [a] help  [q] quit"
       ui_info "Actions auto: $action_hint"
     fi
   fi
@@ -266,23 +266,23 @@ show_server_help() {
 
 show_deploy_help() {
   if [[ "$SERVER_TARGET" = "wildfly" ]]; then
-    ui_info "Aide déploiement WildFly:"
-    ui_info "- Vérifie que wildfly est actif: sudo systemctl status wildfly"
-    ui_info "- Vérifie les ports: ss -lntp | rg ':9990|:8080'"
-    ui_info "- Vérifie les marqueurs deployments: .deployed/.failed/.isdeploying"
-    ui_info "- Vérifie les droits sur deployments (WILDFLY_HOME/WILDFLY_DEPLOYMENTS)"
-    ui_info "- Recharge sudo si nécessaire: sudo -v"
+    ui_info "WildFly deployment help:"
+    ui_info "- Verify wildfly is active: sudo systemctl status wildfly"
+    ui_info "- Verify ports: ss -lntp | rg ':9990|:8080'"
+    ui_info "- Verify deployment markers: .deployed/.failed/.isdeploying"
+    ui_info "- Verify permissions on deployments (WILDFLY_HOME/WILDFLY_DEPLOYMENTS)"
+    ui_info "- Refresh sudo session if needed: sudo -v"
   else
-    ui_info "Aide déploiement Tomcat:"
-    ui_info "- Vérifie les droits sur TOMCAT10/webapps"
-    ui_info "- Recharge sudo si nécessaire: sudo -v"
+    ui_info "Tomcat deployment help:"
+    ui_info "- Verify permissions on TOMCAT10/webapps"
+    ui_info "- Refresh sudo session if needed: sudo -v"
   fi
 }
 
 require_node() {
   if ! command -v node >/dev/null 2>&1; then
-    ui_err "Node.js est requis pour le mode dev."
-    ui_info "Installe Node 18+ puis relance (ex: nvm install 20)."
+    ui_err "Node.js is required for dev mode."
+    ui_info "Install Node 18+ and retry (example: nvm install 20)."
     exit 1
   fi
 }

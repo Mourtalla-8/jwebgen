@@ -154,12 +154,12 @@ echo "Remember to rebuild and redeploy: ./.jwebgen/scripts/dev.sh"
 export function makeDevMd({ appName, serverTarget }) {
   const prereqServer =
     serverTarget === 'tomcat'
-      ? `## Prérequis (Tomcat)
+      ? `## Prerequisites (Tomcat)
 
-- Tomcat installé + démarré
-- Variable optionnelle : \`TOMCAT10\` (par défaut \`/var/lib/tomcat10\`)
+- Tomcat installed + started
+- Optional variable: \`TOMCAT10\` (default: \`/var/lib/tomcat10\`)
 
-Commandes (selon ta distro) :
+Commands (depending on your distro):
 
 \`\`\`bash
 # Debian/Ubuntu
@@ -174,26 +174,26 @@ sudo pacman -S tomcat10
 sudo systemctl start tomcat10
 \`\`\``
       : serverTarget === 'wildfly'
-        ? `## Prérequis (WildFly)
+        ? `## Prerequisites (WildFly)
 
-- WildFly installé et démarré
-- Variables utiles :
-  - \`WILDFLY_HOME\` (par défaut \`/opt/wildfly\`)
-  - \`WILDFLY_DEPLOYMENTS\` (par défaut \`$WILDFLY_HOME/standalone/deployments\`)`
-        : `## Prérequis (serveur à choisir)
+- WildFly installed and started
+- Useful variables:
+  - \`WILDFLY_HOME\` (default: \`/opt/wildfly\`)
+  - \`WILDFLY_DEPLOYMENTS\` (default: \`$WILDFLY_HOME/standalone/deployments\`)`
+        : `## Prerequisites (server to choose)
 
-- Aucun serveur n'a été défini pendant la création rapide.
-- Au premier \`jwebgen --dev\` ou \`jwebgen --deploy\`, jwebgen te demandera Tomcat ou WildFly puis enregistrera le choix.`;
+- No server was selected during quick project creation.
+- On first \`jwebgen --dev\` or \`jwebgen --deploy\`, jwebgen will ask for Tomcat or WildFly and save the choice.`;
 
   const devNotes =
     serverTarget === 'tomcat'
-      ? `- En dev, le déploiement est **explosé** + sync incrémental (rsync si dispo), sans redémarrage Tomcat.
-- \`src/main/webapp/META-INF/context.xml\` active \`reloadable="true"\` pour aider Tomcat à recharger le contexte.`
-      : serverTarget === 'wildfly'
-        ? `- En dev, le script déploie le WAR vers le dossier deployments et déclenche \`.dodeploy\`.`
-        : `- En dev, le serveur cible sera sélectionné au premier lancement puis mémorisé dans \`.jwebgen/.jwebgenrc\`.`;
+      ? `- In dev mode, deployment is **exploded** + incremental sync (rsync when available), without restarting Tomcat.
+- \`src/main/webapp/META-INF/context.xml\` enables \`reloadable="true"\` to help Tomcat reload context changes.`
+        : serverTarget === 'wildfly'
+        ? `- In dev mode, the script deploys the WAR to the deployments directory and triggers \`.dodeploy\`.`
+        : `- In dev mode, target server is selected at first run and stored in \`.jwebgen/.jwebgenrc\`.`;
 
-  return `# Développement rapide
+  return `# Quick Development
 
 URL de dev stable :
 
@@ -205,30 +205,30 @@ ${prereqServer}
 
 Ce template est Jakarta-only (Servlet API 6+).
 
-## Outils requis
+## Required tools
 
 - Java (JDK) 11+
 - Maven (\`mvn\`)
 - Node.js (**uniquement** pour \`./.jwebgen/scripts/dev.sh\` et le reload navigateur)
 
-Scripts générés :
+Generated scripts:
 
 - \`./.jwebgen/scripts/build.sh\` : compile le WAR
-- \`./.jwebgen/scripts/deploy.sh\` : déploiement vers le serveur cible
+- \`./.jwebgen/scripts/deploy.sh\` : deploys to the target server
 - \`./.jwebgen/scripts/dev.sh\` : mode dev continu (watch + rebuild + deploy + reload navigateur)
 - \`./.jwebgen/scripts/watch.sh\` : rebuild + redeploy automatique
-- \`jwebgen --servlet [NomClasse]\` : crée une servlet
+- \`jwebgen --servlet [ClassName]\` : creates a servlet
 
 Contexte du projet :
 
 - stack : modern jakarta
-- serveur cible : ${serverTarget}
+- target server: ${serverTarget}
 
 Notes :
 
 - ${devNotes}
-- Si le serveur cible est indisponible, le mode dev propose \`Retry / Aide / Quit\` avec diagnostics.
-- LiveReload en dev utilise un serveur WebSocket local (port auto si conflit, départ \`35729\`, configurable via \`JWEBGEN_LIVE_PORT\`).
-- le dossier \`target/\` peut être supprimé/recréé à tout moment
+- If the target server is unavailable, dev mode offers \`Retry / Help / Quit\` with diagnostics.
+- LiveReload in dev mode uses a local WebSocket server (auto-fallback on port conflict, starts at \`35729\`, configurable via \`JWEBGEN_LIVE_PORT\`).
+- The \`target/\` directory can be removed/recreated at any time
 `;
 }

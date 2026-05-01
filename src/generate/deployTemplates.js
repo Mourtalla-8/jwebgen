@@ -105,7 +105,7 @@ if [[ "$CLEANUP_DEV_MODE" = "0" ]]; then
   if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet "$TOMCAT_UNIT" 2>/dev/null; then
     log_success "Tomcat is running"
   elif command -v curl >/dev/null 2>&1 && curl -sS --max-time 2 http://127.0.0.1:8080/ >/dev/null 2>&1; then
-    log_success "Tomcat actif (HTTP répond)"
+    log_success "Tomcat is running (HTTP responds)"
   else
     log_error "Tomcat is not running"
     log_info "Start it: sudo systemctl start $TOMCAT_UNIT"
@@ -225,7 +225,7 @@ run_privileged() {
 }
 
 if [[ "$CLEANUP_DEV_MODE" = "0" && ( -z "$WAR_FILE" || ! -f "$WAR_FILE" ) ]]; then
-  echo "Aucun fichier WAR trouvé. Lance d'abord ./.jwebgen/scripts/build.sh"
+  echo "No WAR file found. Run ./.jwebgen/scripts/build.sh first"
   echo "__JWEBGEN_EVENT__ deploy_error" >&2
   exit 1
 fi
@@ -233,11 +233,11 @@ fi
 if [[ "$CLEANUP_DEV_MODE" = "1" ]]; then
   echo "WildFly dev cleanup (current app): $DEPLOY_DIR/$APP_NAME.war"
 else
-  echo "Déploiement WildFly vers : $DEPLOY_DIR/$APP_NAME.war"
+  echo "Deploying WildFly to: $DEPLOY_DIR/$APP_NAME.war"
 fi
 
 if [[ "$CLEANUP_DEV_MODE" = "0" ]]; then
-  # Vérifier si WildFly est actif avant déploiement.
+  # Check whether WildFly is active before deployment.
   if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet wildfly 2>/dev/null; then
     true
   elif command -v curl >/dev/null 2>&1 && curl -sS --max-time 2 http://127.0.0.1:9990/ >/dev/null 2>&1; then
@@ -245,14 +245,14 @@ if [[ "$CLEANUP_DEV_MODE" = "0" ]]; then
   elif command -v pgrep >/dev/null 2>&1 && pgrep -f "standalone.sh|org.jboss.as.standalone" >/dev/null 2>&1; then
     true
   else
-    echo "WildFly inactif ou non détecté."
+    echo "WildFly inactive or not detected."
     echo "__JWEBGEN_EVENT__ server_down" >&2
     exit 1
   fi
 fi
 
 if ! run_privileged mkdir -p "$DEPLOY_DIR"; then
-  echo "Permissions insuffisantes pour créer $DEPLOY_DIR."
+  echo "Insufficient permissions to create $DEPLOY_DIR."
   echo "Lance 'sudo -v' puis relance."
   echo "__JWEBGEN_EVENT__ deploy_sudo_required" >&2
   exit 1
@@ -274,7 +274,7 @@ if [[ "$CLEANUP_DEV_MODE" = "1" ]]; then
     echo "__JWEBGEN_EVENT__ deploy_sudo_required" >&2
     exit 1
   fi
-  echo "Nettoyage dev terminé pour $APP_NAME (WildFly)."
+  echo "Dev cleanup completed for $APP_NAME (WildFly)."
   exit 0
 fi
 if ! run_privileged cp "$WAR_FILE" "$DEPLOY_DIR/$APP_NAME.war"; then
@@ -286,7 +286,7 @@ fi
 
 run_privileged touch "$DEPLOY_DIR/$APP_NAME.war.dodeploy" || true
 
-# Vérifier le résultat réel du déploiement WildFly.
+# Verify actual WildFly deployment result.
 FAILED_MARKER="$DEPLOY_DIR/$APP_NAME.war.failed"
 DEPLOYED_MARKER="$DEPLOY_DIR/$APP_NAME.war.deployed"
 INPROGRESS_MARKER="$DEPLOY_DIR/$APP_NAME.war.isdeploying"
@@ -295,9 +295,9 @@ STATUS_MARKER="$DEPLOY_DIR/$APP_NAME.war.status"
 deadline=$((SECONDS + 20))
 while (( SECONDS < deadline )); do
   if [[ -f "$FAILED_MARKER" ]]; then
-    echo "Déploiement WildFly échoué."
+    echo "WildFly deployment failed."
     if [[ -f "$STATUS_MARKER" ]]; then
-      echo "Détail: $(tr '\n' ' ' < "$STATUS_MARKER")"
+      echo "Detail: $(tr '\n' ' ' < "$STATUS_MARKER")"
     fi
     echo "__JWEBGEN_EVENT__ deploy_error" >&2
     exit 1
@@ -310,23 +310,23 @@ done
 
 if [[ ! -f "$DEPLOYED_MARKER" ]]; then
   if [[ -f "$INPROGRESS_MARKER" ]]; then
-    echo "Déploiement WildFly toujours en cours (timeout)."
+    echo "WildFly deployment still in progress (timeout)."
   else
-    echo "Déploiement WildFly non confirmé (marqueur .deployed absent)."
+    echo "WildFly deployment not confirmed (.deployed marker missing)."
   fi
   echo "__JWEBGEN_EVENT__ deploy_error" >&2
   exit 1
 fi
 
-echo "Déployé (WildFly) : http://localhost:8080/$APP_NAME/"
+echo "Deployed (WildFly): http://localhost:8080/$APP_NAME/"
 `;
   }
 
   return `#!/usr/bin/env bash
 set -euo pipefail
 
-echo "Serveur cible non supporté: ${serverTarget}"
-echo "Cibles supportées: tomcat, wildfly"
+echo "Unsupported target server: ${serverTarget}"
+echo "Supported targets: tomcat, wildfly"
 exit 1
 `;
 }
@@ -354,8 +354,8 @@ case "$TARGET" in
     exec "$SCRIPT_DIR/deploy-wildfly.sh" "$@"
     ;;
   *)
-    echo "Serveur cible non supporté: $TARGET"
-    echo "Cibles supportées: tomcat, wildfly"
+    echo "Unsupported target server: $TARGET"
+    echo "Supported targets: tomcat, wildfly"
     exit 1
     ;;
 esac
