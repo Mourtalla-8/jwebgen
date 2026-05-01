@@ -8,11 +8,12 @@ on:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        node-version: [18, 20]
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node-version: ["20", "22"]
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -26,8 +27,26 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run checks
+      - name: Run checks (Linux)
+        if: runner.os == 'Linux'
         run: npm run check
 
       - name: Verify package
         run: npm pack --dry-run
+
+      - name: Lint (macOS/Windows)
+        if: runner.os != 'Linux'
+        run: npm run lint
+
+      - name: Unit tests (macOS/Windows)
+        if: runner.os != 'Linux'
+        run: npm run test:unit
+
+      - name: CLI help smoke (macOS/Windows)
+        if: runner.os != 'Linux'
+        run: node bin/jwebgen.js --help
+
+      - name: CLI new smoke (macOS/Windows)
+        if: runner.os != 'Linux'
+        run: |
+          node -e "const fs=require('node:fs'); const os=require('node:os'); const path=require('node:path'); const cp=require('node:child_process'); const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'jwebgen-smoke-')); cp.execFileSync(process.execPath,[path.join(process.cwd(),'bin','jwebgen.js'),'--new','myapp','--yes'],{cwd:tmp,stdio:'inherit'});"

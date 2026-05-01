@@ -24,7 +24,7 @@ No global setup alternative:
 
 ## Node version error
 
-- `jwebgen` requires Node 18.19+.
+- `jwebgen` requires Node 20.12+ (matches the current `@clack` UI stack).
 - Check:
   - `node -v`
 - Upgrade and retry.
