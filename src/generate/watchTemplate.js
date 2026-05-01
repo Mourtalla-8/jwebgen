@@ -62,7 +62,7 @@ cleanup_orphan_dev_session() {
     local old_pid=""
     old_pid="$(tr -d '[:space:]' < "$DEV_PID_FILE" 2>/dev/null || true)"
     if [[ -n "$old_pid" && "$old_pid" != "$$" ]] && kill -0 "$old_pid" 2>/dev/null; then
-      ui_warn "Session dev précédente détectée (PID $old_pid), arrêt en cours..."
+      ui_warn "Previous dev session detected (PID $old_pid), stopping..."
       kill "$old_pid" 2>/dev/null || true
       sleep 1
       kill -9 "$old_pid" 2>/dev/null || true
@@ -96,10 +96,10 @@ cleanup_orphan_dev_session
 
 if ! server_is_running; then
   detect_server_state
-  ui_warn "$(server_label) indisponible au lancement."
+  ui_warn "$(server_label) unavailable at startup."
   show_server_help
   if ! prompt_server_remediation; then
-    ui_info "arrêt du mode dev"
+    ui_info "stopping dev mode"
     exit 0
   fi
 fi

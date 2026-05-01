@@ -27,6 +27,6 @@ test('printUnknownCommandAndExit prints help and exits with code 1', () => {
   }
 
   const combined = logs.join('\n');
-  assert.match(combined, /Commande inconnue/);
+  assert.match(combined, /Unknown command/);
   assert.match(combined, /Usage: jwebgen/);
 });

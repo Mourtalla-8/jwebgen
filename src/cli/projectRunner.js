@@ -14,7 +14,7 @@ export async function runProjectScript(scriptName, args = [], options = {}, deps
 
   const projectRoot = findProjectRoot();
   if (!projectRoot) {
-    console.error(pc.red('Aucun projet jwebgen détecté dans le dossier courant ou ses parents.'));
+    console.error(pc.red('No jwebgen project detected in the current directory or its parents.'));
     process.exit(1);
   }
 
@@ -29,15 +29,15 @@ export async function runProjectScript(scriptName, args = [], options = {}, deps
       legacyDeployScript
     });
     if (issues.length > 0) {
-      console.error(pc.red('Projet détecté comme legacy/incompatible avec cette version de jwebgen.'));
+      console.error(pc.red('Project detected as legacy/incompatible with this jwebgen version.'));
       for (const issue of issues) console.error(pc.yellow(`- ${issue}`));
-      console.error(pc.cyan('Exécute d\'abord: jwebgen --migrate'));
+      console.error(pc.cyan('Run first: jwebgen --migrate'));
       process.exit(1);
     }
   }
 
   if (!existsSync(scriptPath)) {
-    console.error(pc.red(`Le script ${scriptName} est introuvable dans ${scriptsDir}.`));
+    console.error(pc.red(`Script ${scriptName} was not found in ${scriptsDir}.`));
     process.exit(1);
   }
 
@@ -45,7 +45,7 @@ export async function runProjectScript(scriptName, args = [], options = {}, deps
     await execa(scriptPath, args, { cwd: projectRoot, stdio: 'inherit', env });
   } catch (error) {
     const msg = error?.shortMessage || error?.message || String(error);
-    console.error(pc.red(`Échec de ${scriptName}: ${msg}`));
+    console.error(pc.red(`${scriptName} failed: ${msg}`));
     error.jwebgenHandled = true;
     throw error;
   }

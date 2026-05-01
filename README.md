@@ -42,11 +42,11 @@ npx jwebgen --help
 ### First project
 
 ```bash
-jwebgen --new mon-webapp
+jwebgen --new my-webapp
 # fast (no prompts):
-jwebgen --new mon-webapp --yes --tomcat
+jwebgen --new my-webapp --yes --tomcat
 # fast + deferred server choice:
-jwebgen --new mon-webapp --yes
+jwebgen --new my-webapp --yes
 ```
 
 With `--yes` and no server flag, jwebgen does not choose Tomcat/WildFly automatically.

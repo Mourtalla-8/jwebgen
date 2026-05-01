@@ -201,12 +201,12 @@ async function ensureServerTarget({ projectRoot, requestedTarget }) {
   const configured = await readConfiguredServerTarget(projectRoot);
   if (configured) return configured;
   if (!process.stdin.isTTY) {
-    console.log(pc.red('Serveur cible non configuré.'));
-    console.log(pc.yellow('Passe --tomcat/--wildfly ou configure .jwebgen/.jwebgenrc'));
+    console.log(pc.red('Server target is not configured.'));
+    console.log(pc.yellow('Pass --tomcat/--wildfly or configure .jwebgen/.jwebgenrc'));
     process.exit(1);
   }
   const chosen = await select({
-    message: 'Serveur cible',
+    message: 'Target server',
     options: SERVER_OPTIONS
   });
   if (isCancel(chosen)) process.exit(0);
@@ -227,10 +227,10 @@ async function runCli() {
   }
 
   if (isLikelyLegacySubcommand(argv[0])) {
-    console.log(pc.yellow('Commande non supportée sous cette forme.'));
-    console.log(pc.yellow('Utilise une option:'));
+    console.log(pc.yellow('Unsupported command form.'));
+    console.log(pc.yellow('Use a flag instead:'));
     console.log(pc.cyan('  jwebgen --dev'));
-    console.log(pc.cyan('  jwebgen --new mon-webapp'));
+    console.log(pc.cyan('  jwebgen --new my-webapp'));
     console.log('');
     showHelp();
     process.exit(1);
@@ -238,12 +238,12 @@ async function runCli() {
 
   const parsed = parseFlags(argv);
   if (parsed.unknown.length > 0) {
-    console.log(pc.yellow(`Option inconnue: ${parsed.unknown.join(' ')}`));
+    console.log(pc.yellow(`Unknown option: ${parsed.unknown.join(' ')}`));
     showHelp();
     process.exit(1);
   }
   if (parsed.actionCount > 1) {
-    console.log(pc.yellow('Une seule action principale est autorisée à la fois.'));
+    console.log(pc.yellow('Only one main action is allowed at a time.'));
     showHelp();
     process.exit(1);
   }
@@ -266,7 +266,7 @@ async function runCli() {
   if (action === 'deploy') {
     const projectRoot = findProjectRoot();
     if (!projectRoot) {
-      console.error(pc.red('Aucun projet jwebgen détecté.'));
+      console.error(pc.red('No jwebgen project detected.'));
       process.exit(1);
     }
     const target = await ensureServerTarget({ projectRoot, requestedTarget: flags.server });
@@ -275,7 +275,7 @@ async function runCli() {
   if (action === 'dev') {
     const projectRoot = findProjectRoot();
     if (!projectRoot) {
-      console.error(pc.red('Aucun projet jwebgen détecté.'));
+      console.error(pc.red('No jwebgen project detected.'));
       process.exit(1);
     }
     const target = await ensureServerTarget({ projectRoot, requestedTarget: flags.server });

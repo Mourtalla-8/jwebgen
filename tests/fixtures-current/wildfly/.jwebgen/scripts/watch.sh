@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-echo "⚠ WildFly indisponible au lancement"
-echo "ℹ Diagnostic: WildFly non détecté"
+echo "⚠ WildFly unavailable at startup"
+echo "ℹ Diagnostic: WildFly not detected"
 exit 0
 

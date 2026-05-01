@@ -23,17 +23,17 @@ test('evaluateJavaCompatibility rejects old or unreadable versions', () => {
 
 test('validateArtifactId enforces expected format', () => {
   assert.equal(validateArtifactId('my-app'), null);
-  assert.match(validateArtifactId('MyApp'), /artifactId invalide/);
+  assert.match(validateArtifactId('MyApp'), /Invalid artifactId/);
 });
 
 test('validateQualifiedName enforces minimum segments and syntax', () => {
   assert.equal(validateQualifiedName('com.exo', { minSegments: 2 }), null);
-  assert.match(validateQualifiedName('com', { minSegments: 2 }), /au moins 2 segments/);
-  assert.match(validateQualifiedName('com.Exo', { minSegments: 2 }), /invalide/);
+  assert.match(validateQualifiedName('com', { minSegments: 2 }), /at least 2 segments/);
+  assert.match(validateQualifiedName('com.Exo', { minSegments: 2 }), /is invalid/);
 });
 
 test('validateLocation and validateNonEmpty reject invalid values', () => {
-  assert.equal(validateNonEmpty('x', 'Nom'), null);
-  assert.match(validateNonEmpty('   ', 'Nom'), /vide/);
-  assert.match(validateLocation(''), /vide/);
+  assert.equal(validateNonEmpty('x', 'Name'), null);
+  assert.match(validateNonEmpty('   ', 'Name'), /is empty/);
+  assert.match(validateLocation(''), /is empty/);
 });

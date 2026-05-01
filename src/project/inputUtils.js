@@ -97,10 +97,10 @@ export function detectJavaCompiler() {
 
 export function evaluateJavaCompatibility(majorRelease, min = 11) {
   if (!Number.isInteger(majorRelease) || majorRelease <= 0) {
-    return { status: 'unusable', min, reason: 'Version Java non lisible.' };
+    return { status: 'unusable', min, reason: 'Unable to parse Java version.' };
   }
   if (majorRelease < min) {
-    return { status: 'unusable', min, reason: `Java trop ancienne pour ce projet. Minimum attendu : ${min}.` };
+    return { status: 'unusable', min, reason: `Java version is too old for this project. Minimum required: ${min}.` };
   }
   return { status: 'ok', min, reason: null };
 }
@@ -117,7 +117,7 @@ export function installHint(tool) {
     if (platform === 'win32') return 'winget install Apache.Maven';
     return 'Linux: pacman -S maven | apt install maven | dnf install maven';
   }
-  return 'Installe-le depuis la source officielle.';
+  return 'Install it from the official source.';
 }
 
 export function which(binary) {
@@ -129,37 +129,37 @@ export function which(binary) {
 }
 
 export function validateArtifactId(value) {
-  if (!value) return 'artifactId vide.';
+  if (!value) return 'artifactId is empty.';
   if (!/^[a-z][a-z0-9-]{0,127}$/.test(value)) {
-    return 'artifactId invalide. Utilise seulement minuscules, chiffres et tirets. Exemple: mon-webapp';
+    return 'Invalid artifactId. Use only lowercase letters, digits, and hyphens. Example: my-webapp';
   }
   return null;
 }
 
 export function validateQualifiedName(value, { minSegments = 2, label = 'Nom' } = {}) {
-  if (!value) return `${label} vide.`;
+  if (!value) return `${label} is empty.`;
   const segments = value.split('.');
   if (segments.length < minSegments) {
-    return `${label} invalide. Il faut au moins ${minSegments} segments. Exemple: com.exo`;
+    return `${label} is invalid. It must contain at least ${minSegments} segments. Example: com.example`;
   }
   for (const segment of segments) {
     if (!/^[a-z_][a-z0-9_]*$/.test(segment)) {
-      return `${label} invalide. Chaque segment doit commencer par une lettre minuscule ou "_" puis contenir lettres, chiffres ou "_".`;
+      return `${label} is invalid. Each segment must start with a lowercase letter or "_" and then contain only letters, digits, or "_".`;
     }
   }
   return null;
 }
 
 export function validateLocation(value) {
-  if (!value) return 'Emplacement vide.';
-  if (value.includes('\0')) return 'Emplacement invalide.';
+  if (!value) return 'Location is empty.';
+  if (value.includes('\0')) return 'Invalid location.';
   const root = path.parse(value).root;
-  if (value === root) return 'Le dossier racine n’est pas autorisé.';
+  if (value === root) return 'The filesystem root directory is not allowed.';
   return null;
 }
 
 export function validateNonEmpty(value, label) {
-  if (!String(value).trim()) return `${label} vide.`;
+  if (!String(value).trim()) return `${label} is empty.`;
   return null;
 }
 

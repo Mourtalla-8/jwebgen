@@ -1,21 +1,21 @@
 # Internal Test Harness
 
-Ce dossier contient le harness interne de validation du générateur, indépendant de `projectTest`.
+This directory contains the internal generator validation harness, independent from `projectTest`.
 
 ## Scripts
 
 - `tests/golden-check.sh`  
-  Vérifie les snapshots “golden” des fichiers générés.
+  Verifies golden snapshots of generated files.
 
 - `tests/integration/run-matrix.sh`  
-  Exécute une matrice déterministe avec shims système.
+  Runs a deterministic matrix with system shims.
 
-## Fixtures attendues
+## Expected fixtures
 
 - `tests/fixtures-current/tomcat/`
 - `tests/fixtures-current/wildfly/`
 
-Chaque fixture contient au minimum:
+Each fixture contains at least:
 - `.jwebgen/DEV.md`
 - `.jwebgen/scripts/build.sh`
 - `.jwebgen/scripts/deploy.sh`

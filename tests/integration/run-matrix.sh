@@ -31,7 +31,7 @@ case_tomcat_down_noninteractive() {
   JWEBGEN_SHIM_HTTP_8080=0 \
   JWEBGEN_SHIM_APP_OK=0 \
   bash -lc "cd \"$FIXTURE_TOMCAT\" && timeout 5 ./.jwebgen/scripts/watch.sh" >/tmp/jwebgen_case_out 2>&1 || true
-  assert_output_contains "indisponible au lancement" /tmp/jwebgen_case_out
+  assert_output_contains "unavailable at startup" /tmp/jwebgen_case_out
 }
 
 case_tomcat_engine_up_app_down() {
@@ -40,7 +40,7 @@ case_tomcat_engine_up_app_down() {
   JWEBGEN_SHIM_HTTP_8080=1 \
   JWEBGEN_SHIM_APP_OK=0 \
   bash -lc "cd \"$FIXTURE_TOMCAT\" && timeout 5 ./.jwebgen/scripts/watch.sh" >/tmp/jwebgen_case_out 2>&1 || true
-  assert_output_contains "application inaccessible" /tmp/jwebgen_case_out
+  assert_output_contains "application is unreachable" /tmp/jwebgen_case_out
 }
 
 case_http_port_conflict() {
@@ -49,7 +49,7 @@ case_http_port_conflict() {
   JWEBGEN_SHIM_HTTP_8080=0 \
   JWEBGEN_SHIM_PORT_8080_LISTEN=1 \
   bash -lc "cd \"$FIXTURE_TOMCAT\" && timeout 5 ./.jwebgen/scripts/watch.sh" >/tmp/jwebgen_case_out 2>&1 || true
-  assert_output_contains "Port HTTP 8080 déjà occupé" /tmp/jwebgen_case_out
+  assert_output_contains "HTTP port 8080 is already in use" /tmp/jwebgen_case_out
 }
 
 case_wildfly_down() {
@@ -57,12 +57,12 @@ case_wildfly_down() {
   JWEBGEN_SHIM_WILDFLY_ACTIVE=0 \
   JWEBGEN_SHIM_WILDFLY_MGMT=0 \
   bash -lc "cd \"$FIXTURE_WILDFLY\" && JWEBGEN_SERVER_TARGET=wildfly timeout 5 ./.jwebgen/scripts/watch.sh" >/tmp/jwebgen_case_out 2>&1 || true
-  assert_output_contains "WildFly indisponible au lancement" /tmp/jwebgen_case_out
+  assert_output_contains "WildFly unavailable at startup" /tmp/jwebgen_case_out
 }
 
 case_clean_deploy_flag_combo() {
   bash -lc "cd \"$FIXTURE_TOMCAT\" && node \"$ROOT_DIR/bin/jwebgen.js\" --clean --deploy" >/tmp/jwebgen_case_out 2>&1 || true
-  if assert_output_contains "Une seule action principale est autorisée" /tmp/jwebgen_case_out; then
+  if assert_output_contains "Only one main action is allowed" /tmp/jwebgen_case_out; then
     return 1
   fi
   return 0

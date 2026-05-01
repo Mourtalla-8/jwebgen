@@ -29,12 +29,12 @@ detect_server_state() {
     fi
     if [[ "$app_status" =~ ^(2|3) ]]; then
       DETECT_STATUS="up"
-      DETECT_REASON="Tomcat répond et l'application est accessible"
+      DETECT_REASON="Tomcat is responding and the application is reachable"
       return 0
     fi
     if [[ "$management_ok" = "1" && "$app_status" =~ ^(4|5) ]]; then
-      DETECT_REASON="Tomcat répond mais l'URL de l'application renvoie HTTP \${app_status:-inconnu}"
-      DETECT_ACTION="Vérifie le contexte /$APP_NAME/ (déploiement effectif) et les logs Tomcat."
+      DETECT_REASON="Tomcat is responding but the application URL returns HTTP \${app_status:-unknown}"
+      DETECT_ACTION="Check /$APP_NAME/ context path (effective deployment) and Tomcat logs."
       return 0
     fi
     if is_port_busy "$DEV_HTTP_PORT"; then
@@ -42,25 +42,25 @@ detect_server_state() {
       if [[ "$management_ok" = "1" ]]; then
         # When Tomcat is active, HTTP 404/other app status is usually a deploy/context issue,
         # not a port-conflict remediation scenario.
-        DETECT_REASON="Tomcat répond mais l'URL de l'application renvoie HTTP \${app_status:-inconnu}"
-        DETECT_ACTION="Vérifie le contexte /$APP_NAME/ (déploiement effectif) et les logs Tomcat."
+        DETECT_REASON="Tomcat is responding but the application URL returns HTTP \${app_status:-unknown}"
+        DETECT_ACTION="Check /$APP_NAME/ context path (effective deployment) and Tomcat logs."
         DETECT_OWNER=""
         DETECT_OWNER_PID=""
       else
         DETECT_CONFLICT_PORT="$DEV_HTTP_PORT"
         DETECT_OWNER="$owner_line"
         DETECT_OWNER_PID="$(extract_pid_from_owner "$owner_line")"
-        DETECT_REASON="Tomcat non actif (port HTTP $DEV_HTTP_PORT occupé)"
-        DETECT_ACTION="Démarre Tomcat puis traite l'occupant du port si nécessaire."
+        DETECT_REASON="Tomcat is not running (HTTP port $DEV_HTTP_PORT is busy)"
+        DETECT_ACTION="Start Tomcat, then handle the port owner if needed."
       fi
       return 0
     fi
     if [[ "$management_ok" = "1" ]]; then
-      DETECT_REASON="process détecté mais endpoint HTTP indisponible"
-      DETECT_ACTION="Vérifie les logs Tomcat et le port $DEV_HTTP_PORT."
+      DETECT_REASON="process detected but HTTP endpoint is unavailable"
+      DETECT_ACTION="Check Tomcat logs and port $DEV_HTTP_PORT."
       return 0
     fi
-    DETECT_REASON="Tomcat non actif"
+    DETECT_REASON="Tomcat is not running"
     DETECT_ACTION="sudo systemctl start $unit"
     return 0
   fi
@@ -73,7 +73,7 @@ detect_server_state() {
   fi
   if [[ "$app_status" =~ ^(2|3) ]]; then
     DETECT_STATUS="up"
-    DETECT_REASON="WildFly répond et l'application est accessible"
+    DETECT_REASON="WildFly is responding and the application is reachable"
     return 0
   fi
   if [[ "$management_ok" = "1" && "$app_status" =~ ^(4|5) ]]; then

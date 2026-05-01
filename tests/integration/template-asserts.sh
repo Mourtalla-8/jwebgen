@@ -37,11 +37,11 @@ if (String(watch).includes('[s]udo')) {
 
 const deployTomcat = makeDeployServerScript({ appName: 'appx', serverTarget: 'tomcat' });
 assertContains(deployTomcat, '--cleanup-dev', 'deploy tomcat');
-assertContains(deployTomcat, 'Nettoyage dev Tomcat', 'deploy tomcat cleanup');
+assertContains(deployTomcat, 'Tomcat dev cleanup', 'deploy tomcat cleanup');
 
 const deployWildfly = makeDeployServerScript({ appName: 'appx', serverTarget: 'wildfly' });
 assertContains(deployWildfly, '--cleanup-dev', 'deploy wildfly');
-assertContains(deployWildfly, 'Nettoyage dev WildFly', 'deploy wildfly cleanup');
+assertContains(deployWildfly, 'WildFly dev cleanup', 'deploy wildfly cleanup');
 
 const snippet = makeLiveReloadSnippet();
 assertContains(snippet, "_lr=' + Date.now()", 'devAssets snippet cache buster');

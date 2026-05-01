@@ -8,30 +8,30 @@ import { jwebgenConfigPath, jwebgenMetaDir, jwebgenScriptsDir } from '../project
 export async function runClean({ findProjectRoot }) {
   const projectRoot = findProjectRoot();
   if (!projectRoot) {
-    console.error(pc.red('Aucun projet jwebgen détecté.'));
+    console.error(pc.red('No jwebgen project detected.'));
     process.exit(1);
   }
 
   const targetDir = path.join(projectRoot, 'target');
   if (!existsSync(targetDir)) {
-    console.log(pc.yellow('Le dossier target/ n\'existe pas.'));
+    console.log(pc.yellow('The target/ directory does not exist.'));
     return;
   }
 
-  console.log(pc.cyan(`Suppression de ${targetDir}...`));
+  console.log(pc.cyan(`Removing ${targetDir}...`));
   await rm(targetDir, { recursive: true, force: true });
-  console.log(pc.green('Nettoyé.'));
+  console.log(pc.green('Cleaned.'));
 }
 
 export async function showStatus({ findProjectRoot }) {
   const projectRoot = findProjectRoot();
   if (!projectRoot) {
-    console.log(pc.red('Aucun projet jwebgen détecté.'));
+    console.log(pc.red('No jwebgen project detected.'));
     return;
   }
 
-  console.log(pc.cyan(`Projet : ${path.basename(projectRoot)}`));
-  console.log(pc.cyan(`Racine : ${projectRoot}`));
+  console.log(pc.cyan(`Project: ${path.basename(projectRoot)}`));
+  console.log(pc.cyan(`Root: ${projectRoot}`));
 
   let serverTarget = '';
   const cfgPath = jwebgenConfigPath(projectRoot);
@@ -54,10 +54,10 @@ export async function showStatus({ findProjectRoot }) {
   if (!hasConfiguredServer) {
     serverTarget = 'unset';
   }
-  console.log(pc.cyan(`Serveur : ${serverTarget}`));
+  console.log(pc.cyan(`Server: ${serverTarget}`));
   if (!hasConfiguredServer) {
-    console.log(pc.yellow('Serveur non choisi (utilise jwebgen --dev ou --deploy pour le sélectionner).'));
-    console.log(pc.yellow('Déploiement : inconnu (en attente du choix serveur)'));
+    console.log(pc.yellow('Server is not configured yet (use jwebgen --dev or --deploy to choose one).'));
+    console.log(pc.yellow('Deployment: unknown (waiting for server selection)'));
     return;
   }
 
@@ -65,22 +65,22 @@ export async function showStatus({ findProjectRoot }) {
     if (serverTarget === 'tomcat') {
       const { stdout } = await execa('pgrep', ['-f', 'tomcat'], { timeout: 2000 });
       if (stdout.trim()) {
-        console.log(pc.green('Tomcat : en cours d\'exécution'));
+        console.log(pc.green('Tomcat: running'));
       } else {
-        console.log(pc.yellow('Tomcat : arrêté'));
-        console.log(pc.yellow('Pour démarrer Tomcat : sudo systemctl start tomcat10 (ou équivalent)'));
+        console.log(pc.yellow('Tomcat: stopped'));
+        console.log(pc.yellow('To start Tomcat: sudo systemctl start tomcat10 (or equivalent)'));
       }
     } else {
       const { stdout } = await execa('pgrep', ['-f', 'standalone.sh|org.jboss.as.standalone'], { timeout: 2000 });
       if (stdout.trim()) {
-        console.log(pc.green('WildFly : en cours d\'exécution'));
+        console.log(pc.green('WildFly: running'));
       } else {
-        console.log(pc.yellow('WildFly : arrêté'));
-        console.log(pc.yellow('Pour démarrer WildFly : systemctl start wildfly (si configuré) ou standalone.sh'));
+        console.log(pc.yellow('WildFly: stopped'));
+        console.log(pc.yellow('To start WildFly: systemctl start wildfly (if configured) or standalone.sh'));
       }
     }
   } catch {
-    console.log(pc.yellow('Serveur : statut inconnu (pgrep non disponible)'));
+    console.log(pc.yellow('Server: unknown status (pgrep unavailable)'));
   }
 
   const appName = path.basename(projectRoot);
@@ -89,10 +89,10 @@ export async function showStatus({ findProjectRoot }) {
     const warPath = path.join(tomcatDir, 'webapps', `${appName}.war`);
     const explodedPath = path.join(tomcatDir, 'webapps', appName);
     if (existsSync(warPath) || existsSync(explodedPath)) {
-      console.log(pc.green('Déploiement : présent'));
+      console.log(pc.green('Deployment: present'));
       console.log(pc.cyan(`URL : http://localhost:8080/${appName}/`));
     } else {
-      console.log(pc.yellow('Déploiement : absent'));
+      console.log(pc.yellow('Deployment: absent'));
     }
     return;
   }
@@ -101,10 +101,10 @@ export async function showStatus({ findProjectRoot }) {
   const deployments = process.env.WILDFLY_DEPLOYMENTS || path.join(wildflyHome, 'standalone', 'deployments');
   const deployed = path.join(deployments, `${appName}.war`);
   if (existsSync(deployed)) {
-    console.log(pc.green('Déploiement : présent'));
+    console.log(pc.green('Deployment: present'));
     console.log(pc.cyan(`URL : http://localhost:8080/${appName}/`));
   } else {
-    console.log(pc.yellow('Déploiement : absent'));
+    console.log(pc.yellow('Deployment: absent'));
   }
 }
 
@@ -123,7 +123,7 @@ export async function runMigrate({
 }) {
   const projectRoot = findProjectRoot();
   if (!projectRoot) {
-    console.error(pc.red('Aucun projet jwebgen détecté.'));
+    console.error(pc.red('No jwebgen project detected.'));
     process.exit(1);
   }
 
@@ -166,8 +166,8 @@ export async function runMigrate({
   await makeExecutable(path.join(scriptsDir, 'watch.sh'));
   await makeExecutable(path.join(scriptsDir, 'add-servlet.sh'));
 
-  console.log(pc.green('Migration terminée: scripts régénérés au format courant.'));
-  console.log(pc.cyan('Tu peux relancer: jwebgen --dev'));
+  console.log(pc.green('Migration complete: scripts regenerated to current format.'));
+  console.log(pc.cyan('You can run again: jwebgen --dev'));
 }
 
 async function inferBasePackage(projectRoot, appName) {

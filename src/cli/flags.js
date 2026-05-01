@@ -104,6 +104,10 @@ export function parseFlags(argv = []) {
       unknown.push(a);
       continue;
     }
+    if (String(a).startsWith('-')) {
+      unknown.push(a);
+      continue;
+    }
     flags.args.push(a);
   }
 

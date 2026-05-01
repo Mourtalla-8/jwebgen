@@ -53,7 +53,7 @@ export async function runCreateCommand(deps) {
 
   function exitOnCancel(value) {
     if (isCancel(value)) {
-      console.log(pc.yellow('Annulé.'));
+      console.log(pc.yellow('Cancelled.'));
       process.exit(0);
     }
     return value;
@@ -77,7 +77,7 @@ export async function runCreateCommand(deps) {
     }
   }
 
-  intro(`${pc.cyan(appName)} — générateur Java Web (Servlet/JSP)`);
+  intro(`${pc.cyan(appName)} — Java Web generator (Servlet/JSP)`);
 
   const cliProjectName = String(cli?.projectName || '').trim();
   const cliYes = Boolean(cli?.yes);
@@ -85,17 +85,17 @@ export async function runCreateCommand(deps) {
 
   const projectName = cliYes
     ? cliProjectName
-    : await askText('Nom du projet', {
-        placeholder: 'mon-webapp',
-        defaultValue: cliProjectName || 'mon-webapp',
+    : await askText('Project name', {
+        placeholder: 'my-webapp',
+        defaultValue: cliProjectName || 'my-webapp',
         transform: (value) => String(value).trim(),
-        validate: (value) => validateNonEmpty(value, 'Nom du projet')
+        validate: (value) => validateNonEmpty(value, 'Project name')
       });
 
   const defaultArtifactId = slugifyArtifactId(projectName) || 'mon-webapp';
   const artifactId = cliYes
     ? defaultArtifactId
-    : await askText('Identifiant Maven (artifactId)', {
+    : await askText('Maven artifactId', {
         placeholder: defaultArtifactId,
         defaultValue: defaultArtifactId,
         transform: slugifyArtifactId,
@@ -115,17 +115,17 @@ export async function runCreateCommand(deps) {
   const defaultPackage = sanitizePackage(`${groupId}.${artifactPackagePart(artifactId)}`) || 'com.exo.app';
   const basePackage = cliYes
     ? defaultPackage
-    : await askText('Package de base', {
+    : await askText('Base package', {
         placeholder: defaultPackage,
         defaultValue: defaultPackage,
         transform: sanitizePackage,
-        validate: (value) => validateQualifiedName(value, { minSegments: 2, label: 'Package de base' })
+        validate: (value) => validateQualifiedName(value, { minSegments: 2, label: 'Base package' })
       });
 
   const defaultLocation = path.join(process.cwd(), artifactId);
   const location = cliYes
     ? path.resolve(expandHome(defaultLocation))
-    : await askText('Emplacement du projet', {
+    : await askText('Project location', {
         placeholder: defaultLocation,
         defaultValue: defaultLocation,
         transform: (value) => path.resolve(expandHome(value)),
@@ -133,61 +133,61 @@ export async function runCreateCommand(deps) {
       });
   const targetDir = location;
 
-  const serverTarget = cliServerTarget || (cliYes ? null : exitOnCancel(await select({ message: 'Serveur cible', options: serverOptions })));
+  const serverTarget = cliServerTarget || (cliYes ? null : exitOnCancel(await select({ message: 'Target server', options: serverOptions })));
   const javaDetection = detectJavaCompiler();
 
   if (!javaDetection.present) {
-    console.log(pc.red('Java (JDK) est absent ou `javac` est introuvable.'));
-    console.log(pc.yellow(`Installation requise : ${installHint('java')}`));
-    console.log(pc.yellow('La création est arrêtée tant qu’un JDK compatible n’est pas disponible.'));
+    console.log(pc.red('Java (JDK) is missing or `javac` cannot be found.'));
+    console.log(pc.yellow(`Required install: ${installHint('java')}`));
+    console.log(pc.yellow('Creation is stopped until a compatible JDK is available.'));
     process.exit(1);
   }
 
   const javaCompatibility = evaluateJavaCompatibility(javaDetection.majorRelease);
   if (javaCompatibility.status !== 'ok') {
-    console.log(pc.red(`Java détecté mais non utilisable pour ce projet : ${javaDetection.display}`));
+    console.log(pc.red(`Java detected but not usable for this project: ${javaDetection.display}`));
     console.log(pc.red(javaCompatibility.reason));
-    console.log(pc.yellow(`Mise à niveau requise : ${installHint('java')}`));
-    console.log(pc.yellow('La création est arrêtée tant qu’un JDK compatible n’est pas disponible.'));
+    console.log(pc.yellow(`Upgrade required: ${installHint('java')}`));
+    console.log(pc.yellow('Creation is stopped until a compatible JDK is available.'));
     process.exit(1);
   }
 
   const javaRelease = javaDetection.majorRelease;
-  const addServlet = cliYes ? true : exitOnCancel(await confirm({ message: 'Créer une servlet d’exemple /hello ?', initialValue: true }));
-  const addJsp = cliYes ? true : exitOnCancel(await confirm({ message: 'Créer une page JSP index.jsp ?', initialValue: true }));
-  const addWebXml = cliYes ? false : exitOnCancel(await confirm({ message: 'Créer un web.xml ?', initialValue: false }));
-  const addGitignore = cliYes ? true : exitOnCancel(await confirm({ message: 'Créer un .gitignore ?', initialValue: true }));
-  const buildNow = cliYes ? false : exitOnCancel(await confirm({ message: 'Compiler le projet après création ?', initialValue: false }));
+  const addServlet = cliYes ? true : exitOnCancel(await confirm({ message: 'Create an example /hello servlet?', initialValue: true }));
+  const addJsp = cliYes ? true : exitOnCancel(await confirm({ message: 'Create an index.jsp page?', initialValue: true }));
+  const addWebXml = cliYes ? false : exitOnCancel(await confirm({ message: 'Create web.xml?', initialValue: false }));
+  const addGitignore = cliYes ? true : exitOnCancel(await confirm({ message: 'Create .gitignore?', initialValue: true }));
+  const buildNow = cliYes ? false : exitOnCancel(await confirm({ message: 'Build project after creation?', initialValue: false }));
 
   if (existsSync(targetDir)) {
-    console.log(pc.red(`Le dossier existe déjà : ${targetDir}`));
+    console.log(pc.red(`Directory already exists: ${targetDir}`));
     process.exit(1);
   }
 
   note(
     [
-      `Projet : ${projectName}`,
+      `Project: ${projectName}`,
       `artifactId : ${artifactId}`,
-      `Nom déployé : ${deployedAppName}`,
-      `Emplacement : ${targetDir}`,
+      `Deployed name: ${deployedAppName}`,
+      `Location: ${targetDir}`,
       `groupId : ${groupId}`,
-      `package : ${basePackage}`,
-      `serveur : ${serverTarget || 'non défini (sera demandé au 1er --dev/--deploy)'}`,
-      `Java détecté : ${javaDetection.display}`,
-      `Version Java : ${javaRelease}`,
-      `Servlet : ${addServlet ? 'oui' : 'non'}`,
-      `JSP : ${addJsp ? 'oui' : 'non'}`,
-      `web.xml : ${addWebXml ? 'oui' : 'non'}`,
-      `Build : ${buildNow ? 'oui' : 'non'}`,
-      `URL dev : http://localhost:8080/${deployedAppName}/`
+      `package: ${basePackage}`,
+      `server: ${serverTarget || 'unset (will be requested on first --dev/--deploy)'}`,
+      `Detected Java: ${javaDetection.display}`,
+      `Java version: ${javaRelease}`,
+      `Servlet: ${addServlet ? 'yes' : 'no'}`,
+      `JSP: ${addJsp ? 'yes' : 'no'}`,
+      `web.xml: ${addWebXml ? 'yes' : 'no'}`,
+      `Build: ${buildNow ? 'yes' : 'no'}`,
+      `Dev URL: http://localhost:8080/${deployedAppName}/`
     ].join('\n'),
-    'Résumé'
+    'Summary'
   );
 
   if (!cliYes) {
-    const shouldCreate = exitOnCancel(await confirm({ message: `Créer le projet ici ?\n${targetDir}`, initialValue: true }));
+    const shouldCreate = exitOnCancel(await confirm({ message: `Create project here?\n${targetDir}`, initialValue: true }));
     if (!shouldCreate) {
-      console.log(pc.yellow('Annulé. Aucun fichier n’a été créé.'));
+      console.log(pc.yellow('Cancelled. No files were created.'));
       process.exit(0);
     }
   }
@@ -195,7 +195,7 @@ export async function runCreateCommand(deps) {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'jwebgen-'));
   const workDir = path.join(tempRoot, artifactId);
   const s = spinner();
-  s.start('Génération...');
+  s.start('Generating...');
 
   try {
     const pkgPath = packageToPath(basePackage);
@@ -273,40 +273,40 @@ export async function runCreateCommand(deps) {
     await mkdir(path.dirname(targetDir), { recursive: true });
     await cp(workDir, targetDir, { recursive: true, force: true });
     for (const relativePath of scriptFiles) await makeExecutable(path.join(targetDir, relativePath));
-    s.stop('Terminé.');
+    s.stop('Done.');
   } catch (error) {
-    s.stop('Génération interrompue.');
+    s.stop('Generation interrupted.');
     throw error;
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
   }
 
-  console.log(pc.green(`\n✅ Projet créé : ${targetDir}`));
+  console.log(pc.green(`\n✅ Project created: ${targetDir}`));
   if (buildNow) {
     const { javaOk, mavenOk } = await ensureBuildTools();
-    if (!javaOk) console.log(pc.yellow(`Java introuvable. ${installHint('java')}`));
-    if (!mavenOk) console.log(pc.yellow(`Maven introuvable. ${installHint('maven')}`));
+    if (!javaOk) console.log(pc.yellow(`Java not found. ${installHint('java')}`));
+    if (!mavenOk) console.log(pc.yellow(`Maven not found. ${installHint('maven')}`));
     if (javaOk && mavenOk) {
       const build = spinner();
-      build.start('Build Maven...');
+        build.start('Running Maven build...');
       try {
         await execa('mvn', ['clean', 'package'], { cwd: targetDir, stdio: 'inherit' });
         build.stop('Build OK');
       } catch {
-        build.stop('Build échoué.');
-        console.error(pc.red('Le build Maven a échoué.'));
+        build.stop('Build failed.');
+        console.error(pc.red('Maven build failed.'));
         process.exit(1);
       }
     } else {
-      console.log(pc.yellow('Build ignoré tant que Java ou Maven manque.'));
+      console.log(pc.yellow('Build skipped while Java or Maven is missing.'));
     }
   }
 
-  console.log(pc.cyan('\nDéveloppement rapide :'));
+  console.log(pc.cyan('\nQuick development commands:'));
   console.log(pc.cyan('- ./.jwebgen/scripts/build.sh'));
   console.log(pc.cyan('- ./.jwebgen/scripts/deploy.sh'));
   console.log(pc.cyan('- ./.jwebgen/scripts/dev.sh'));
   console.log(pc.cyan('- ./.jwebgen/scripts/watch.sh'));
   if (addServlet) console.log(pc.cyan('- jwebgen --servlet HelloServlet'));
-  outro(pc.cyan('Terminé.'));
+  outro(pc.cyan('Done.'));
 }

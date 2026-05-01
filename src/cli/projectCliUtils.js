@@ -53,49 +53,49 @@ Usage: jwebgen [option]
 Options:
 
 --help, -h
-  This help message.
+  Show this help message.
 
 --status
   Show project status.
 
 --dev
-  Start dev loop in current project.
+  Start dev loop in the current project.
 
 --watch
   Alias for --dev.
 
 --build
-  Run project build script.
+  Run the project build script.
 
 --deploy
-  Run project deploy script.
+  Run the project deploy script.
 
 --clean
-  Remove target/ in current project.
+  Remove target/ in the current project.
 
 --clean --deploy
-  Clean deployed app from server for current project only.
+  Clean deployed app on the selected server for this project only.
 
 --migrate, -m
   Upgrade a legacy jwebgen project.
 
 --servlet <Name>
-  Create a servlet (class name auto-normalized).
+  Create a servlet (class name is auto-normalized).
 
 --new, -n <projectName>
 --create, -c <projectName>
   Create a new project (interactive by default).
 
 --yes, -y
-  Non-interactive mode for project creation (requires <projectName>).
+  Non-interactive project creation mode (requires <projectName>).
 
 --tomcat, -t / --wildfly, -w
-  Choose server target.
+  Choose the server target.
 `);
 }
 
 export function printUnknownCommandAndExit(command) {
-  console.log(pc.yellow(`Commande inconnue : ${command}`));
+  console.log(pc.yellow(`Unknown command: ${command}`));
   showHelp();
   process.exit(1);
 }

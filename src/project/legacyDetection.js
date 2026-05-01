@@ -14,23 +14,23 @@ export async function detectLegacyProjectIssues(projectRoot, {
   const watchPath = path.join(scriptsDir, 'watch.sh');
 
   if (!existsSync(deployPath) && existsSync(legacyDeployPath)) {
-    issues.push(`script legacy détecté: ${legacyDeployScript} sans ${canonicalDeployScript}`);
+    issues.push(`legacy script detected: ${legacyDeployScript} without ${canonicalDeployScript}`);
   }
 
   if (existsSync(watchPath)) {
     try {
       const watch = await readFile(watchPath, 'utf8');
       if (watch.includes(`runScript('${legacyDeployScript}')`)) {
-        issues.push(`watch.sh référence encore ${legacyDeployScript}`);
+        issues.push(`watch.sh still references ${legacyDeployScript}`);
       }
       if (watch.includes('const cmd = [') && watch.includes('$1=="LISTEN" && $4 ~ /:')) {
-        issues.push('watch.sh contient un pattern de quoting historique potentiellement invalide');
+        issues.push('watch.sh contains a historical quoting pattern that may be invalid');
       }
       if (watch.includes('[Qq]|[Nn])')) {
-        issues.push("watch.sh contient un prompt ambigu legacy ([Nn] quitte aussi)");
+        issues.push('watch.sh contains an ambiguous legacy prompt ([Nn] also quits)');
       }
     } catch {
-      issues.push('impossible de lire .jwebgen/scripts/watch.sh pour validation');
+      issues.push('unable to read .jwebgen/scripts/watch.sh for validation');
     }
   }
   return issues;

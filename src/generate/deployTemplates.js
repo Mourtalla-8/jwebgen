@@ -7,11 +7,11 @@ export function makeDeployTomcatScript({ appName }) {
 set -euo pipefail
 
 if [[ "$(uname -s 2>/dev/null || echo unknown)" != "Linux" ]]; then
-  echo "Environnement non-Linux détecté. Ce script cible Linux/systemd en priorité."
-  echo "Continue seulement si Tomcat local est configuré manuellement."
+  echo "Non-Linux environment detected. This script primarily targets Linux/systemd."
+  echo "Continue only if local Tomcat is configured manually."
 fi
 
-# Couleurs pour les logs
+# Colors for logs
 RED='\\033[0;31m'
 GREEN='\\033[0;32m'
 YELLOW='\\033[1;33m'
@@ -82,7 +82,7 @@ EXPLODED_APP_DIR="$ROOT_DIR/target/$APP_NAME"
 
 if [[ "$CLEANUP_DEV_MODE" = "0" && "\${JWEBGEN_DEV:-0}" = "1" ]]; then
   if [[ ! -d "$EXPLODED_APP_DIR" ]]; then
-    log_error "Compilation requise"
+    log_error "Build is required"
     exit 1
   fi
 fi
@@ -94,63 +94,63 @@ if [[ -d "$ROOT_DIR/target" ]]; then
 fi
 
 if [[ "$CLEANUP_DEV_MODE" = "1" ]]; then
-  log_action "Nettoyage dev Tomcat (app courante)"
+  log_action "Tomcat dev cleanup (current app)"
 else
-  log_action "Envoi vers Tomcat"
+  log_action "Deploying to Tomcat"
 fi
 
 if [[ "$CLEANUP_DEV_MODE" = "0" ]]; then
-  # Vérifier si Tomcat est en cours
+  # Check whether Tomcat is running
   TOMCAT_UNIT="$(tomcat_unit_name)"
   if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet "$TOMCAT_UNIT" 2>/dev/null; then
-    log_success "Tomcat actif"
+    log_success "Tomcat is running"
   elif command -v curl >/dev/null 2>&1 && curl -sS --max-time 2 http://127.0.0.1:8080/ >/dev/null 2>&1; then
     log_success "Tomcat actif (HTTP répond)"
   else
-    log_error "Tomcat n'est pas actif"
-    log_info "Démarre-le : sudo systemctl start $TOMCAT_UNIT"
+    log_error "Tomcat is not running"
+    log_info "Start it: sudo systemctl start $TOMCAT_UNIT"
     exit 1
   fi
 fi
 
 if ! run_privileged mkdir -p "$TOMCAT_DIR/webapps"; then
-  log_error "Permissions insuffisantes pour créer $TOMCAT_DIR/webapps."
-  log_info "Lance 'sudo -v' puis relance."
+  log_error "Insufficient permissions to create $TOMCAT_DIR/webapps."
+  log_info "Run 'sudo -v' then retry."
   echo "__JWEBGEN_EVENT__ deploy_sudo_required" >&2
   exit 1
 fi
 
 if [[ "$CLEANUP_DEV_MODE" = "1" ]]; then
   if ! run_privileged rm -rf "$TOMCAT_DIR/webapps/$APP_NAME" "$TOMCAT_DIR/webapps/$APP_NAME.war"; then
-    log_error "Permissions insuffisantes pour nettoyer $APP_NAME dans $TOMCAT_DIR/webapps."
-    log_info "Lance 'sudo -v' puis relance."
+    log_error "Insufficient permissions to clean $APP_NAME in $TOMCAT_DIR/webapps."
+    log_info "Run 'sudo -v' then retry."
     echo "__JWEBGEN_EVENT__ deploy_sudo_required" >&2
     exit 1
   fi
-  log_success "Nettoyage dev terminé pour $APP_NAME (Tomcat)."
+  log_success "Dev cleanup completed for $APP_NAME (Tomcat)."
   exit 0
 fi
 
 if [[ "\${JWEBGEN_DEV:-0}" = "1" ]]; then
   DEST_DIR="$TOMCAT_DIR/webapps/$APP_NAME"
-  # Sync incrémental (rapide) plutôt qu'un delete + copie complète.
+  # Incremental sync (fast) instead of delete + full copy.
   if command -v rsync >/dev/null 2>&1; then
     if ! run_privileged rsync -a --delete "$EXPLODED_APP_DIR/" "$DEST_DIR/"; then
-      log_warn "Tentative avec sudo"
+      log_warn "Retrying with sudo"
       if ! sudo -n mkdir -p "$DEST_DIR" || ! sudo -n rsync -a --delete "$EXPLODED_APP_DIR/" "$DEST_DIR/"; then
-        log_error "Permissions insuffisantes. Lance 'sudo -v' puis relance."
+        log_error "Insufficient permissions. Run 'sudo -v' then retry."
         echo "__JWEBGEN_EVENT__ deploy_sudo_required" >&2
         exit 1
       fi
     fi
   else
-    # Fallback simple (moins optimal) si rsync absent.
+    # Simple fallback (less optimal) when rsync is unavailable.
     run_privileged rm -rf "$DEST_DIR" || true
     if ! run_privileged cp -R "$EXPLODED_APP_DIR" "$DEST_DIR"; then
-      log_warn "Tentative avec sudo"
+      log_warn "Retrying with sudo"
       if ! sudo -n rm -rf "$DEST_DIR" 2>/dev/null || true; then true; fi
       if ! sudo -n cp -R "$EXPLODED_APP_DIR" "$DEST_DIR"; then
-        log_error "Permissions insuffisantes. Lance 'sudo -v' puis relance."
+        log_error "Insufficient permissions. Run 'sudo -v' then retry."
         echo "__JWEBGEN_EVENT__ deploy_sudo_required" >&2
         exit 1
       fi
@@ -160,20 +160,20 @@ if [[ "\${JWEBGEN_DEV:-0}" = "1" ]]; then
   rm -f "$TOMCAT_DIR/webapps/$APP_NAME.war" 2>/dev/null || true
   rm -f "$ROOT_DIR/target/$APP_NAME.war" 2>/dev/null || true
   
-  # Aider Tomcat à détecter les changements
+  # Help Tomcat detect changes
   if [[ -f "$TOMCAT_DIR/webapps/$APP_NAME/META-INF/context.xml" ]]; then
     run_privileged touch "$TOMCAT_DIR/webapps/$APP_NAME/META-INF/context.xml" || true
   fi
 else
   run_privileged rm -rf "$TOMCAT_DIR/webapps/$APP_NAME" "$TOMCAT_DIR/webapps/$APP_NAME.war" || true
   if [[ -z "$WAR_FILE" || ! -f "$WAR_FILE" ]]; then
-    log_error "Fichier WAR introuvable"
+    log_error "WAR file not found"
     exit 1
   fi
   if ! run_privileged cp "$WAR_FILE" "$TOMCAT_DIR/webapps/$APP_NAME.war"; then
-    log_warn "Tentative avec sudo"
+    log_warn "Retrying with sudo"
     if ! sudo -n cp "$WAR_FILE" "$TOMCAT_DIR/webapps/$APP_NAME.war"; then
-      log_error "Permissions insuffisantes. Lance 'sudo -v' puis relance."
+      log_error "Insufficient permissions. Run 'sudo -v' then retry."
       echo "__JWEBGEN_EVENT__ deploy_sudo_required" >&2
       exit 1
     fi
@@ -194,8 +194,8 @@ export function makeDeployServerScript({ appName, serverTarget }) {
 set -euo pipefail
 
 if [[ "$(uname -s 2>/dev/null || echo unknown)" != "Linux" ]]; then
-  echo "Environnement non-Linux détecté. Ce script cible Linux/systemd en priorité."
-  echo "Continue seulement si WildFly local est configuré manuellement."
+  echo "Non-Linux environment detected. This script primarily targets Linux/systemd."
+  echo "Continue only if local WildFly is configured manually."
 fi
 
 APP_NAME=${shellQuote(appName)}
@@ -231,7 +231,7 @@ if [[ "$CLEANUP_DEV_MODE" = "0" && ( -z "$WAR_FILE" || ! -f "$WAR_FILE" ) ]]; th
 fi
 
 if [[ "$CLEANUP_DEV_MODE" = "1" ]]; then
-  echo "Nettoyage dev WildFly (app courante) : $DEPLOY_DIR/$APP_NAME.war"
+  echo "WildFly dev cleanup (current app): $DEPLOY_DIR/$APP_NAME.war"
 else
   echo "Déploiement WildFly vers : $DEPLOY_DIR/$APP_NAME.war"
 fi

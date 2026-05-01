@@ -23,8 +23,8 @@ This project follows Semantic Versioning.
 - Per-project server configuration file: `.jwebgenrc` (`JWEBGEN_SERVER_TARGET=tomcat|wildfly`).
 - Server selection prompt on `--dev/--deploy` when target isn’t configured (interactive terminals only).
 - `deploy.sh` is now a selector that dispatches to:
-  - `scripts/deploy-tomcat.sh`
-  - `scripts/deploy-wildfly.sh`
+  - `.jwebgen/scripts/deploy-tomcat.sh`
+  - `.jwebgen/scripts/deploy-wildfly.sh`
 
 ### Migration
 

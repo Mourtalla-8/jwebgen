@@ -13,7 +13,7 @@ fi
 
 cd "$ROOT_DIR"
 if [[ "\${JWEBGEN_DEV:-0}" = "1" ]]; then
-  # En dev, éviter "clean" pour garder l'incrémental (beaucoup plus rapide).
+  # In dev mode, avoid "clean" to preserve incremental builds (much faster).
   mvn "\${MVN_COMMON_ARGS[@]}" package
 else
   mvn clean "\${MVN_COMMON_ARGS[@]}" package
