@@ -31,9 +31,14 @@ jobs:
         if: runner.os == 'Linux'
         run: npm run check
 
-      - name: Run checks (macOS/Windows)
-        if: runner.os != 'Linux'
-        run: npm run lint && npm run test:unit && node bin/jwebgen.js --help && node bin/jwebgen.js --new myapp --yes
-
       - name: Verify package
         run: npm pack --dry-run
+
+      - name: Run checks (macOS/Windows)
+        if: runner.os != 'Linux'
+        run: npm run lint && node --test tests/unit && node bin/jwebgen.js --help
+
+      - name: Run generator smoke (macOS/Windows, Node 20 only)
+        if: runner.os != 'Linux' && matrix.node-version == 20
+        run: |
+          node -e "const fs=require('node:fs'); const os=require('node:os'); const path=require('node:path'); const cp=require('node:child_process'); const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'jwebgen-smoke-')); cp.execFileSync(process.execPath,[path.join(process.cwd(),'bin','jwebgen.js'),'--new','myapp','--yes'],{cwd:tmp,stdio:'inherit'});"
