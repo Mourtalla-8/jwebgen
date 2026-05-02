@@ -131,7 +131,13 @@ export async function runMigrate({
   const scriptsDir = jwebgenScriptsDir(projectRoot);
   await mkdir(scriptsDir, { recursive: true });
   const appName = path.basename(projectRoot);
-  const serverTarget = detectServerTargetFromProject(projectRoot);
+  const configuredTarget = await readConfiguredServerTarget(projectRoot);
+  const legacyScriptTarget = await detectExplicitServerTargetFromDevScript(projectRoot);
+  const detectedTarget = detectServerTargetFromProject(projectRoot);
+  const serverTarget =
+    configuredTarget
+    || legacyScriptTarget
+    || (detectedTarget === 'wildfly' ? 'wildfly' : '');
 
   await writeFileSafe(path.join(scriptsDir, 'build.sh'), makeBuildScript());
   await writeFileSafe(path.join(scriptsDir, 'deploy.sh'), makeDeploySelectorScript());
@@ -210,6 +216,7 @@ async function writeProjectConfigServerTarget(projectRoot, detectedTarget) {
 
   const existingTarget = extractServerTarget(raw);
   const effectiveTarget = existingTarget || detectedTarget;
+  if (!effectiveTarget) return;
   const line = `export JWEBGEN_SERVER_TARGET="${effectiveTarget}"`;
   const hasServerLine = /^export\s+JWEBGEN_SERVER_TARGET=.*$/m.test(raw);
 
@@ -223,6 +230,31 @@ async function writeProjectConfigServerTarget(projectRoot, detectedTarget) {
   }
 
   await writeFile(cfgPath, nextRaw, 'utf8');
+}
+
+async function readConfiguredServerTarget(projectRoot) {
+  const cfgPath = jwebgenConfigPath(projectRoot);
+  if (!existsSync(cfgPath)) return '';
+  try {
+    return extractServerTarget(await readFile(cfgPath, 'utf8'));
+  } catch {
+    return '';
+  }
+}
+
+async function detectExplicitServerTargetFromDevScript(projectRoot) {
+  const devPath = path.join(jwebgenScriptsDir(projectRoot), 'dev.sh');
+  if (!existsSync(devPath)) return '';
+  try {
+    const raw = await readFile(devPath, 'utf8');
+    const direct = raw.match(/^\s*export\s+JWEBGEN_SERVER_TARGET="?([a-zA-Z0-9_-]+)"?\s*$/m);
+    const fallback = raw.match(/JWEBGEN_SERVER_TARGET:-([a-zA-Z0-9_-]+)/);
+    const target = String(direct?.[1] || fallback?.[1] || '').toLowerCase();
+    if (target === 'tomcat' || target === 'wildfly') return target;
+    return '';
+  } catch {
+    return '';
+  }
 }
 
 function extractServerTarget(raw) {

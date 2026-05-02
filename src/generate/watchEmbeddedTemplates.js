@@ -19,7 +19,8 @@ const serverUnit =
     : 'tomcat10';
 const preferredLivePort = Number(process.env.JWEBGEN_LIVE_PORT || 35729);
 let livePort = preferredLivePort;
-const proxyPort = Number(process.env.JWEBGEN_PROXY_PORT || 8081);
+const preferredProxyPort = Number(process.env.JWEBGEN_PROXY_PORT || 8081);
+let proxyPort = preferredProxyPort;
 const wsClients = new Set();
 
 const state = {
@@ -29,7 +30,8 @@ const state = {
   server: 'checking',
   app: 'checking',
   live: 'starting',
-  url: 'http://localhost:' + httpPort + '/' + appName + '/',
+  url: 'http://localhost:' + proxyPort + '/' + appName + '/',
+  appUrl: 'http://localhost:' + httpPort + '/' + appName + '/',
   proxyUrl: 'http://localhost:' + proxyPort + '/' + appName + '/',
   serverCheckUrl: serverTarget === 'wildfly' ? 'http://127.0.0.1:9990' : 'http://127.0.0.1:' + httpPort,
   livePort,
@@ -215,10 +217,37 @@ wsServer.listen(livePort, () => {
 });
 const proxy = createProxyServer();
 proxy.on('error', (err) => {
+  if (err?.code === 'EADDRINUSE') {
+    (async () => {
+      const busyPort = proxyPort;
+      const owner = await portOwner(busyPort);
+      const fallback = await findFreePort(busyPort + 1);
+      emit('proxy_port_busy', { port: busyPort, owner: owner || '' });
+      if (!fallback) {
+        console.error('[jwebgen] Proxy server error: no free port for fallback');
+        process.exit(1);
+        return;
+      }
+      proxyPort = fallback;
+      state.proxyPort = proxyPort;
+      state.proxyUrl = 'http://localhost:' + proxyPort + '/' + appName + '/';
+      state.url = state.proxyUrl;
+      saveState();
+      proxy.listen(proxyPort, '127.0.0.1', () => {
+        emit('proxy_port_fallback', { fromPort: busyPort, toPort: proxyPort });
+      });
+    })().catch(() => process.exit(1));
+    return;
+  }
   console.error('[jwebgen] Proxy server error:', err);
   process.exit(1);
 });
-proxy.listen(proxyPort, '127.0.0.1', () => { saveState(); });
+proxy.listen(proxyPort, '127.0.0.1', () => {
+  state.proxyPort = proxyPort;
+  state.proxyUrl = 'http://localhost:' + proxyPort + '/' + appName + '/';
+  state.url = state.proxyUrl;
+  saveState();
+});
 process.on('exit', () => { try { proxy.close(); } catch {} });
 process.on('exit', () => { try { wsServer.close(); } catch {} });
 if (parentPid > 1) {
