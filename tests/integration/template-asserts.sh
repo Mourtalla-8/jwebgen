@@ -46,10 +46,12 @@ assertContains(deployWildfly, 'WildFly dev cleanup', 'deploy wildfly cleanup');
 
 const nodeBuild = makeNodeBuildScript();
 assertContains(nodeBuild, '#!/usr/bin/env node', 'build.mjs shebang');
-assertContains(nodeBuild, "execa('mvn'", 'build.mjs uses mvn');
+assertContains(nodeBuild, "run('mvn'", 'build.mjs invokes mvn via spawn helper');
+assertContains(nodeBuild, "from 'node:child_process'", 'build.mjs uses child_process spawn');
 const nodeDeploy = makeNodeDeployScript();
 assertContains(nodeDeploy, 'deployTomcat', 'deploy.mjs contains tomcat deploy adapter');
 assertContains(nodeDeploy, 'deployWildfly', 'deploy.mjs contains wildfly deploy adapter');
+assertContains(nodeDeploy, 'readMavenAppName', 'deploy.mjs resolves deploy name from pom.xml');
 const nodeDev = makeNodeDevScript();
 assertContains(nodeDev, 'dev.sh', 'dev.mjs delegates to dev.sh');
 const nodeWatch = makeNodeWatchScript();

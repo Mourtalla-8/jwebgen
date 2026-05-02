@@ -315,10 +315,11 @@ export async function runCreateCommand(deps) {
   }
 
   console.log(pc.cyan('\nQuick development commands:'));
-  console.log(pc.cyan('- ./.jwebgen/scripts/build.sh'));
-  console.log(pc.cyan('- ./.jwebgen/scripts/deploy.sh'));
-  console.log(pc.cyan('- ./.jwebgen/scripts/dev.sh'));
-  console.log(pc.cyan('- ./.jwebgen/scripts/watch.sh'));
+  console.log(pc.cyan('- node .jwebgen/scripts/build.mjs'));
+  console.log(pc.cyan('- node .jwebgen/scripts/deploy.mjs'));
+  console.log(pc.cyan('- node .jwebgen/scripts/dev.mjs'));
+  console.log(pc.cyan('- node .jwebgen/scripts/watch.mjs'));
+  console.log(pc.dim('Shell alternatives (Unix): .jwebgen/scripts/build.sh, deploy.sh, dev.sh, watch.sh'));
   if (addServlet) console.log(pc.cyan('- jwebgen --servlet HelloServlet'));
   outro(pc.cyan('Done.'));
 }

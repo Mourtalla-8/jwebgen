@@ -13,9 +13,35 @@ function scriptHeader({ name }) {
 `;
 }
 
-function delegateToBash({ bashName }) {
+/** Embedded in generated .mjs files — no npm dependencies besides Node. */
+function embeddedSpawnRun() {
   return `
-import { execa } from 'execa';
+import { spawn } from 'node:child_process';
+
+function run(command, args = [], options = {}) {
+  const { cwd, env = process.env } = options;
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      stdio: 'inherit',
+      shell: false,
+      cwd,
+      env
+    });
+    child.on('error', reject);
+    child.on('exit', (code, signal) => {
+      if (code === 0) resolve();
+      else {
+        const hint = signal ? \`signal \${signal}\` : \`code \${code}\`;
+        reject(new Error(\`Command failed (\${hint}): \${command} \${args.join(' ')}\`.trim()));
+      }
+    });
+  });
+}
+`;
+}
+
+function delegateToBash({ bashName }) {
+  return `${embeddedSpawnRun()}
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -28,13 +54,13 @@ if (process.platform === 'win32') {
 }
 
 const bashPath = path.join(__dirname, ${JSON.stringify(bashName)});
-await execa('bash', [bashPath, ...process.argv.slice(2)], { stdio: 'inherit', env: process.env });
+await run('bash', [bashPath, ...process.argv.slice(2)]);
 `;
 }
 
 export function makeNodeBuildScript() {
-  return `${scriptHeader({ name: 'build' })}
-import { execa } from 'execa';
+  return `${scriptHeader({ name: 'build' })}${embeddedSpawnRun()}
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -48,12 +74,11 @@ if (!verbose) mvnArgs.unshift('-B', '-ntp');
 const isDev = String(process.env.JWEBGEN_DEV || '') === '1';
 const args = isDev ? [...mvnArgs, 'package'] : ['clean', ...mvnArgs, 'package'];
 
-await execa('mvn', args, { cwd: rootDir, stdio: 'inherit', env: process.env });
+await run('mvn', args, { cwd: rootDir });
 `;
 }
 
 export function makeNodeDeployScript() {
-  // Cross-platform deploy entrypoint. This is the first step to replace bash deploy scripts.
   return `${scriptHeader({ name: 'deploy' })}
 import path from 'node:path';
 import { existsSync } from 'node:fs';
@@ -63,8 +88,6 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '../..');
-const scriptsDir = __dirname;
-const appName = path.basename(rootDir);
 
 function parseExports(text) {
   const env = {};
@@ -75,7 +98,7 @@ function parseExports(text) {
     if (!m) continue;
     const key = m[1];
     let value = m[2].trim();
-    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith(\"'\") && value.endsWith(\"'\"))) {
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith('\\'') && value.endsWith('\\''))) {
       value = value.slice(1, -1);
     }
     env[key] = value;
@@ -94,6 +117,22 @@ async function loadProjectConfig() {
   }
 }
 
+async function readMavenAppName() {
+  const pomPath = path.join(rootDir, 'pom.xml');
+  if (!existsSync(pomPath)) return path.basename(rootDir);
+  try {
+    const xml = await readFile(pomPath, 'utf8');
+    const fm = xml.match(/<finalName>\\s*([^<]+?)\\s*<\\/finalName>/);
+    if (fm?.[1]) return fm[1].trim();
+    const noParent = xml.replace(/<parent>[\\s\\S]*?<\\/parent>/gi, '');
+    const am = noParent.match(/<artifactId>\\s*([^<]+?)\\s*<\\/artifactId>/);
+    if (am?.[1]) return am[1].trim();
+  } catch {
+    /* ignore */
+  }
+  return path.basename(rootDir);
+}
+
 function resolveServerTarget({ cfg }) {
   const v = String(process.env.JWEBGEN_SERVER_TARGET || cfg.JWEBGEN_SERVER_TARGET || '').trim();
   if (v === 'tomcat' || v === 'wildfly') return v;
@@ -108,7 +147,7 @@ async function ensureDir(p) {
   await mkdir(p, { recursive: true });
 }
 
-async function deployTomcat({ cfg, cleanupOnly }) {
+async function deployTomcat({ cfg, cleanupOnly, appName }) {
   const tomcatHome = String(process.env.TOMCAT_HOME || process.env.TOMCAT10 || cfg.TOMCAT_HOME || cfg.TOMCAT10 || '').trim();
   const defaultHome = process.platform === 'win32' ? '' : '/var/lib/tomcat10';
   const home = tomcatHome || defaultHome;
@@ -138,7 +177,6 @@ async function deployTomcat({ cfg, cleanupOnly }) {
     await rm(destWar, { force: true });
     await rm(destExploded, { recursive: true, force: true });
     await cp(explodedSrc, destExploded, { recursive: true, force: true });
-    // Best-effort touch for Tomcat reloadable context
     const ctx = path.join(destExploded, 'META-INF', 'context.xml');
     if (existsSync(ctx)) await writeFile(ctx, await readFile(ctx));
     console.log('Deployed to Tomcat (exploded): ' + destExploded);
@@ -150,8 +188,8 @@ async function deployTomcat({ cfg, cleanupOnly }) {
     console.error('Build required: target/ directory is missing.');
     process.exit(1);
   }
-  // Find newest WAR in target/
-  const entries = await (await import('node:fs/promises')).readdir(targetDir);
+  const fsPromises = await import('node:fs/promises');
+  const entries = await fsPromises.readdir(targetDir);
   const wars = entries.filter((e) => e.endsWith('.war')).sort();
   const warFile = wars[wars.length - 1] ? path.join(targetDir, wars[wars.length - 1]) : '';
   if (!warFile || !existsSync(warFile)) {
@@ -164,7 +202,7 @@ async function deployTomcat({ cfg, cleanupOnly }) {
   console.log('Deployed to Tomcat: ' + destWar);
 }
 
-async function deployWildfly({ cfg, cleanupOnly }) {
+async function deployWildfly({ cfg, cleanupOnly, appName }) {
   const wildflyHome = String(process.env.WILDFLY_HOME || cfg.WILDFLY_HOME || '/opt/wildfly').trim();
   const deployments = String(process.env.WILDFLY_DEPLOYMENTS || cfg.WILDFLY_DEPLOYMENTS || path.join(wildflyHome, 'standalone', 'deployments')).trim();
   const destWar = path.join(deployments, appName + '.war');
@@ -195,7 +233,8 @@ async function deployWildfly({ cfg, cleanupOnly }) {
     console.error('Build required: target/ directory is missing.');
     process.exit(1);
   }
-  const entries = await (await import('node:fs/promises')).readdir(targetDir);
+  const fsPromises = await import('node:fs/promises');
+  const entries = await fsPromises.readdir(targetDir);
   const wars = entries.filter((e) => e.endsWith('.war')).sort();
   const warFile = wars[wars.length - 1] ? path.join(targetDir, wars[wars.length - 1]) : '';
   if (!warFile || !existsSync(warFile)) {
@@ -208,24 +247,22 @@ async function deployWildfly({ cfg, cleanupOnly }) {
 }
 
 const cfg = await loadProjectConfig();
+const appName = await readMavenAppName();
 const target = resolveServerTarget({ cfg });
 const cleanupOnly = process.argv.includes('--cleanup-dev');
 
 if (target === 'tomcat') {
-  await deployTomcat({ cfg, cleanupOnly });
+  await deployTomcat({ cfg, cleanupOnly, appName });
 } else {
-  await deployWildfly({ cfg, cleanupOnly });
+  await deployWildfly({ cfg, cleanupOnly, appName });
 }
 `;
 }
 
 export function makeNodeDevScript() {
-  // Temporary bridge: delegate to bash dev script on Unix.
   return `${scriptHeader({ name: 'dev' })}${delegateToBash({ bashName: 'dev.sh' })}`;
 }
 
 export function makeNodeWatchScript() {
-  // Temporary bridge: delegate to bash watch script on Unix.
   return `${scriptHeader({ name: 'watch' })}${delegateToBash({ bashName: 'watch.sh' })}`;
 }
-
