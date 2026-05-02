@@ -72,8 +72,9 @@ if (!verbose) mvnArgs.unshift('-B', '-ntp');
 
 const isDev = String(process.env.JWEBGEN_DEV || '') === '1';
 const args = isDev ? [...mvnArgs, 'package'] : ['clean', ...mvnArgs, 'package'];
+const mavenExecutable = process.platform === 'win32' ? 'mvn.cmd' : 'mvn';
 
-await run('mvn', args, { cwd: rootDir });
+await run(mavenExecutable, args, { cwd: rootDir });
 `;
 }
 
