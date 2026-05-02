@@ -13,10 +13,36 @@ function scriptHeader({ name }) {
 `;
 }
 
-function delegateToBash({ bashName }) {
+function embeddedSpawnRun() {
   return `
-import { execa } from 'execa';
+import { spawn } from 'node:child_process';
+
+function run(command, args = [], options = {}) {
+  const { cwd, env = process.env } = options;
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      stdio: 'inherit',
+      shell: false,
+      cwd,
+      env
+    });
+    child.on('error', reject);
+    child.on('exit', (code, signal) => {
+      if (code === 0) resolve();
+      else {
+        const hint = signal ? \`signal \${signal}\` : \`code \${code}\`;
+        reject(new Error(\`Command failed (\${hint}): \${command} \${args.join(' ')}\`.trim()));
+      }
+    });
+  });
+}
+`;
+}
+
+function delegateToBash({ bashName }) {
+  return `${embeddedSpawnRun()}
 import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -27,14 +53,14 @@ if (process.platform === 'win32') {
 }
 
 const bashPath = path.join(__dirname, ${JSON.stringify(bashName)});
-await execa('bash', [bashPath, ...process.argv.slice(2)], { stdio: 'inherit', env: process.env });
+await run('bash', [bashPath, ...process.argv.slice(2)]);
 `;
 }
 
 export function makeNodeBuildScript() {
-  return `${scriptHeader({ name: 'build' })}
-import { execa } from 'execa';
+  return `${scriptHeader({ name: 'build' })}${embeddedSpawnRun()}
 import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -47,7 +73,7 @@ if (!verbose) mvnArgs.unshift('-B', '-ntp');
 const isDev = String(process.env.JWEBGEN_DEV || '') === '1';
 const args = isDev ? [...mvnArgs, 'package'] : ['clean', ...mvnArgs, 'package'];
 
-await execa('mvn', args, { cwd: rootDir, stdio: 'inherit', env: process.env });
+await run('mvn', args, { cwd: rootDir });
 `;
 }
 

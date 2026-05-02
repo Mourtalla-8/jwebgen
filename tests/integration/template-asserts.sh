@@ -46,7 +46,8 @@ assertContains(deployWildfly, 'WildFly dev cleanup', 'deploy wildfly cleanup');
 
 const nodeBuild = makeNodeBuildScript();
 assertContains(nodeBuild, '#!/usr/bin/env node', 'build.mjs shebang');
-assertContains(nodeBuild, "execa('mvn'", 'build.mjs uses mvn');
+assertContains(nodeBuild, "run('mvn'", 'build.mjs uses run helper for mvn');
+assertContains(nodeBuild, "from 'node:child_process'", 'build.mjs imports child_process');
 const nodeDeploy = makeNodeDeployScript();
 assertContains(nodeDeploy, 'deploy.sh', 'deploy.mjs delegates to deploy.sh');
 const nodeDev = makeNodeDevScript();
