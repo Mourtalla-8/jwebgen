@@ -8,7 +8,8 @@ node --input-type=module <<'EOF'
 import { makeWatchScript } from './src/generate/watchTemplate.js';
 import { makeDeployServerScript } from './src/generate/deployTemplates.js';
 import { makeAddServletScript, makeLiveReloadClientScript } from './src/generate/devAssets.js';
-import { devLiveReloadFilter, helloServlet, indexJsp } from './src/templates.js';
+import { helloServlet, indexJsp } from './src/templates.js';
+import { DEV_WORKER_SCRIPT_TEMPLATE } from './src/generate/watchEmbeddedTemplates.js';
 
 function assertContains(haystack, needle, label) {
   if (!String(haystack).includes(needle)) {
@@ -43,6 +44,9 @@ const deployWildfly = makeDeployServerScript({ appName: 'appx', serverTarget: 'w
 assertContains(deployWildfly, '--cleanup-dev', 'deploy wildfly');
 assertContains(deployWildfly, 'WildFly dev cleanup', 'deploy wildfly cleanup');
 
+assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'createProxyServer', 'worker contains dev proxy server');
+assertContains(DEV_WORKER_SCRIPT_TEMPLATE, '/.jwebgen/live-reload.js', 'worker serves live-reload asset');
+
 const client = makeLiveReloadClientScript();
 assertContains(client, "_lr=' + Date.now()", 'devAssets live reload client cache buster');
 assertContains(client, 'livePorts', 'devAssets live reload client fallback ports');
@@ -63,10 +67,6 @@ const jsp = indexJsp({ projectName: 'x', artifactId: 'x', hasServlet: true });
 if (String(jsp).includes('<script>')) {
   throw new Error('unexpected inline script in indexJsp template');
 }
-
-const filter = devLiveReloadFilter({ basePackage: 'com.ex.dev' });
-assertContains(filter, 'WebFilter("/*")', 'dev reload filter annotation');
-assertContains(filter, '/.jwebgen/live-reload.js', 'dev reload filter script path');
 EOF
 
 echo "Template asserts: OK"

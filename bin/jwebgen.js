@@ -12,7 +12,6 @@ import {
 import pc from 'picocolors';
 import {
   gitignore,
-  devLiveReloadFilter,
   helloServlet,
   indexJsp,
   pomXml,
@@ -124,7 +123,6 @@ async function main(cli = {}) {
     makeExecutable,
     ensureBuildTools,
     gitignore,
-    devLiveReloadFilter,
     helloServlet,
     indexJsp,
     pomXml,

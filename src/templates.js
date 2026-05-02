@@ -96,7 +96,6 @@ public class HelloServlet extends HttpServlet {
             out.println("</head>");
             out.println("<body>");
             out.println("<h1>Hello from Jakarta Servlet!</h1>");
-            out.println("<p>LiveReload is injected by DevLiveReloadFilter in dev mode.</p>");
             out.println("</body>");
             out.println("</html>");
         }
@@ -121,105 +120,8 @@ export function indexJsp({ projectName, artifactId, hasServlet }) {
   <h1>${htmlEscape(projectName)}</h1>
   <p>WebApp generated with jwebgen.</p>
 ${servletLink}
-  <p>LiveReload is injected by DevLiveReloadFilter in dev mode.</p>
 </body>
 </html>
-`;
-}
-
-export function devLiveReloadFilter({ basePackage }) {
-  return `package ${basePackage};
-
-import jakarta.servlet.Filter;
-import jakarta.servlet.FilterChain;
-import jakarta.servlet.ServletException;
-import jakarta.servlet.ServletRequest;
-import jakarta.servlet.ServletResponse;
-import jakarta.servlet.annotation.WebFilter;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
-import jakarta.servlet.http.HttpServletResponseWrapper;
-import java.io.CharArrayWriter;
-import java.io.IOException;
-import java.io.PrintWriter;
-
-@WebFilter("/*")
-public class DevLiveReloadFilter implements Filter {
-    private static final String SCRIPT_TAG = "<script src=\\\\\"%s/.jwebgen/live-reload.js\\\\\"></script>";
-
-    @Override
-    public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
-            throws IOException, ServletException {
-        if (!(request instanceof HttpServletRequest) || !(response instanceof HttpServletResponse)) {
-            chain.doFilter(request, response);
-            return;
-        }
-        HttpServletRequest req = (HttpServletRequest) request;
-        HttpServletResponse res = (HttpServletResponse) response;
-
-        String uri = req.getRequestURI();
-        if (uri != null && uri.contains("/.jwebgen/live-reload.js")) {
-            chain.doFilter(request, response);
-            return;
-        }
-
-        BufferingResponseWrapper wrapped = new BufferingResponseWrapper(res);
-        chain.doFilter(request, wrapped);
-
-        String contentType = wrapped.getContentType();
-        if (contentType == null || !contentType.toLowerCase().contains("text/html")) {
-            wrapped.commitToOriginal();
-            return;
-        }
-
-        String body = wrapped.getCapturedBody();
-        String contextPath = req.getContextPath() == null ? "" : req.getContextPath();
-        String tag = String.format(SCRIPT_TAG, contextPath);
-        if (body.contains(tag)) {
-            wrapped.commitToOriginal();
-            return;
-        }
-
-        String updated = injectBeforeBodyClose(body, tag);
-        byte[] bytes = updated.getBytes(res.getCharacterEncoding() != null ? res.getCharacterEncoding() : "UTF-8");
-        res.setContentLength(bytes.length);
-        res.getOutputStream().write(bytes);
-    }
-
-    private static String injectBeforeBodyClose(String html, String tag) {
-        String lower = html.toLowerCase();
-        int idx = lower.lastIndexOf("</body>");
-        if (idx < 0) return html + tag;
-        return html.substring(0, idx) + tag + html.substring(idx);
-    }
-
-    private static class BufferingResponseWrapper extends HttpServletResponseWrapper {
-        private final CharArrayWriter capture = new CharArrayWriter();
-        private final PrintWriter writer = new PrintWriter(capture);
-
-        BufferingResponseWrapper(HttpServletResponse response) {
-            super(response);
-        }
-
-        @Override
-        public PrintWriter getWriter() {
-            return writer;
-        }
-
-        String getCapturedBody() {
-            writer.flush();
-            return capture.toString();
-        }
-
-        void commitToOriginal() throws IOException {
-            String body = getCapturedBody();
-            HttpServletResponse original = (HttpServletResponse) getResponse();
-            byte[] bytes = body.getBytes(original.getCharacterEncoding() != null ? original.getCharacterEncoding() : "UTF-8");
-            original.setContentLength(bytes.length);
-            original.getOutputStream().write(bytes);
-        }
-    }
-}
 `;
 }
 

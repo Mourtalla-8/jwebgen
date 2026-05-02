@@ -29,6 +29,7 @@ function makeMigrateDeps(projectRoot, detectedTarget = 'tomcat') {
     makeDevScript: () => '#!/usr/bin/env bash\n',
     makeWatchScript: () => '#!/usr/bin/env bash\n',
     makeAddServletScript: () => '#!/usr/bin/env bash\n',
+    makeLiveReloadClientScript: () => 'console.log(\"lr\")\n',
     makeExecutable: async () => {},
     legacyDeployScript: 'deploy-tomcat.sh'
   };

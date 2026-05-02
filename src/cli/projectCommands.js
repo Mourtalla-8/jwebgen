@@ -118,6 +118,7 @@ export async function runMigrate({
   makeDevScript,
   makeWatchScript,
   makeAddServletScript,
+  makeLiveReloadClientScript,
   makeExecutable,
   legacyDeployScript
 }) {
@@ -147,6 +148,7 @@ export async function runMigrate({
   const basePackage = await inferBasePackage(projectRoot, appName);
   await writeFileSafe(path.join(scriptsDir, 'add-servlet.sh'), makeAddServletScript({ basePackage }));
   await writeProjectConfigServerTarget(projectRoot, serverTarget);
+  await writeFileSafe(path.join(projectRoot, '.jwebgen', 'live-reload.js'), makeLiveReloadClientScript());
 
   const reservedScriptNames = new Set([
     'deploy.sh',

@@ -188,7 +188,6 @@ public class $CLASS_NAME extends HttpServlet {
       out.println("<h1>$CLASS_NAME</h1>");
       out.println("<p>Servlet generated with ${appName}.</p>");
       out.println("<p>URL: $URL_PATTERN</p>");
-      out.println("<p>LiveReload is injected automatically in dev mode.</p>");
       out.println("</body>");
       out.println("</html>");
     }

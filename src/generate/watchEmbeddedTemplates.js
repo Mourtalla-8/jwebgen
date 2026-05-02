@@ -1,7 +1,7 @@
 export const DEV_WORKER_SCRIPT_TEMPLATE = `import http from 'node:http';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { readdirSync, statSync, watch as fsWatch, writeFileSync, appendFileSync } from 'node:fs';
+import { readdirSync, statSync, watch as fsWatch, writeFileSync, appendFileSync, readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 
 const root = process.cwd();
@@ -19,6 +19,7 @@ const serverUnit =
     : 'tomcat10';
 const preferredLivePort = Number(process.env.JWEBGEN_LIVE_PORT || 35729);
 let livePort = preferredLivePort;
+const proxyPort = Number(process.env.JWEBGEN_PROXY_PORT || 8081);
 const wsClients = new Set();
 
 const state = {
@@ -29,8 +30,10 @@ const state = {
   app: 'checking',
   live: 'starting',
   url: 'http://localhost:' + httpPort + '/' + appName + '/',
+  proxyUrl: 'http://localhost:' + proxyPort + '/' + appName + '/',
   serverCheckUrl: serverTarget === 'wildfly' ? 'http://127.0.0.1:9990' : 'http://127.0.0.1:' + httpPort,
-  livePort
+  livePort,
+  proxyPort
 };
 function saveState() { writeFileSync(stateFile, JSON.stringify(state), 'utf8'); }
 function emit(type, details = {}) { appendFileSync(eventsFile, JSON.stringify({ type, ts: Date.now(), ...details }) + '\\n', 'utf8'); }
@@ -83,6 +86,72 @@ function wsSend(socket, text) {
     : Buffer.from([0x81, 126, (payload.length >> 8) & 0xff, payload.length & 0xff]);
   socket.write(Buffer.concat([header, payload]));
 }
+function injectLiveReload(html, tag) {
+  const lower = String(html).toLowerCase();
+  const idx = lower.lastIndexOf('</body>');
+  if (idx < 0) return String(html) + tag;
+  return String(html).slice(0, idx) + tag + String(html).slice(idx);
+}
+function proxyScriptTag() {
+  return '<script>window.__JWEBGEN_LIVE_PORT=' + String(livePort) + ';</script><script src=\"/.jwebgen/live-reload.js\"></script>';
+}
+function serveProxyClient(res) {
+  const assetPath = path.join(root, '.jwebgen', 'live-reload.js');
+  if (!existsSync(assetPath)) {
+    res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+    res.end('missing .jwebgen/live-reload.js\\n');
+    return;
+  }
+  const body = readFileSync(assetPath, 'utf8');
+  res.writeHead(200, { 'content-type': 'application/javascript; charset=utf-8', 'cache-control': 'no-store' });
+  res.end(body);
+}
+function createProxyServer() {
+  return http.createServer((req, res) => {
+    const url = String(req.url || '/');
+    if (url.startsWith('/.jwebgen/live-reload.js')) return serveProxyClient(res);
+    // Pass-through proxy to local server, injecting only for HTML.
+    const upstream = http.request(
+      {
+        hostname: '127.0.0.1',
+        port: httpPort,
+        method: req.method || 'GET',
+        path: url,
+        headers: { ...req.headers, host: '127.0.0.1:' + httpPort }
+      },
+      (up) => {
+        const ct = String(up.headers['content-type'] || '');
+        const isHtml = ct.toLowerCase().includes('text/html');
+        if (!isHtml) {
+          res.writeHead(up.statusCode || 200, up.headers);
+          up.pipe(res);
+          return;
+        }
+        let body = '';
+        up.setEncoding('utf8');
+        up.on('data', (c) => {
+          body += String(c);
+          if (body.length > 2_000_000) {
+            // Safety cap: do not buffer unbounded responses.
+            body = body.slice(0, 2_000_000);
+          }
+        });
+        up.on('end', () => {
+          const injected = injectLiveReload(body, proxyScriptTag());
+          const headers = { ...up.headers };
+          delete headers['content-length'];
+          res.writeHead(up.statusCode || 200, headers);
+          res.end(injected, 'utf8');
+        });
+      }
+    );
+    upstream.on('error', () => {
+      res.writeHead(502, { 'content-type': 'text/plain; charset=utf-8' });
+      res.end('proxy error\\n');
+    });
+    req.pipe(upstream);
+  });
+}
 function notifyReload() {
   const msg = JSON.stringify({ command: 'reload' });
   for (const s of wsClients) { try { wsSend(s, msg); } catch {} }
@@ -129,6 +198,10 @@ wsServer.listen(livePort, () => {
   state.live = 'ready (ws://localhost:' + livePort + ')';
   saveState();
 });
+const proxy = createProxyServer();
+proxy.on('error', () => {});
+proxy.listen(proxyPort, () => { saveState(); });
+process.on('exit', () => { try { proxy.close(); } catch {} });
 process.on('exit', () => { try { wsServer.close(); } catch {} });
 if (parentPid > 1) {
   setInterval(() => {
