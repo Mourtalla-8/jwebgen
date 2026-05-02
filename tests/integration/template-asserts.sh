@@ -7,9 +7,9 @@ cd "$ROOT_DIR"
 node --input-type=module <<'EOF'
 import { makeWatchScript } from './src/generate/watchTemplate.js';
 import { makeDeployServerScript } from './src/generate/deployTemplates.js';
-import { makeLiveReloadSnippet } from './src/generate/devAssets.js';
+import { makeAddServletScript, makeLiveReloadClientScript } from './src/generate/devAssets.js';
 import { makeNodeBuildScript, makeNodeDeployScript, makeNodeDevScript, makeNodeWatchScript } from './src/generate/scriptTemplates.js';
-import { helloServlet, indexJsp } from './src/templates.js';
+import { devLiveReloadFilter, helloServlet, indexJsp } from './src/templates.js';
 
 function assertContains(haystack, needle, label) {
   if (!String(haystack).includes(needle)) {
@@ -56,15 +56,30 @@ assertContains(nodeDev, 'dev.sh', 'dev.mjs delegates to dev.sh');
 const nodeWatch = makeNodeWatchScript();
 assertContains(nodeWatch, 'watch.sh', 'watch.mjs delegates to watch.sh');
 
-const snippet = makeLiveReloadSnippet();
-assertContains(snippet, "_lr=' + Date.now()", 'devAssets snippet cache buster');
-assertContains(snippet, 'livePorts', 'devAssets snippet fallback ports');
+const client = makeLiveReloadClientScript();
+assertContains(client, "_lr=' + Date.now()", 'devAssets live reload client cache buster');
+assertContains(client, 'livePorts', 'devAssets live reload client fallback ports');
+
+const addServlet = makeAddServletScript({ basePackage: 'com.ex', appName: 'jwebgen' });
+assertContains(addServlet, 'jwebgen --build', 'add-servlet next steps build command');
+assertContains(addServlet, 'jwebgen --dev', 'add-servlet next steps dev command');
+if (String(addServlet).includes('out.println("<script>")')) {
+  throw new Error('unexpected inline script in add-servlet output');
+}
 
 const servlet = helloServlet({ basePackage: 'com.ex' });
-assertContains(servlet, "_lr=' + Date.now()", 'helloServlet snippet cache buster');
+if (String(servlet).includes('<script>')) {
+  throw new Error('unexpected inline script in helloServlet template');
+}
 
 const jsp = indexJsp({ projectName: 'x', artifactId: 'x', hasServlet: true });
-assertContains(jsp, "_lr=' + Date.now()", 'indexJsp snippet cache buster');
+if (String(jsp).includes('<script>')) {
+  throw new Error('unexpected inline script in indexJsp template');
+}
+
+const filter = devLiveReloadFilter({ basePackage: 'com.ex.dev' });
+assertContains(filter, 'WebFilter("/*")', 'dev reload filter annotation');
+assertContains(filter, '/.jwebgen/live-reload.js', 'dev reload filter script path');
 EOF
 
 echo "Template asserts: OK"
