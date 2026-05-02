@@ -20,8 +20,11 @@ import { spawn } from 'node:child_process';
 
 function run(command, args = [], options = {}) {
   const { cwd, env = process.env } = options;
+  const isWindows = process.platform === 'win32';
+  const executable = isWindows ? 'cmd.exe' : command;
+  const commandArgs = isWindows ? ['/c', command, ...args] : args;
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
+    const child = spawn(executable, commandArgs, {
       stdio: 'inherit',
       shell: false,
       cwd,
@@ -148,6 +151,13 @@ async function ensureDir(p) {
   await mkdir(p, { recursive: true });
 }
 
+function selectWarFile({ targetDir, appName, wars }) {
+  const preferred = path.join(targetDir, appName + '.war');
+  if (existsSync(preferred)) return preferred;
+  if (wars.length === 1) return path.join(targetDir, wars[0]);
+  return wars[wars.length - 1] ? path.join(targetDir, wars[wars.length - 1]) : '';
+}
+
 async function deployTomcat({ cfg, cleanupOnly, appName }) {
   const tomcatHome = String(process.env.TOMCAT_HOME || process.env.TOMCAT10 || cfg.TOMCAT_HOME || cfg.TOMCAT10 || '').trim();
   const defaultHome = process.platform === 'win32' ? '' : '/var/lib/tomcat10';
@@ -192,7 +202,7 @@ async function deployTomcat({ cfg, cleanupOnly, appName }) {
   const fsPromises = await import('node:fs/promises');
   const entries = await fsPromises.readdir(targetDir);
   const wars = entries.filter((e) => e.endsWith('.war')).sort();
-  const warFile = wars[wars.length - 1] ? path.join(targetDir, wars[wars.length - 1]) : '';
+  const warFile = selectWarFile({ targetDir, appName, wars });
   if (!warFile || !existsSync(warFile)) {
     console.error('WAR file not found in target/. Run build first.');
     process.exit(1);
@@ -237,7 +247,7 @@ async function deployWildfly({ cfg, cleanupOnly, appName }) {
   const fsPromises = await import('node:fs/promises');
   const entries = await fsPromises.readdir(targetDir);
   const wars = entries.filter((e) => e.endsWith('.war')).sort();
-  const warFile = wars[wars.length - 1] ? path.join(targetDir, wars[wars.length - 1]) : '';
+  const warFile = selectWarFile({ targetDir, appName, wars });
   if (!warFile || !existsSync(warFile)) {
     console.error('WAR file not found in target/. Run build first.');
     process.exit(1);

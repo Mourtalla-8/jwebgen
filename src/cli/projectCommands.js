@@ -35,10 +35,11 @@ export async function showStatus({ findProjectRoot }) {
   console.log(pc.cyan(`Root: ${projectRoot}`));
 
   const cfg = readJwebgenExports(projectRoot);
-  let serverTarget = String(cfg.JWEBGEN_SERVER_TARGET || '').trim();
-  if (serverTarget !== 'tomcat' && serverTarget !== 'wildfly') {
-    const envTarget = String(process.env.JWEBGEN_SERVER_TARGET || '').trim();
-    serverTarget = envTarget === 'tomcat' || envTarget === 'wildfly' ? envTarget : '';
+  const envTarget = String(process.env.JWEBGEN_SERVER_TARGET || '').trim();
+  let serverTarget = envTarget === 'tomcat' || envTarget === 'wildfly' ? envTarget : '';
+  if (!serverTarget) {
+    const cfgTarget = String(cfg.JWEBGEN_SERVER_TARGET || '').trim();
+    if (cfgTarget === 'tomcat' || cfgTarget === 'wildfly') serverTarget = cfgTarget;
   }
   const hasConfiguredServer = serverTarget === 'tomcat' || serverTarget === 'wildfly';
   if (!hasConfiguredServer) {
