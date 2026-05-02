@@ -8,6 +8,7 @@ node --input-type=module <<'EOF'
 import { makeWatchScript } from './src/generate/watchTemplate.js';
 import { makeDeployServerScript } from './src/generate/deployTemplates.js';
 import { makeLiveReloadSnippet } from './src/generate/devAssets.js';
+import { makeNodeBuildScript, makeNodeDeployScript, makeNodeDevScript, makeNodeWatchScript } from './src/generate/scriptTemplates.js';
 import { helloServlet, indexJsp } from './src/templates.js';
 
 function assertContains(haystack, needle, label) {
@@ -42,6 +43,18 @@ assertContains(deployTomcat, 'Tomcat dev cleanup', 'deploy tomcat cleanup');
 const deployWildfly = makeDeployServerScript({ appName: 'appx', serverTarget: 'wildfly' });
 assertContains(deployWildfly, '--cleanup-dev', 'deploy wildfly');
 assertContains(deployWildfly, 'WildFly dev cleanup', 'deploy wildfly cleanup');
+
+const nodeBuild = makeNodeBuildScript();
+assertContains(nodeBuild, '#!/usr/bin/env node', 'build.mjs shebang');
+assertContains(nodeBuild, 'mavenExecutable', 'build.mjs selects maven executable per OS');
+assertContains(nodeBuild, 'mvn.cmd', 'build.mjs handles Windows mvn.cmd');
+assertContains(nodeBuild, "from 'node:child_process'", 'build.mjs imports child_process');
+const nodeDeploy = makeNodeDeployScript();
+assertContains(nodeDeploy, 'deploy.sh', 'deploy.mjs delegates to deploy.sh');
+const nodeDev = makeNodeDevScript();
+assertContains(nodeDev, 'dev.sh', 'dev.mjs delegates to dev.sh');
+const nodeWatch = makeNodeWatchScript();
+assertContains(nodeWatch, 'watch.sh', 'watch.mjs delegates to watch.sh');
 
 const snippet = makeLiveReloadSnippet();
 assertContains(snippet, "_lr=' + Date.now()", 'devAssets snippet cache buster');

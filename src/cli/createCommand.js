@@ -38,6 +38,10 @@ export async function runCreateCommand(deps) {
     makeDeploySelectorScript,
     makeDevScript,
     makeWatchScript,
+    makeNodeBuildScript,
+    makeNodeDeployScript,
+    makeNodeDevScript,
+    makeNodeWatchScript,
     makeAddServletScript,
     makeExecutable,
     ensureBuildTools,
@@ -255,6 +259,10 @@ export async function runCreateCommand(deps) {
     );
     await writeFileSafe(path.join(scriptsDir, 'dev.sh'), makeDevScript({ serverTarget }));
     await writeFileSafe(path.join(scriptsDir, 'watch.sh'), makeWatchScript());
+    if (typeof makeNodeBuildScript === 'function') await writeFileSafe(path.join(scriptsDir, 'build.mjs'), makeNodeBuildScript());
+    if (typeof makeNodeDeployScript === 'function') await writeFileSafe(path.join(scriptsDir, 'deploy.mjs'), makeNodeDeployScript());
+    if (typeof makeNodeDevScript === 'function') await writeFileSafe(path.join(scriptsDir, 'dev.mjs'), makeNodeDevScript());
+    if (typeof makeNodeWatchScript === 'function') await writeFileSafe(path.join(scriptsDir, 'watch.mjs'), makeNodeWatchScript());
     if (addServlet) await writeFileSafe(path.join(scriptsDir, 'add-servlet.sh'), makeAddServletScript({ basePackage }));
     if (serverTarget === 'tomcat' || serverTarget === 'wildfly') {
       await writeFileSafe(path.join(workDir, '.jwebgen', '.jwebgenrc'), `export JWEBGEN_SERVER_TARGET="${serverTarget}"\n`);
@@ -267,6 +275,10 @@ export async function runCreateCommand(deps) {
       '.jwebgen/scripts/deploy-wildfly.sh',
       '.jwebgen/scripts/dev.sh',
       '.jwebgen/scripts/watch.sh',
+      typeof makeNodeBuildScript === 'function' ? '.jwebgen/scripts/build.mjs' : null,
+      typeof makeNodeDeployScript === 'function' ? '.jwebgen/scripts/deploy.mjs' : null,
+      typeof makeNodeDevScript === 'function' ? '.jwebgen/scripts/dev.mjs' : null,
+      typeof makeNodeWatchScript === 'function' ? '.jwebgen/scripts/watch.mjs' : null,
       addServlet ? '.jwebgen/scripts/add-servlet.sh' : null
     ].filter(Boolean);
     for (const relativePath of scriptFiles) await makeExecutable(path.join(workDir, relativePath));

@@ -19,7 +19,10 @@ export async function runProjectScript(scriptName, args = [], options = {}, deps
   }
 
   const scriptsDir = jwebgenScriptsDir(projectRoot);
-  const scriptPath = path.join(scriptsDir, scriptName);
+  const candidateNode =
+    scriptName.endsWith('.sh') ? scriptName.replace(/\.sh$/, '.mjs') : scriptName.endsWith('.mjs') ? scriptName : null;
+  const nodePath = candidateNode ? path.join(scriptsDir, candidateNode) : '';
+  const scriptPath = candidateNode && existsSync(nodePath) ? nodePath : path.join(scriptsDir, scriptName);
   const env = { ...process.env, ...(options.env || {}) };
   if (options.verbose !== undefined) env.JWEBGEN_VERBOSE = options.verbose ? '1' : '0';
 
@@ -42,7 +45,11 @@ export async function runProjectScript(scriptName, args = [], options = {}, deps
   }
 
   try {
-    await execa(scriptPath, args, { cwd: projectRoot, stdio: 'inherit', env });
+    if (scriptPath.endsWith('.mjs')) {
+      await execa(process.execPath, [scriptPath, ...args], { cwd: projectRoot, stdio: 'inherit', env });
+    } else {
+      await execa(scriptPath, args, { cwd: projectRoot, stdio: 'inherit', env });
+    }
   } catch (error) {
     const msg = error?.shortMessage || error?.message || String(error);
     console.error(pc.red(`${scriptName} failed: ${msg}`));
