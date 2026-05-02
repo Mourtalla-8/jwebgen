@@ -150,10 +150,12 @@ public class DevLiveReloadFilter implements Filter {
     @Override
     public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
             throws IOException, ServletException {
-        if (!(request instanceof HttpServletRequest req) || !(response instanceof HttpServletResponse res)) {
+        if (!(request instanceof HttpServletRequest) || !(response instanceof HttpServletResponse)) {
             chain.doFilter(request, response);
             return;
         }
+        HttpServletRequest req = (HttpServletRequest) request;
+        HttpServletResponse res = (HttpServletResponse) response;
 
         String uri = req.getRequestURI();
         if (uri != null && uri.contains("/.jwebgen/live-reload.js")) {
