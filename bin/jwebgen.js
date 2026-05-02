@@ -12,6 +12,7 @@ import {
 import pc from 'picocolors';
 import {
   gitignore,
+  devLiveReloadFilter,
   helloServlet,
   indexJsp,
   pomXml,
@@ -36,6 +37,7 @@ import {
   validateNonEmpty as validateNonEmptyImpl
 } from '../src/project/inputUtils.js';
 import {
+  makeLiveReloadClientScript as makeLiveReloadClientScriptImpl,
   makeLiveReloadServerScript as makeLiveReloadServerScriptImpl,
   makeLiveReloadSnippet as makeLiveReloadSnippetImpl,
   makeAddServletScript as makeAddServletScriptImpl,
@@ -118,9 +120,11 @@ async function main(cli = {}) {
     makeDevScript: makeDevScriptImpl,
     makeWatchScript: makeWatchScriptImpl,
     makeAddServletScript: ({ basePackage }) => makeAddServletScriptImpl({ basePackage, appName: APP_NAME }),
+    makeLiveReloadClientScript: makeLiveReloadClientScriptImpl,
     makeExecutable,
     ensureBuildTools,
     gitignore,
+    devLiveReloadFilter,
     helloServlet,
     indexJsp,
     pomXml,
