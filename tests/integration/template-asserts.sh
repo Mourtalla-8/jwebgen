@@ -48,7 +48,7 @@ assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'createProxyServer', 'worker contains
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, '/.jwebgen/live-reload.js', 'worker serves live-reload asset');
 
 const client = makeLiveReloadClientScript();
-assertContains(client, "_lr=' + Date.now()", 'devAssets live reload client cache buster');
+assertContains(client, 'window.location.reload()', 'devAssets live reload uses clean URL refresh');
 assertContains(client, 'livePorts', 'devAssets live reload client fallback ports');
 
 const addServlet = makeAddServletScript({ basePackage: 'com.ex', appName: 'jwebgen' });

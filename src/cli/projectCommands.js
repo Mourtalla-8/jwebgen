@@ -83,7 +83,7 @@ export async function showStatus({ findProjectRoot }) {
     console.log(pc.yellow('Server: unknown status (pgrep unavailable)'));
   }
 
-  const appName = path.basename(projectRoot);
+  const appName = await readAppNameFromPom(projectRoot, path.basename(projectRoot));
   if (serverTarget === 'tomcat') {
     const tomcatDir = process.env.TOMCAT10 || '/var/lib/tomcat10';
     const warPath = path.join(tomcatDir, 'webapps', `${appName}.war`);
@@ -130,7 +130,7 @@ export async function runMigrate({
 
   const scriptsDir = jwebgenScriptsDir(projectRoot);
   await mkdir(scriptsDir, { recursive: true });
-  const appName = path.basename(projectRoot);
+  const appName = await readAppNameFromPom(projectRoot, path.basename(projectRoot));
   const configuredTarget = await readConfiguredServerTarget(projectRoot);
   const legacyScriptTarget = await detectExplicitServerTargetFromDevScript(projectRoot);
   const detectedTarget = detectServerTargetFromProject(projectRoot);
@@ -240,6 +240,21 @@ async function readConfiguredServerTarget(projectRoot) {
   } catch {
     return '';
   }
+}
+
+async function readAppNameFromPom(projectRoot, fallback) {
+  const pomPath = path.join(projectRoot, 'pom.xml');
+  if (!existsSync(pomPath)) return fallback;
+  try {
+    const pom = await readFile(pomPath, 'utf8');
+    const finalNameMatch = pom.match(/<finalName>\s*([^<\s][^<]*)\s*<\/finalName>/i);
+    if (finalNameMatch?.[1]) return String(finalNameMatch[1]).trim();
+    const artifactMatch = pom.match(/<artifactId>\s*([^<\s][^<]*)\s*<\/artifactId>/i);
+    if (artifactMatch?.[1]) return String(artifactMatch[1]).trim();
+  } catch {
+    return fallback;
+  }
+  return fallback;
 }
 
 async function detectExplicitServerTargetFromDevScript(projectRoot) {

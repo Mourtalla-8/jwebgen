@@ -11,6 +11,8 @@ test('makeDevScript leaves server target unset when unspecified', () => {
 test('makeWatchScript resolves Maven root and keeps dev state under .jwebgen', () => {
   const script = makeWatchScript();
   assert.match(script, /ROOT_DIR="\$\(cd "\$SCRIPT_DIR\/\.\.\/\.\." && pwd\)"/);
+  assert.match(script, /resolve_app_name\(\)/);
+  assert.match(script, /<finalName>/);
   assert.match(script, /STATE_FILE="\$ROOT_DIR\/\.jwebgen\/\.jwebgen-dev-state\.json"/);
 });
 

@@ -27,7 +27,22 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
-APP_NAME="$(basename "$ROOT_DIR")"
+resolve_app_name() {
+  local pom_file="$ROOT_DIR/pom.xml"
+  local value=""
+  if [[ -f "$pom_file" ]]; then
+    value="$(sed -n 's:.*<finalName>\\([^<]*\\)</finalName>.*:\\1:p' "$pom_file" | head -n 1 | tr -d '[:space:]')"
+    if [[ -z "$value" ]]; then
+      value="$(sed -n 's:.*<artifactId>\\([^<]*\\)</artifactId>.*:\\1:p' "$pom_file" | head -n 1 | tr -d '[:space:]')"
+    fi
+  fi
+  if [[ -n "$value" ]]; then
+    printf '%s' "$value"
+    return
+  fi
+  printf '%s' "$(basename "$ROOT_DIR")"
+}
+APP_NAME="$(resolve_app_name)"
 SERVER_TARGET="\${JWEBGEN_SERVER_TARGET:-tomcat}"
 JWEBGEN_VERBOSE="\${JWEBGEN_VERBOSE:-0}"
 LIVE_PORT="\${JWEBGEN_LIVE_PORT:-35729}"
