@@ -31,9 +31,11 @@ resolve_app_name() {
   local pom_file="$ROOT_DIR/pom.xml"
   local value=""
   if [[ -f "$pom_file" ]]; then
-    value="$(sed -n 's:.*<finalName>\\([^<]*\\)</finalName>.*:\\1:p' "$pom_file" | head -n 1 | tr -d '[:space:]')"
+    # First try to find finalName within the <build> block
+    value="$(sed -n '/<build>/,/<\\/build>/{ s:.*<finalName>\\([^<]*\\)</finalName>.*:\\1:p }' "$pom_file" | head -n 1 | tr -d '[:space:]')"
     if [[ -z "$value" ]]; then
-      value="$(sed -n 's:.*<artifactId>\\([^<]*\\)</artifactId>.*:\\1:p' "$pom_file" | head -n 1 | tr -d '[:space:]')"
+      # Fallback to artifactId, but skip the <parent> block to avoid picking up parent artifactId
+      value="$(sed '/<parent>/,/<\\/parent>/d' "$pom_file" | sed -n 's:.*<artifactId>\\([^<]*\\)</artifactId>.*:\\1:p' | head -n 1 | tr -d '[:space:]')"
     fi
   fi
   if [[ -n "$value" ]]; then
