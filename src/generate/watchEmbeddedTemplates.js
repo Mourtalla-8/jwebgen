@@ -144,6 +144,7 @@ function createProxyServer() {
         let truncated = false;
         up.setEncoding('utf8');
         up.on('data', (c) => {
+          if (truncated) return;
           body += String(c);
           if (body.length > 2_000_000) {
             // Safety cap: do not buffer unbounded responses.
