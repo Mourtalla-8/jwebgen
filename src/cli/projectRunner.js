@@ -51,6 +51,14 @@ export async function runProjectScript(scriptName, args = [], options = {}, deps
       await execa(scriptPath, args, { cwd: projectRoot, stdio: 'inherit', env });
     }
   } catch (error) {
+    if (error?.code === 'EACCES' || String(error?.message || '').includes('EACCES')) {
+      const relative = `./.jwebgen/scripts/${scriptName}`;
+      console.error(pc.red(`${scriptName} failed: permission denied (${relative}).`));
+      console.error(pc.yellow(`Run: chmod +x "${relative}"`));
+      console.error(pc.yellow('If permissions keep failing, regenerate scripts with: jwebgen --migrate'));
+      error.jwebgenHandled = true;
+      throw error;
+    }
     const msg = error?.shortMessage || error?.message || String(error);
     console.error(pc.red(`${scriptName} failed: ${msg}`));
     error.jwebgenHandled = true;

@@ -86,6 +86,58 @@ export function makeLiveReloadSnippet() {
 </script>`;
 }
 
+export function makeLiveReloadClientScript() {
+  return `(function() {
+  if (typeof window === 'undefined') return;
+  var protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  var preferred = Number(window.__JWEBGEN_LIVE_PORT || 35729);
+  var livePorts = [preferred, 35729, 35730, 35731, 35732, 35733, 35734, 35735, 35736, 35737, 35738, 35739];
+  var attempt = 0;
+  var maxAttempts = 10;
+  var backoffMs = 500;
+
+  function connect() {
+    if (attempt >= maxAttempts) {
+      console.log('[LiveReload] Connection failed after ' + maxAttempts + ' attempts');
+      return;
+    }
+    attempt++;
+
+    try {
+      var port = livePorts[(attempt - 1) % livePorts.length];
+      var wsUri = protocol + '//' + window.location.hostname + ':' + port;
+      var ws = new WebSocket(wsUri);
+      ws.onopen = function() {
+        console.log('[LiveReload] Connected');
+        attempt = 0;
+      };
+      ws.onmessage = function(event) {
+        var data = JSON.parse(event.data);
+        if (data.command === 'reload') {
+          console.log('[LiveReload] Reloading page...');
+          var url = window.location.href;
+          url += (url.indexOf('?') === -1 ? '?' : '&') + '_lr=' + Date.now();
+          window.location.replace(url);
+        }
+      };
+      ws.onclose = function() {
+        console.log('[LiveReload] Reconnecting in ' + (backoffMs * attempt) + 'ms...');
+        setTimeout(connect, backoffMs * attempt);
+      };
+      ws.onerror = function(error) {
+        console.log('[LiveReload] Error:', error.message);
+        ws.close();
+      };
+    } catch (error) {
+      console.log('[LiveReload] Connection error:', error.message);
+      setTimeout(connect, backoffMs * attempt);
+    }
+  }
+
+  connect();
+})();`;
+}
+
 export function makeAddServletScript({ basePackage, appName }) {
   const servletImport = 'jakarta.servlet';
   const httpImport = 'jakarta.servlet.http';
@@ -136,9 +188,7 @@ public class $CLASS_NAME extends HttpServlet {
       out.println("<h1>$CLASS_NAME</h1>");
       out.println("<p>Servlet generated with ${appName}.</p>");
       out.println("<p>URL: $URL_PATTERN</p>");
-      out.println("<script>");
-      out.println("(function() {\\n  if (typeof window === 'undefined') return;\\n  var protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';\\n  var preferred = Number(window.__JWEBGEN_LIVE_PORT || 35729);\\n  var livePorts = [preferred, 35729, 35730, 35731, 35732, 35733, 35734, 35735, 35736, 35737, 35738, 35739];\\n  var attempt = 0;\\n  var maxAttempts = 10;\\n  var backoffMs = 500;\\n\\n  function connect() {\\n    if (attempt >= maxAttempts) {\\n      console.log('[LiveReload] Connection failed');\\n      return;\\n    }\\n    attempt++;\\n\\n    try {\\n      var port = livePorts[(attempt - 1) % livePorts.length];\\n      var wsUri = protocol + '//' + window.location.hostname + ':' + port;\\n      var ws = new WebSocket(wsUri);\\n      ws.onopen = function() {\\n        console.log('[LiveReload] Connected');\\n        attempt = 0;\\n      };\\n      ws.onmessage = function(event) {\\n        var data = JSON.parse(event.data);\\n        if (data.command === 'reload') {\\n          console.log('[LiveReload] Reloading...');\\n          var url = window.location.href;\\n          url += (url.indexOf('?') === -1 ? '?' : '&') + '_lr=' + Date.now();\\n          window.location.replace(url);\\n        }\\n      };\\n      ws.onclose = function() {\\n        setTimeout(connect, backoffMs * attempt);\\n      };\\n      ws.onerror = function() {\\n        ws.close();\\n      };\\n    } catch (error) {\\n      setTimeout(connect, backoffMs * attempt);\\n    }\\n  }\\n\\n  connect();\\n})();");
-      out.println("</script>");
+      out.println("<p>LiveReload is injected automatically in dev mode.</p>");
       out.println("</body>");
       out.println("</html>");
     }
@@ -147,7 +197,11 @@ public class $CLASS_NAME extends HttpServlet {
 EOF
 
 echo "Servlet created: $TARGET_FILE"
-echo "Remember to rebuild and redeploy: ./.jwebgen/scripts/dev.sh"
+echo "Next steps:"
+echo "  jwebgen --build"
+echo "  jwebgen --deploy"
+echo "Or run continuous mode:"
+echo "  jwebgen --dev"
 `;
 }
 
