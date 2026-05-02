@@ -6,6 +6,10 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { runProjectScript } from '../../src/cli/projectRunner.js';
 
 test('runProjectScript prints actionable message on EACCES', async () => {
+  if (process.platform === 'win32') {
+    // Windows does not reliably enforce POSIX exec bits, making EACCES hard to simulate here.
+    return;
+  }
   const tmpRoot = await mkdtemp(path.join(os.tmpdir(), 'jwebgen-runner-eacces-'));
   const scriptsDir = path.join(tmpRoot, '.jwebgen', 'scripts');
   await mkdir(scriptsDir, { recursive: true });
