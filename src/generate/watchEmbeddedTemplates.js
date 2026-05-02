@@ -127,19 +127,34 @@ function createProxyServer() {
           up.pipe(res);
           return;
         }
+        // Force identity transfer/encoding and strip compression metadata for HTML
+        up.headers['transfer-encoding'] = 'identity';
+        delete up.headers['content-encoding'];
+        delete up.headers['content-length'];
+        delete up.headers['te'];
+        delete up.headers['vary'];
         let body = '';
+        let truncated = false;
         up.setEncoding('utf8');
         up.on('data', (c) => {
           body += String(c);
           if (body.length > 2_000_000) {
             // Safety cap: do not buffer unbounded responses.
-            body = body.slice(0, 2_000_000);
+            if (!truncated) {
+              console.warn('[jwebgen] Response body exceeds 2MB limit, replacing with fallback HTML');
+              truncated = true;
+            }
+            body = '<!doctype html><html><body><h1>Content too large</h1></body></html>';
           }
         });
         up.on('end', () => {
           const injected = injectLiveReload(body, proxyScriptTag());
           const headers = { ...up.headers };
+          headers['transfer-encoding'] = 'identity';
+          delete headers['content-encoding'];
           delete headers['content-length'];
+          delete headers['te'];
+          delete headers['vary'];
           res.writeHead(up.statusCode || 200, headers);
           res.end(injected, 'utf8');
         });
@@ -199,8 +214,11 @@ wsServer.listen(livePort, () => {
   saveState();
 });
 const proxy = createProxyServer();
-proxy.on('error', () => {});
-proxy.listen(proxyPort, () => { saveState(); });
+proxy.on('error', (err) => {
+  console.error('[jwebgen] Proxy server error:', err);
+  process.exit(1);
+});
+proxy.listen(proxyPort, '127.0.0.1', () => { saveState(); });
 process.on('exit', () => { try { proxy.close(); } catch {} });
 process.on('exit', () => { try { wsServer.close(); } catch {} });
 if (parentPid > 1) {

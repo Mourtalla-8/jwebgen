@@ -169,6 +169,7 @@ async function runMigrate() {
     makeDevScript: makeDevScriptImpl,
     makeWatchScript: makeWatchScriptImpl,
     makeAddServletScript: ({ basePackage }) => makeAddServletScriptImpl({ basePackage, appName: APP_NAME }),
+    makeLiveReloadClientScript: makeLiveReloadClientScriptImpl,
     makeExecutable,
     legacyDeployScript: LEGACY_DEPLOY_SCRIPT
   });
