@@ -133,19 +133,23 @@ export function devLiveReloadFilter({ basePackage }) {
 import jakarta.servlet.Filter;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
+import jakarta.servlet.ServletOutputStream;
 import jakarta.servlet.ServletRequest;
 import jakarta.servlet.ServletResponse;
+import jakarta.servlet.WriteListener;
 import jakarta.servlet.annotation.WebFilter;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpServletResponseWrapper;
+import java.io.ByteArrayOutputStream;
 import java.io.CharArrayWriter;
 import java.io.IOException;
+import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 
-@WebFilter("/*")
+// @WebFilter("/*") — disabled by default; register via web.xml or programmatically in dev mode only
 public class DevLiveReloadFilter implements Filter {
-    private static final String SCRIPT_TAG = "<script src=\\\\\"%s/.jwebgen/live-reload.js\\\\\"></script>";
+    private static final String SCRIPT_TAG = "<script src=\\\"%s/.jwebgen/live-reload.js\\\"></script>";
 
     @Override
     public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
@@ -179,9 +183,7 @@ public class DevLiveReloadFilter implements Filter {
         }
 
         String updated = injectBeforeBodyClose(body, tag);
-        byte[] bytes = updated.getBytes(res.getCharacterEncoding() != null ? res.getCharacterEncoding() : "UTF-8");
-        res.setContentLength(bytes.length);
-        res.getOutputStream().write(bytes);
+        wrapped.commitInjected(updated);
     }
 
     private static String injectBeforeBodyClose(String html, String tag) {
@@ -192,27 +194,82 @@ public class DevLiveReloadFilter implements Filter {
     }
 
     private static class BufferingResponseWrapper extends HttpServletResponseWrapper {
-        private final CharArrayWriter capture = new CharArrayWriter();
-        private final PrintWriter writer = new PrintWriter(capture);
+        private final CharArrayWriter charCapture = new CharArrayWriter();
+        private final ByteArrayOutputStream byteCapture = new ByteArrayOutputStream();
+        private PrintWriter writer;
+        private ServletOutputStream outputStream;
+        private boolean writerUsed = false;
+        private boolean streamUsed = false;
 
         BufferingResponseWrapper(HttpServletResponse response) {
             super(response);
         }
 
         @Override
-        public PrintWriter getWriter() {
+        public PrintWriter getWriter() throws IOException {
+            if (streamUsed) {
+                throw new IllegalStateException("getOutputStream() has already been called on this response");
+            }
+            if (writer == null) {
+                writerUsed = true;
+                String encoding = getCharacterEncoding();
+                if (encoding == null) encoding = "UTF-8";
+                writer = new PrintWriter(new OutputStreamWriter(byteCapture, encoding));
+            }
             return writer;
         }
 
-        String getCapturedBody() {
-            writer.flush();
-            return capture.toString();
+        @Override
+        public ServletOutputStream getOutputStream() throws IOException {
+            if (writerUsed) {
+                throw new IllegalStateException("getWriter() has already been called on this response");
+            }
+            if (outputStream == null) {
+                streamUsed = true;
+                outputStream = new ServletOutputStream() {
+                    @Override
+                    public void write(int b) throws IOException {
+                        byteCapture.write(b);
+                    }
+
+                    @Override
+                    public boolean isReady() {
+                        return true;
+                    }
+
+                    @Override
+                    public void setWriteListener(WriteListener writeListener) {
+                        throw new UnsupportedOperationException("Async not supported");
+                    }
+                };
+            }
+            return outputStream;
+        }
+
+        String getCapturedBody() throws IOException {
+            if (writer != null) {
+                writer.flush();
+            }
+            String encoding = getCharacterEncoding();
+            if (encoding == null) encoding = "UTF-8";
+            return byteCapture.toString(encoding);
         }
 
         void commitToOriginal() throws IOException {
             String body = getCapturedBody();
             HttpServletResponse original = (HttpServletResponse) getResponse();
-            byte[] bytes = body.getBytes(original.getCharacterEncoding() != null ? original.getCharacterEncoding() : "UTF-8");
+            String encoding = original.getCharacterEncoding();
+            if (encoding == null) encoding = "UTF-8";
+            byte[] bytes = body.getBytes(encoding);
+            original.setContentLength(bytes.length);
+            original.getOutputStream().write(bytes);
+        }
+
+        void commitInjected(String injectedBody) throws IOException {
+            HttpServletResponse original = (HttpServletResponse) getResponse();
+            String encoding = original.getCharacterEncoding();
+            if (encoding == null) encoding = "UTF-8";
+            byte[] bytes = injectedBody.getBytes(encoding);
             original.setContentLength(bytes.length);
             original.getOutputStream().write(bytes);
         }

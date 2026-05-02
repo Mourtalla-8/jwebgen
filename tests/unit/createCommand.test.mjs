@@ -68,7 +68,7 @@ test('runCreateCommand keeps typed project name casing for default directory', a
     assert.equal(existsSync(targetDir), true);
     const pom = await readFile(path.join(targetDir, 'pom.xml'), 'utf8');
     assert.match(pom, /<artifactId>exo1<\/artifactId>/);
-    assert.ok(writes.some((f) => f.endsWith('/src/main/webapp/.jwebgen/live-reload.js')));
+    assert.ok(writes.some((f) => f.endsWith(path.join('src', 'main', 'webapp', '.jwebgen', 'live-reload.js'))));
   } finally {
     process.chdir(startCwd);
     await rm(tempRoot, { recursive: true, force: true });
