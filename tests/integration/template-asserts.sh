@@ -65,6 +65,7 @@ assertContains(nodeBuild, "from 'node:child_process'", 'build.mjs imports child_
 const nodeDeploy = makeNodeDeployScript();
 assertContains(nodeDeploy, 'deployTomcat', 'deploy.mjs contains tomcat deploy adapter');
 assertContains(nodeDeploy, 'deployWildfly', 'deploy.mjs contains wildfly deploy adapter');
+assertContains(nodeDeploy, 'readMavenAppName', 'deploy.mjs resolves deploy name from pom.xml');
 const nodeDev = makeNodeDevScript();
 assertContains(nodeDev, 'dev.sh', 'dev.mjs delegates to dev.sh');
 const nodeWatch = makeNodeWatchScript();

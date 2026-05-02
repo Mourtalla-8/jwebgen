@@ -4,6 +4,7 @@ import path from 'node:path';
 import { rm, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { execa } from 'execa';
 import { jwebgenConfigPath, jwebgenMetaDir, jwebgenScriptsDir } from '../project/jwebgenLayout.js';
+import { readJwebgenExports } from '../project/jwebgenRc.js';
 
 export async function runClean({ findProjectRoot }) {
   const projectRoot = findProjectRoot();
@@ -33,22 +34,11 @@ export async function showStatus({ findProjectRoot }) {
   console.log(pc.cyan(`Project: ${path.basename(projectRoot)}`));
   console.log(pc.cyan(`Root: ${projectRoot}`));
 
-  let serverTarget = '';
-  const cfgPath = jwebgenConfigPath(projectRoot);
-  if (existsSync(cfgPath)) {
-    try {
-      const raw = await readFile(cfgPath, 'utf8');
-      const m = raw.match(/JWEBGEN_SERVER_TARGET\s*=\s*"?([a-zA-Z0-9_-]+)"?/);
-      serverTarget = String(m?.[1] || '').trim();
-    } catch {
-      // ignore
-    }
-  }
-  if (!serverTarget) {
+  const cfg = readJwebgenExports(projectRoot);
+  let serverTarget = String(cfg.JWEBGEN_SERVER_TARGET || '').trim();
+  if (serverTarget !== 'tomcat' && serverTarget !== 'wildfly') {
     const envTarget = String(process.env.JWEBGEN_SERVER_TARGET || '').trim();
-    if (envTarget === 'tomcat' || envTarget === 'wildfly') {
-      serverTarget = envTarget;
-    }
+    serverTarget = envTarget === 'tomcat' || envTarget === 'wildfly' ? envTarget : '';
   }
   const hasConfiguredServer = serverTarget === 'tomcat' || serverTarget === 'wildfly';
   if (!hasConfiguredServer) {
@@ -85,9 +75,15 @@ export async function showStatus({ findProjectRoot }) {
 
   const appName = await readAppNameFromPom(projectRoot, path.basename(projectRoot));
   if (serverTarget === 'tomcat') {
-    const tomcatDir = process.env.TOMCAT10 || '/var/lib/tomcat10';
-    const warPath = path.join(tomcatDir, 'webapps', `${appName}.war`);
-    const explodedPath = path.join(tomcatDir, 'webapps', appName);
+    const tomcatHome = String(process.env.TOMCAT_HOME || process.env.TOMCAT10 || cfg.TOMCAT_HOME || cfg.TOMCAT10 || '').trim();
+    const defaultHome = process.platform === 'win32' ? '' : '/var/lib/tomcat10';
+    const home = tomcatHome || defaultHome;
+    if (!home) {
+      console.log(pc.yellow('Deployment: unknown (configure TOMCAT_HOME or .jwebgen/.jwebgenrc)'));
+      return;
+    }
+    const warPath = path.join(home, 'webapps', `${appName}.war`);
+    const explodedPath = path.join(home, 'webapps', appName);
     if (existsSync(warPath) || existsSync(explodedPath)) {
       console.log(pc.green('Deployment: present'));
       console.log(pc.cyan(`URL : http://localhost:8080/${appName}/`));
@@ -97,8 +93,10 @@ export async function showStatus({ findProjectRoot }) {
     return;
   }
 
-  const wildflyHome = process.env.WILDFLY_HOME || '/opt/wildfly';
-  const deployments = process.env.WILDFLY_DEPLOYMENTS || path.join(wildflyHome, 'standalone', 'deployments');
+  const wildflyHome = String(process.env.WILDFLY_HOME || cfg.WILDFLY_HOME || '/opt/wildfly').trim();
+  const deployments = String(
+    process.env.WILDFLY_DEPLOYMENTS || cfg.WILDFLY_DEPLOYMENTS || path.join(wildflyHome, 'standalone', 'deployments')
+  ).trim();
   const deployed = path.join(deployments, `${appName}.war`);
   if (existsSync(deployed)) {
     console.log(pc.green('Deployment: present'));
