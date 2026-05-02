@@ -62,7 +62,13 @@ export function makeLiveReloadSnippet() {
           var data = JSON.parse(event.data);
           if (data.command === 'reload') {
             console.log('[LiveReload] Reloading page...');
-            window.location.reload();
+            try {
+              var u = new URL(window.location.href);
+              u.searchParams.set('_jwg', String(Date.now()));
+              window.location.replace(u.toString());
+            } catch (e) {
+              window.location.reload();
+            }
           }
         };
         ws.onclose = function() {
@@ -113,7 +119,13 @@ export function makeLiveReloadClientScript() {
         var data = JSON.parse(event.data);
         if (data.command === 'reload') {
           console.log('[LiveReload] Reloading page...');
-          window.location.reload();
+          try {
+            var u = new URL(window.location.href);
+            u.searchParams.set('_jwg', String(Date.now()));
+            window.location.replace(u.toString());
+          } catch (e) {
+            window.location.reload();
+          }
         }
       };
       ws.onclose = function() {

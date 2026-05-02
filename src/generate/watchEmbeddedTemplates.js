@@ -37,6 +37,11 @@ const state = {
   livePort,
   proxyPort
 };
+function syncPublicUrls() {
+  state.proxyUrl = 'http://localhost:' + proxyPort + '/' + appName + '/';
+  state.appUrl = 'http://localhost:' + httpPort + '/' + appName + '/';
+  state.url = state.proxyUrl;
+}
 function saveState() { writeFileSync(stateFile, JSON.stringify(state), 'utf8'); }
 function emit(type, details = {}) { appendFileSync(eventsFile, JSON.stringify({ type, ts: Date.now(), ...details }) + '\\n', 'utf8'); }
 function parseListenOwner(text, port) {
@@ -173,6 +178,50 @@ function notifyReload() {
   const msg = JSON.stringify({ command: 'reload' });
   for (const s of wsClients) { try { wsSend(s, msg); } catch {} }
 }
+function listenOnce(server, port, host) {
+  return new Promise((resolve, reject) => {
+    const onErr = (e) => {
+      server.removeListener('listening', onOk);
+      reject(e);
+    };
+    const onOk = () => {
+      server.removeListener('error', onErr);
+      resolve();
+    };
+    server.once('error', onErr);
+    server.once('listening', onOk);
+    server.listen(port, host);
+  });
+}
+async function startProxyServer() {
+  let candidate = preferredProxyPort;
+  for (let tries = 0; tries < 60; tries++) {
+    try {
+      await listenOnce(proxy, candidate, '127.0.0.1');
+      proxyPort = candidate;
+      state.proxyPort = proxyPort;
+      syncPublicUrls();
+      saveState();
+      return;
+    } catch (err) {
+      if (err?.code !== 'EADDRINUSE') {
+        console.error('[jwebgen] Proxy server error:', err);
+        process.exit(1);
+      }
+      const owner = await portOwner(candidate);
+      emit('proxy_port_busy', { port: candidate, owner: owner || '' });
+      const next = await findFreePort(candidate + 1);
+      if (!next) {
+        console.error('[jwebgen] Proxy server error: no free port for fallback');
+        process.exit(1);
+      }
+      emit('proxy_port_fallback', { fromPort: candidate, toPort: next });
+      candidate = next;
+    }
+  }
+  console.error('[jwebgen] Proxy server error: could not bind after retries');
+  process.exit(1);
+}
 const wsServer = http.createServer((_, res) => {
   res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
   res.end('jwebgen live\\n');
@@ -216,38 +265,7 @@ wsServer.listen(livePort, () => {
   saveState();
 });
 const proxy = createProxyServer();
-proxy.on('error', (err) => {
-  if (err?.code === 'EADDRINUSE') {
-    (async () => {
-      const busyPort = proxyPort;
-      const owner = await portOwner(busyPort);
-      const fallback = await findFreePort(busyPort + 1);
-      emit('proxy_port_busy', { port: busyPort, owner: owner || '' });
-      if (!fallback) {
-        console.error('[jwebgen] Proxy server error: no free port for fallback');
-        process.exit(1);
-        return;
-      }
-      proxyPort = fallback;
-      state.proxyPort = proxyPort;
-      state.proxyUrl = 'http://localhost:' + proxyPort + '/' + appName + '/';
-      state.url = state.proxyUrl;
-      saveState();
-      proxy.listen(proxyPort, '127.0.0.1', () => {
-        emit('proxy_port_fallback', { fromPort: busyPort, toPort: proxyPort });
-      });
-    })().catch(() => process.exit(1));
-    return;
-  }
-  console.error('[jwebgen] Proxy server error:', err);
-  process.exit(1);
-});
-proxy.listen(proxyPort, '127.0.0.1', () => {
-  state.proxyPort = proxyPort;
-  state.proxyUrl = 'http://localhost:' + proxyPort + '/' + appName + '/';
-  state.url = state.proxyUrl;
-  saveState();
-});
+startProxyServer().catch(() => process.exit(1));
 process.on('exit', () => { try { proxy.close(); } catch {} });
 process.on('exit', () => { try { wsServer.close(); } catch {} });
 if (parentPid > 1) {
@@ -273,7 +291,9 @@ async function rebuild() {
     state.build = 'ok'; state.deploy = 'running'; saveState();
     await runScript('deploy.sh');
     state.deploy = 'ok'; state.phase = 'idle'; saveState();
+    await new Promise((r) => setTimeout(r, 650));
     notifyReload();
+    setTimeout(() => notifyReload(), 900);
   } catch (err) {
     const msg = String(err?.message || '');
     const failedDuringDeploy = state.deploy === 'running';
@@ -429,17 +449,16 @@ function render() {
   const deploy = s.deploy?.startsWith('ok') ? color('0;32', s.deploy) : s.deploy?.startsWith('error') ? color('0;31', s.deploy) : color('1;33', s.deploy);
   const server = s.server === 'up' ? color('0;32', 'up') : s.server === 'down' ? color('0;31', 'down') : color('1;33', s.server);
   const app = s.app === 'up' ? color('0;32', 'up') : s.app === 'down' ? color('0;31', 'down') : color('1;33', s.app ?? 'checking');
-  const live = s.live?.startsWith('ready') ? color('0;34', s.live) : color('0;31', s.live ?? 'error');
-  const url = color('0;32', s.url ?? '');
-  const probe = color('2;37', s.serverCheckUrl ?? '');
-  const label = (k) => color('2;37', String(k).padEnd(8, ' '));
+  const reloadUrl = color('0;32', s.proxyUrl || s.url || '');
+  const directUrl = color('2;37', s.appUrl || '');
+  const label = (k) => color('2;37', String(k).padEnd(18, ' '));
   const kv = (k, v) => label(k) + ': ' + v;
   const controls = color('2;37', '[f] refresh');
   const out = color('1;36', 'jwebgen --dev') + '  ' + phase + '\\n'
     + '  ' + kv('build', build) + '   ' + kv('deploy', deploy) + '\\n'
-    + '  ' + kv('server', server) + '   ' + kv('app', app) + '   ' + kv('live', live) + '\\n'
-    + '  ' + kv('url', url) + '\\n'
-    + '  ' + kv('probe', probe) + '\\n'
+    + '  ' + kv('server', server) + '   ' + kv('app', app) + '\\n'
+    + '  ' + kv('browse (LiveReload)', reloadUrl) + '\\n'
+    + '  ' + kv('browse (no reload)', directUrl) + '\\n'
     + '  ' + kv('cmd', controls);
   process.stderr.write('\\x1b[?1l\\x1b[?1049h\\x1b[?25l\\x1b[H\\x1b[2J' + out + '\\n');
 }
