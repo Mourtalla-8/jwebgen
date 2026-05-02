@@ -39,10 +39,12 @@ export async function runCreateCommand(deps) {
     makeDevScript,
     makeWatchScript,
     makeAddServletScript,
+    makeLiveReloadClientScript,
     makeExecutable,
     ensureBuildTools,
     gitignore,
     helloServlet,
+    devLiveReloadFilter,
     indexJsp,
     pomXml,
     readmeMd,
@@ -122,7 +124,8 @@ export async function runCreateCommand(deps) {
         validate: (value) => validateQualifiedName(value, { minSegments: 2, label: 'Base package' })
       });
 
-  const defaultLocation = path.join(process.cwd(), artifactId);
+  const defaultDirName = String(projectName || artifactId).trim() || artifactId;
+  const defaultLocation = path.join(process.cwd(), defaultDirName);
   const location = cliYes
     ? path.resolve(expandHome(defaultLocation))
     : await askText('Project location', {
@@ -199,9 +202,13 @@ export async function runCreateCommand(deps) {
 
   try {
     const pkgPath = packageToPath(basePackage);
+    const filterPackage = `${basePackage}.dev`;
+    const filterPackagePath = packageToPath(filterPackage);
     const scriptsDir = jwebgenScriptsDir(workDir);
     await mkdir(path.join(workDir, 'src/main/java', pkgPath), { recursive: true });
+    await mkdir(path.join(workDir, 'src/main/java', filterPackagePath), { recursive: true });
     await mkdir(path.join(workDir, 'src/main/webapp/WEB-INF'), { recursive: true });
+    await mkdir(path.join(workDir, 'src/main/webapp/.jwebgen'), { recursive: true });
     await mkdir(scriptsDir, { recursive: true });
 
     await writeFileSafe(
@@ -218,6 +225,11 @@ export async function runCreateCommand(deps) {
     );
 
     if (addServlet) await writeFileSafe(path.join(workDir, 'src/main/java', pkgPath, 'HelloServlet.java'), helloServlet({ basePackage }));
+    await writeFileSafe(
+      path.join(workDir, 'src/main/java', filterPackagePath, 'DevLiveReloadFilter.java'),
+      devLiveReloadFilter({ basePackage: filterPackage })
+    );
+    await writeFileSafe(path.join(workDir, 'src/main/webapp/.jwebgen/live-reload.js'), makeLiveReloadClientScript());
     if (addJsp) {
       await writeFileSafe(path.join(workDir, 'src/main/webapp', 'index.jsp'), indexJsp({ projectName, artifactId, hasServlet: addServlet }));
     }
