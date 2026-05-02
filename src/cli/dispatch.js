@@ -17,7 +17,7 @@ export async function dispatchCommand(command, args, handlers) {
     if (!trimmed) return rawArgs;
     const pascal = trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
     const lower = pascal.toLowerCase();
-    const hasServletAtEdge = lower.startsWith('servlet') || lower.endsWith('servlet');
+    const hasServletAtEdge = (lower.startsWith('servlet') || lower.endsWith('servlet')) && lower !== 'servlet';
     const normalized = hasServletAtEdge ? pascal : `${pascal}Servlet`;
     return [normalized, ...rest];
   };
