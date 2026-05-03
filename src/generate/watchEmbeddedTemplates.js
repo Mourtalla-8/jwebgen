@@ -137,7 +137,7 @@ function createProxyServer() {
           return;
         }
         // Force identity transfer/encoding and strip compression metadata for HTML
-        up.headers['transfer-encoding'] = 'identity';
+        delete up.headers['transfer-encoding'];
         delete up.headers['content-encoding'];
         delete up.headers['content-length'];
         delete up.headers['te'];
@@ -160,11 +160,16 @@ function createProxyServer() {
         up.on('end', () => {
           const injected = injectLiveReload(body, proxyScriptTag());
           const headers = { ...up.headers };
-          headers['transfer-encoding'] = 'identity';
+          delete headers['transfer-encoding'];
           delete headers['content-encoding'];
           delete headers['content-length'];
           delete headers['te'];
           delete headers['vary'];
+          // Remove cache validators so browsers don't reuse cached HTML with old injected port
+          delete headers['etag'];
+          delete headers['last-modified'];
+          delete headers['if-none-match'];
+          delete headers['if-modified-since'];
           res.writeHead(up.statusCode || 200, headers);
           res.end(injected, 'utf8');
         });
