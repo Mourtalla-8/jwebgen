@@ -53,6 +53,13 @@ export async function runProjectScript(scriptName, args = [], options = {}, deps
       throw error;
     }
     const msg = error?.shortMessage || error?.message || String(error);
+    const isCleanupDeploy = scriptName === canonicalDeployScript && Array.isArray(args) && args.includes('--cleanup-dev');
+    if (isCleanupDeploy) {
+      console.error(pc.yellow('Cleanup failed for target server directories.'));
+      console.error(pc.yellow('If this is a permission issue, run: sudo -v && jwebgen --clean --deploy'));
+      error.jwebgenHandled = true;
+      throw error;
+    }
     console.error(pc.red(`${scriptName} failed: ${msg}`));
     error.jwebgenHandled = true;
     throw error;

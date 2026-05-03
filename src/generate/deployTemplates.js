@@ -122,6 +122,17 @@ fi
 
 if [[ "$CLEANUP_DEV_MODE" = "1" ]]; then
   if ! run_privileged rm -rf "$TOMCAT_DIR/webapps/$APP_NAME" "$TOMCAT_DIR/webapps/$APP_NAME.war"; then
+    sleep 0.3
+  fi
+  if [[ -e "$TOMCAT_DIR/webapps/$APP_NAME" || -e "$TOMCAT_DIR/webapps/$APP_NAME.war" ]]; then
+    if ! run_privileged rm -rf "$TOMCAT_DIR/webapps/$APP_NAME" "$TOMCAT_DIR/webapps/$APP_NAME.war"; then
+      log_error "Insufficient permissions to clean $APP_NAME in $TOMCAT_DIR/webapps."
+      log_info "Run 'sudo -v' then retry."
+      echo "__JWEBGEN_EVENT__ deploy_sudo_required" >&2
+      exit 1
+    fi
+  fi
+  if [[ -e "$TOMCAT_DIR/webapps/$APP_NAME" || -e "$TOMCAT_DIR/webapps/$APP_NAME.war" ]]; then
     log_error "Insufficient permissions to clean $APP_NAME in $TOMCAT_DIR/webapps."
     log_info "Run 'sudo -v' then retry."
     echo "__JWEBGEN_EVENT__ deploy_sudo_required" >&2
@@ -157,12 +168,22 @@ if [[ "\${JWEBGEN_DEV:-0}" = "1" ]]; then
     fi
   fi
 
-  rm -f "$TOMCAT_DIR/webapps/$APP_NAME.war" 2>/dev/null || true
+  if ! run_privileged rm -f "$TOMCAT_DIR/webapps/$APP_NAME.war"; then
+    log_error "Insufficient permissions to remove stale WAR in $TOMCAT_DIR/webapps."
+    log_info "Run 'sudo -v' then retry."
+    echo "__JWEBGEN_EVENT__ deploy_sudo_required" >&2
+    exit 1
+  fi
   rm -f "$ROOT_DIR/target/$APP_NAME.war" 2>/dev/null || true
   
   # Help Tomcat detect changes
   if [[ -f "$TOMCAT_DIR/webapps/$APP_NAME/META-INF/context.xml" ]]; then
-    run_privileged touch "$TOMCAT_DIR/webapps/$APP_NAME/META-INF/context.xml" || true
+    if ! run_privileged touch "$TOMCAT_DIR/webapps/$APP_NAME/META-INF/context.xml"; then
+      log_error "Unable to refresh Tomcat context metadata."
+      log_info "Run 'sudo -v' then retry."
+      echo "__JWEBGEN_EVENT__ deploy_sudo_required" >&2
+      exit 1
+    fi
   fi
 else
   run_privileged rm -rf "$TOMCAT_DIR/webapps/$APP_NAME" "$TOMCAT_DIR/webapps/$APP_NAME.war" || true
@@ -269,15 +290,34 @@ if [[ "$CLEANUP_DEV_MODE" = "1" ]]; then
     "$DEPLOY_DIR/$APP_NAME.war.isundeploying" \
     "$DEPLOY_DIR/$APP_NAME.war.status" \
     "$DEPLOY_DIR/$APP_NAME.war.dodeploy"; then
-    echo "Permissions insuffisantes pour nettoyer $APP_NAME dans $DEPLOY_DIR."
-    echo "Lance 'sudo -v' puis relance."
-    echo "__JWEBGEN_EVENT__ deploy_sudo_required" >&2
-    exit 1
+    sleep 0.3
+  fi
+  if [[ -e "$DEPLOY_DIR/$APP_NAME.war" || -e "$DEPLOY_DIR/$APP_NAME.war.deployed" || -e "$DEPLOY_DIR/$APP_NAME.war.failed" ]]; then
+    if ! run_privileged rm -f \
+      "$DEPLOY_DIR/$APP_NAME.war" \
+      "$DEPLOY_DIR/$APP_NAME.war.deployed" \
+      "$DEPLOY_DIR/$APP_NAME.war.undeployed" \
+      "$DEPLOY_DIR/$APP_NAME.war.failed" \
+      "$DEPLOY_DIR/$APP_NAME.war.skipdeploy" \
+      "$DEPLOY_DIR/$APP_NAME.war.pending" \
+      "$DEPLOY_DIR/$APP_NAME.war.isdeploying" \
+      "$DEPLOY_DIR/$APP_NAME.war.isundeploying" \
+      "$DEPLOY_DIR/$APP_NAME.war.status" \
+      "$DEPLOY_DIR/$APP_NAME.war.dodeploy"; then
+      echo "Permissions insuffisantes pour nettoyer $APP_NAME dans $DEPLOY_DIR."
+      echo "Lance 'sudo -v' puis relance."
+      echo "__JWEBGEN_EVENT__ deploy_sudo_required" >&2
+      exit 1
+    fi
   fi
   echo "Dev cleanup completed for $APP_NAME (WildFly)."
   exit 0
 fi
-if ! run_privileged cp "$WAR_FILE" "$DEPLOY_DIR/$APP_NAME.war"; then
+current_size="$(stat -c '%s' "$WAR_FILE" 2>/dev/null || echo 0)"
+deployed_size="$(stat -c '%s' "$DEPLOY_DIR/$APP_NAME.war" 2>/dev/null || echo -1)"
+if [[ "$current_size" != "0" && "$current_size" = "$deployed_size" ]]; then
+  echo "WAR unchanged; keeping existing artifact copy."
+elif ! run_privileged cp "$WAR_FILE" "$DEPLOY_DIR/$APP_NAME.war"; then
   echo "Permissions insuffisantes pour copier le WAR."
   echo "Lance 'sudo -v' puis relance."
   echo "__JWEBGEN_EVENT__ deploy_sudo_required" >&2
@@ -292,7 +332,11 @@ DEPLOYED_MARKER="$DEPLOY_DIR/$APP_NAME.war.deployed"
 INPROGRESS_MARKER="$DEPLOY_DIR/$APP_NAME.war.isdeploying"
 STATUS_MARKER="$DEPLOY_DIR/$APP_NAME.war.status"
 
-deadline=$((SECONDS + 20))
+DEPLOY_TIMEOUT="\${JWEBGEN_WILDFLY_DEPLOY_TIMEOUT:-20}"
+if [[ ! "$DEPLOY_TIMEOUT" =~ ^[0-9]+$ ]] || (( DEPLOY_TIMEOUT < 5 )); then
+  DEPLOY_TIMEOUT=20
+fi
+deadline=$((SECONDS + DEPLOY_TIMEOUT))
 while (( SECONDS < deadline )); do
   if [[ -f "$FAILED_MARKER" ]]; then
     echo "WildFly deployment failed."
@@ -303,6 +347,9 @@ while (( SECONDS < deadline )); do
     exit 1
   fi
   if [[ -f "$DEPLOYED_MARKER" ]]; then
+    break
+  fi
+  if command -v curl >/dev/null 2>&1 && curl -sS --max-time 2 "http://127.0.0.1:8080/$APP_NAME/" >/dev/null 2>&1; then
     break
   fi
   sleep 1

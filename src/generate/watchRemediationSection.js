@@ -15,6 +15,26 @@ wait_for_port_release() {
   return 1
 }
 
+wait_for_worker_cycle() {
+  local timeout_sec="\${1:-40}"
+  local deadline=$((SECONDS + timeout_sec))
+  local build_state=""
+  local deploy_state=""
+  while (( SECONDS < deadline )); do
+    if [[ ! -f "$STATE_FILE" ]]; then
+      sleep 1
+      continue
+    fi
+    build_state="$(sed -n 's/.*"build":"\\([^"]*\\)".*/\\1/p' "$STATE_FILE" 2>/dev/null | tail -n 1)"
+    deploy_state="$(sed -n 's/.*"deploy":"\\([^"]*\\)".*/\\1/p' "$STATE_FILE" 2>/dev/null | tail -n 1)"
+    if [[ "$build_state" != "running" && "$deploy_state" != "running" ]]; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
 owner_systemd_unit_from_pid() {
   local pid="$1"
   local line=""
@@ -438,8 +458,11 @@ prompt_server_remediation() {
         else
           ui_info "Trying quick redeploy..."
         fi
+        ui_info "Redeploy in progress..."
         restart_worker
-        sleep 1
+        if ! wait_for_worker_cycle 50; then
+          ui_warn "Redeploy is taking longer than expected."
+        fi
         detect_server_state
         if [[ "$DETECT_STATUS" = "up" ]]; then
           resume_ui
@@ -722,8 +745,16 @@ cleanup() {
     return 0
   fi
   if [[ -x "$ROOT_DIR/.jwebgen/scripts/deploy.sh" ]]; then
-    if ! "$ROOT_DIR/.jwebgen/scripts/deploy.sh" --cleanup-dev; then
-      ui_warn "Automatic deployment cleanup failed (non-blocking). Try: jwebgen --clean --deploy"
+    local cleanup_output=""
+    if ! cleanup_output="$("$ROOT_DIR/.jwebgen/scripts/deploy.sh" --cleanup-dev 2>&1)"; then
+      if [[ "$cleanup_output" == *"__JWEBGEN_EVENT__ deploy_sudo_required"* ]]; then
+        ui_warn "Automatic cleanup needs sudo privileges. Run: sudo -v && jwebgen --clean --deploy"
+      else
+        ui_warn "Automatic deployment cleanup failed (non-blocking). Try: jwebgen --clean --deploy"
+      fi
+      if [[ -n "$cleanup_output" ]]; then
+        printf "%s\n" "$cleanup_output" >&2
+      fi
     fi
   fi
   rm -f "$STATE_FILE" "$EVENTS_FILE" "$UI_PAUSE_FILE" "$DEV_PID_FILE" 2>/dev/null || true

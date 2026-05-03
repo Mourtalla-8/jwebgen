@@ -287,6 +287,8 @@ let running = false;
 let queued = false;
 let timer = null;
 let lastBuildQueuedAt = 0;
+let lastDeployFinishedAt = 0;
+const DOUBLE_RELOAD = process.env.JWEBGEN_DOUBLE_RELOAD === '1';
 async function rebuild() {
   if (running) { queued = true; return; }
   running = true;
@@ -296,9 +298,9 @@ async function rebuild() {
     state.build = 'ok'; state.deploy = 'running'; saveState();
     await runScript('deploy.sh');
     state.deploy = 'ok'; state.phase = 'idle'; saveState();
-    await new Promise((r) => setTimeout(r, 650));
     notifyReload();
-    setTimeout(() => notifyReload(), 900);
+    if (DOUBLE_RELOAD) setTimeout(() => notifyReload(), 600);
+    lastDeployFinishedAt = Date.now();
   } catch (err) {
     const msg = String(err?.message || '');
     const failedDuringDeploy = state.deploy === 'running';
@@ -317,10 +319,10 @@ async function rebuild() {
 function queueRebuild() {
   const now = Date.now();
   // Protect against very bursty editor writes (tmp swap, multi-write saves).
-  if (now - lastBuildQueuedAt < 120) return;
+  if (now - lastBuildQueuedAt < 200) return;
   lastBuildQueuedAt = now;
   clearTimeout(timer);
-  timer = setTimeout(() => rebuild(), 250);
+  timer = setTimeout(() => rebuild(), 400);
 }
 function isDir(p) { try { return statSync(p).isDirectory(); } catch { return false; } }
 const watched = new Map();
@@ -386,19 +388,30 @@ function serverUp() {
     req.end();
 
     function checkEngine() {
-      const cmd = serverTarget === 'tomcat'
-        ? 'systemctl is-active --quiet ' + serverUnit + ' 2>/dev/null'
-        : 'curl -sS --max-time 2 http://127.0.0.1:9990/ >/dev/null 2>&1';
-      const p = spawn('bash', ['-lc', cmd], { stdio: 'ignore' });
-      p.on('exit', async (code) => {
-        if (code === 0) {
-          if (serverTarget === 'wildfly') return resolve({ ok: true, status: 'app_down_000', httpStatus: 0 });
-          return resolve({ ok: true, status: 'app_down' });
-        }
-        const owner = await portOwner(httpPort);
-        if (owner) return resolve({ ok: false, status: 'port_conflict', owner });
-        resolve({ ok: false, status: 'down' });
+      if (running || Date.now() - lastDeployFinishedAt < 2200) {
+        return resolve({ ok: true, status: 'app_down' });
+      }
+      if (serverTarget === 'wildfly') {
+        const mgmtReq = http.request('http://127.0.0.1:9990/', { method: 'GET', timeout: 1500 }, (mgmtRes) => {
+          mgmtRes.resume();
+          if (Number(mgmtRes.statusCode || 0) > 0) return resolve({ ok: true, status: 'app_down_000', httpStatus: 0 });
+          checkPortOwner();
+        });
+        mgmtReq.on('error', () => checkPortOwner());
+        mgmtReq.on('timeout', () => { mgmtReq.destroy(); checkPortOwner(); });
+        mgmtReq.end();
+        return;
+      }
+      const p = spawn('bash', ['-lc', 'systemctl is-active --quiet ' + serverUnit + ' 2>/dev/null'], { stdio: 'ignore' });
+      p.on('exit', (code) => {
+        if (code === 0) return resolve({ ok: true, status: 'app_down' });
+        checkPortOwner();
       });
+    }
+    async function checkPortOwner() {
+      const owner = await portOwner(httpPort);
+      if (owner) return resolve({ ok: false, status: 'port_conflict', owner });
+      resolve({ ok: false, status: 'down' });
     }
   });
 }
@@ -426,13 +439,11 @@ setInterval(async () => {
     }
   }
 }, 1200).unref();
-walkAndWatch(path.join(root, 'src'));
 walkAndWatch(root);
 // Keep watcher coverage up to date when new directories appear.
 setInterval(() => {
-  walkAndWatch(path.join(root, 'src'));
   walkAndWatch(root);
-}, 3000).unref();
+}, 9000).unref();
 saveState();
 rebuild();
 `;
