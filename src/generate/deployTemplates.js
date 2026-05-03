@@ -78,6 +78,33 @@ run_privileged() {
   sudo -n "$@"
 }
 
+# Servlet / @WebServlet class changes need a reloadable Context; JSP can update without it.
+ensure_tomcat_dev_reloadable_context() {
+  local ctx="$DEST_DIR/META-INF/context.xml"
+  if ! run_privileged mkdir -p "$DEST_DIR/META-INF"; then
+    log_error "Unable to create $DEST_DIR/META-INF."
+    echo "__JWEBGEN_EVENT__ deploy_sudo_required" >&2
+    exit 1
+  fi
+  if [[ ! -f "$ctx" ]]; then
+    if ! printf '%s\\n' '<?xml version="1.0" encoding="UTF-8"?>' '<Context reloadable="true" />' | run_privileged tee "$ctx" >/dev/null; then
+      log_error "Unable to write default META-INF/context.xml for Tomcat dev reload."
+      log_info "Run 'sudo -v' then retry."
+      echo "__JWEBGEN_EVENT__ deploy_sudo_required" >&2
+      exit 1
+    fi
+    return 0
+  fi
+  if grep -qE 'reloadable[[:space:]]*=[[:space:]]*"true"' "$ctx" 2>/dev/null; then
+    return 0
+  fi
+  if grep -q '<Context' "$ctx" 2>/dev/null; then
+    if ! run_privileged sed -i '/<Context/s/<Context/<Context reloadable="true"/' "$ctx" 2>/dev/null; then
+      log_warn "Could not add reloadable=true to META-INF/context.xml; servlet class updates may need a Tomcat restart."
+    fi
+  fi
+}
+
 EXPLODED_APP_DIR="$ROOT_DIR/target/$APP_NAME"
 
 if [[ "$CLEANUP_DEV_MODE" = "0" && "\${JWEBGEN_DEV:-0}" = "1" ]]; then
@@ -175,6 +202,8 @@ if [[ "\${JWEBGEN_DEV:-0}" = "1" ]]; then
     exit 1
   fi
   rm -f "$ROOT_DIR/target/$APP_NAME.war" 2>/dev/null || true
+
+  ensure_tomcat_dev_reloadable_context
   
   # Tomcat reload hints (exploded deploy): always bump a standard descriptor when present.
   if [[ -f "$DEST_DIR/WEB-INF/web.xml" ]]; then

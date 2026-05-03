@@ -41,6 +41,7 @@ if (String(watch).includes('[s]udo')) {
 const deployTomcat = makeDeployServerScript({ appName: 'appx', serverTarget: 'tomcat' });
 assertContains(deployTomcat, '--cleanup-dev', 'deploy tomcat');
 assertContains(deployTomcat, 'Tomcat dev cleanup', 'deploy tomcat cleanup');
+assertContains(deployTomcat, 'ensure_tomcat_dev_reloadable_context', 'deploy tomcat reloadable context for servlets');
 assertContains(deployTomcat, 'WEB-INF/web.xml', 'deploy tomcat web.xml reload hint');
 assertContains(deployTomcat, 'Unable to refresh Tomcat deployment descriptor (WEB-INF/web.xml).', 'deploy tomcat strict web.xml refresh');
 assertContains(deployTomcat, 'Unable to refresh Tomcat context metadata.', 'deploy tomcat strict context refresh');
