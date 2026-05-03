@@ -53,7 +53,11 @@ apply_validated_http_port_fallback() {
   local old_port="$DEV_HTTP_PORT"
   local candidate
   local switched=0
+  local proxy_hint="\${JWEBGEN_PROXY_PORT:-8081}"
   for candidate in 8081 8082 8083 8084 8085 8086 8087 8088 8089 8090; do
+    if [[ "$candidate" = "$proxy_hint" ]]; then
+      continue
+    fi
     if is_port_busy "$candidate"; then
       continue
     fi
@@ -711,16 +715,18 @@ cleanup() {
   CLEANUP_DONE=1
   resume_ui
   stop_all
+  local pid_in_file=""
+  pid_in_file="$(tr -d '[:space:]' < "$DEV_PID_FILE" 2>/dev/null || true)"
+  if [[ -n "$pid_in_file" && "$pid_in_file" != "$$" ]]; then
+    ui_info "Another dev session is active (PID $pid_in_file); skipping deploy cleanup and shared file removal."
+    return 0
+  fi
   if [[ -x "$ROOT_DIR/.jwebgen/scripts/deploy.sh" ]]; then
-    if ! "$ROOT_DIR/.jwebgen/scripts/deploy.sh" --cleanup-dev >/dev/null 2>&1; then
-      ui_warn "Automatic deployment cleanup failed (non-blocking)."
+    if ! "$ROOT_DIR/.jwebgen/scripts/deploy.sh" --cleanup-dev; then
+      ui_warn "Automatic deployment cleanup failed (non-blocking). Try: jwebgen --clean --deploy"
     fi
   fi
-  if [[ "\${JWEBGEN_KEEP_DEV_FILES:-0}" != "1" ]]; then
-    rm -f "$WORKER_SCRIPT" "$DASHBOARD_SCRIPT" "$STATE_FILE" "$EVENTS_FILE" "$UI_PAUSE_FILE" "$DEV_PID_FILE" 2>/dev/null || true
-  else
-    rm -f "$DEV_PID_FILE" 2>/dev/null || true
-  fi
+  rm -f "$STATE_FILE" "$EVENTS_FILE" "$UI_PAUSE_FILE" "$DEV_PID_FILE" 2>/dev/null || true
 }
 trap cleanup EXIT
 trap 'if [[ "$STOP_MSG_DONE" = "0" ]]; then STOP_MSG_DONE=1; echo >&2; ui_info "stopping dev mode"; fi; exit 130' INT TERM

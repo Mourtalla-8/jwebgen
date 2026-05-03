@@ -309,6 +309,7 @@ restart_worker() {
     kill "$WORKER_PID" 2>/dev/null || true
     wait "$WORKER_PID" 2>/dev/null || true
     WORKER_PID=""
+    sleep 0.45
   fi
   start_worker
   LAST_WORKER_RESTART_AT="$(date +%s 2>/dev/null || echo 0)"

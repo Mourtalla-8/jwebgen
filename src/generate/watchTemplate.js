@@ -99,6 +99,8 @@ fi
 
 ${WATCH_RUNTIME_SECTION}
 
+cleanup_orphan_dev_session
+
 cat > "$WORKER_SCRIPT" <<'EOF'
 ${DEV_WORKER_SCRIPT_TEMPLATE}
 EOF
@@ -108,8 +110,6 @@ ${DEV_DASHBOARD_SCRIPT_TEMPLATE}
 EOF
 
 chmod +x "$WORKER_SCRIPT" "$DASHBOARD_SCRIPT" 2>/dev/null || true
-
-cleanup_orphan_dev_session
 
 if ! server_is_running; then
   detect_server_state
@@ -123,7 +123,10 @@ fi
 
 start_worker
 start_dashboard
-handle_events_loop || true
+if ! handle_events_loop; then
+  stop_all
+  exit 130
+fi
 wait "$WORKER_PID" 2>/dev/null || true
 `;
 }

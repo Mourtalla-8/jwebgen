@@ -191,7 +191,8 @@ function listenOnce(server, port, host) {
     };
     server.once('error', onErr);
     server.once('listening', onOk);
-    server.listen(port, host);
+    if (host) server.listen(port, host);
+    else server.listen(port);
   });
 }
 async function startProxyServer() {
@@ -227,30 +228,6 @@ const wsServer = http.createServer((_, res) => {
   res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
   res.end('jwebgen live\\n');
 });
-wsServer.on('error', (err) => {
-  if (err?.code === 'EADDRINUSE') {
-    (async () => {
-      const busyPort = livePort;
-      const owner = await portOwner(busyPort);
-      const fallback = await findFreePort(busyPort + 1);
-      state.live = 'port busy (' + busyPort + ')';
-      saveState();
-      emit('live_port_busy', { port: busyPort, owner: owner || '' });
-      if (fallback) {
-        livePort = fallback;
-        state.livePort = livePort;
-        wsServer.listen(livePort, () => {
-          state.live = 'ready (ws://localhost:' + livePort + ')';
-          saveState();
-          emit('live_port_fallback', { fromPort: busyPort, toPort: livePort });
-        });
-      }
-    })().catch(() => {});
-    return;
-  }
-  state.live = 'error';
-  saveState();
-});
 wsServer.on('upgrade', (req, socket) => {
   const key = req.headers['sec-websocket-key'];
   if (!key) { socket.destroy(); return; }
@@ -260,11 +237,38 @@ wsServer.on('upgrade', (req, socket) => {
   socket.on('close', () => wsClients.delete(socket));
   socket.on('error', () => wsClients.delete(socket));
 });
-wsServer.listen(livePort, () => {
-  state.livePort = livePort;
-  state.live = 'ready (ws://localhost:' + livePort + ')';
+async function startWsServer() {
+  let candidate = preferredLivePort;
+  for (let tries = 0; tries < 60; tries++) {
+    try {
+      await listenOnce(wsServer, candidate);
+      livePort = candidate;
+      state.livePort = livePort;
+      state.live = 'ready (ws://localhost:' + livePort + ')';
+      saveState();
+      return;
+    } catch (err) {
+      if (err?.code !== 'EADDRINUSE') {
+        state.live = 'error';
+        saveState();
+        return;
+      }
+      const owner = await portOwner(candidate);
+      emit('live_port_busy', { port: candidate, owner: owner || '' });
+      const next = await findFreePort(candidate + 1);
+      if (!next) {
+        state.live = 'error';
+        saveState();
+        return;
+      }
+      emit('live_port_fallback', { fromPort: candidate, toPort: next });
+      candidate = next;
+    }
+  }
+  state.live = 'error';
   saveState();
-});
+}
+startWsServer().catch(() => {});
 const proxy = createProxyServer();
 startProxyServer().catch(() => process.exit(1));
 process.on('exit', () => { try { proxy.close(); } catch {} });
@@ -445,6 +449,7 @@ function loadState() { try { return JSON.parse(readFileSync(stateFile, 'utf8'));
 function render() {
   if (pauseFile && existsSync(pauseFile)) return;
   const s = loadState(); if (!s) return;
+  const LW = 22;
   const phase = s.phase === 'running' ? color('1;34', '● cycle') : color('1;32', '✓ idle');
   const build = s.build?.startsWith('ok') ? color('0;32', s.build) : s.build?.startsWith('error') ? color('0;31', s.build) : color('1;33', s.build);
   const deploy = s.deploy?.startsWith('ok') ? color('0;32', s.deploy) : s.deploy?.startsWith('error') ? color('0;31', s.deploy) : color('1;33', s.deploy);
@@ -452,12 +457,13 @@ function render() {
   const app = s.app === 'up' ? color('0;32', 'up') : s.app === 'down' ? color('0;31', 'down') : color('1;33', s.app ?? 'checking');
   const reloadUrl = color('0;32', s.proxyUrl || s.url || '');
   const directUrl = color('2;37', s.appUrl || '');
-  const label = (k) => color('2;37', String(k).padEnd(18, ' '));
-  const kv = (k, v) => label(k) + ': ' + v;
+  const lbl = (k) => color('2;37', String(k).padEnd(LW));
+  const kv = (k, v) => lbl(k) + color('2;37', ': ') + v;
+  const kvPair = (k1, v1, k2, v2) => '  ' + kv(k1, v1) + '   ' + kv(k2, v2) + '\\n';
   const controls = color('2;37', '[f] refresh');
   const out = color('1;36', 'jwebgen --dev') + '  ' + phase + '\\n'
-    + '  ' + kv('build', build) + '   ' + kv('deploy', deploy) + '\\n'
-    + '  ' + kv('server', server) + '   ' + kv('app', app) + '\\n'
+    + kvPair('build', build, 'deploy', deploy)
+    + kvPair('server', server, 'app', app)
     + '  ' + kv('browse (LiveReload)', reloadUrl) + '\\n'
     + '  ' + kv('browse (no reload)', directUrl) + '\\n'
     + '  ' + kv('cmd', controls);
