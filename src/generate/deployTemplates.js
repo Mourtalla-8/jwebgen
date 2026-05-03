@@ -359,10 +359,8 @@ if [[ "$CLEANUP_DEV_MODE" = "1" ]]; then
   echo "Dev cleanup completed for $APP_NAME (WildFly)."
   exit 0
 fi
-current_size="$(stat -c '%s' "$WAR_FILE" 2>/dev/null || echo 0)"
-deployed_size="$(stat -c '%s' "$DEPLOY_DIR/$APP_NAME.war" 2>/dev/null || echo -1)"
 war_unchanged=0
-if [[ "$current_size" != "0" && "$current_size" = "$deployed_size" ]]; then
+if [[ -f "$WAR_FILE" && -f "$DEPLOY_DIR/$APP_NAME.war" ]] && cmp -s "$WAR_FILE" "$DEPLOY_DIR/$APP_NAME.war" 2>/dev/null; then
   war_unchanged=1
   echo "WAR unchanged; keeping existing artifact copy."
 fi
@@ -397,6 +395,7 @@ if [[ ! "$DEPLOY_TIMEOUT" =~ ^[0-9]+$ ]] || (( DEPLOY_TIMEOUT < 5 )); then
   DEPLOY_TIMEOUT=20
 fi
 deadline=$((SECONDS + DEPLOY_TIMEOUT))
+DEPLOY_HTTP_OK=0
 while (( SECONDS < deadline )); do
   if [[ -f "$FAILED_MARKER" ]]; then
     echo "WildFly deployment failed."
@@ -410,22 +409,27 @@ while (( SECONDS < deadline )); do
     break
   fi
   if command -v curl >/dev/null 2>&1 && curl -sS --max-time 2 "http://127.0.0.1:8080/$APP_NAME/" >/dev/null 2>&1; then
+    DEPLOY_HTTP_OK=1
     break
   fi
   sleep 1
 done
 
-if [[ ! -f "$DEPLOYED_MARKER" ]]; then
-  if [[ -f "$INPROGRESS_MARKER" ]]; then
-    echo "WildFly deployment still in progress (timeout)."
-  else
-    echo "WildFly deployment not confirmed (.deployed marker missing)."
+if [[ -f "$DEPLOYED_MARKER" || "$DEPLOY_HTTP_OK" = "1" ]]; then
+  if [[ "$DEPLOY_HTTP_OK" = "1" && ! -f "$DEPLOYED_MARKER" ]]; then
+    echo "WildFly: application reachable (continuing without .deployed marker)."
   fi
-  echo "__JWEBGEN_EVENT__ deploy_error" >&2
-  exit 1
+  echo "Deployed (WildFly): http://localhost:8080/$APP_NAME/"
+  exit 0
 fi
 
-echo "Deployed (WildFly): http://localhost:8080/$APP_NAME/"
+if [[ -f "$INPROGRESS_MARKER" ]]; then
+  echo "WildFly deployment still in progress (timeout)."
+else
+  echo "WildFly deployment not confirmed (.deployed marker missing)."
+fi
+echo "__JWEBGEN_EVENT__ deploy_error" >&2
+exit 1
 `;
   }
 

@@ -118,13 +118,15 @@ function createProxyServer() {
     const url = String(req.url || '/');
     if (url.startsWith('/.jwebgen/live-reload.js')) return serveProxyClient(res);
     // Pass-through proxy to local server, injecting only for HTML.
+    const upstreamHeaders = { ...req.headers, host: '127.0.0.1:' + httpPort };
+    upstreamHeaders['accept-encoding'] = 'identity';
     const upstream = http.request(
       {
         hostname: '127.0.0.1',
         port: httpPort,
         method: req.method || 'GET',
         path: url,
-        headers: { ...req.headers, host: '127.0.0.1:' + httpPort }
+        headers: upstreamHeaders
       },
       (up) => {
         const ct = String(up.headers['content-type'] || '');
@@ -249,7 +251,7 @@ async function startWsServer() {
   let candidate = preferredLivePort;
   for (let tries = 0; tries < 60; tries++) {
     try {
-      await listenOnce(wsServer, candidate);
+      await listenOnce(wsServer, candidate, '127.0.0.1');
       livePort = candidate;
       state.livePort = livePort;
       state.live = 'ready (ws://localhost:' + livePort + ')';
@@ -395,7 +397,7 @@ function runScript(script) {
 function serverUp() {
   return new Promise((resolve) => {
     const appUrl = new URL('/' + appName + '/', 'http://127.0.0.1:' + httpPort).toString();
-    const req = http.request(appUrl, { method: 'GET', timeout: 1500 }, (res) => {
+    const req = http.request(appUrl, { method: 'GET', timeout: 1500, headers: { 'accept-encoding': 'identity' } }, (res) => {
       const code = Number(res.statusCode || 0);
       res.resume();
       if (code >= 200 && code < 400) return resolve({ ok: true, status: 'up' });
@@ -410,7 +412,7 @@ function serverUp() {
         return resolve({ ok: true, status: 'app_down' });
       }
       if (serverTarget === 'wildfly') {
-        const mgmtReq = http.request('http://127.0.0.1:9990/', { method: 'GET', timeout: 1500 }, (mgmtRes) => {
+        const mgmtReq = http.request('http://127.0.0.1:9990/', { method: 'GET', timeout: 1500, headers: { 'accept-encoding': 'identity' } }, (mgmtRes) => {
           mgmtRes.resume();
           if (Number(mgmtRes.statusCode || 0) > 0) return resolve({ ok: true, status: 'app_down_000', httpStatus: 0 });
           checkPortOwner();

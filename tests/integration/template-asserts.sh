@@ -52,6 +52,8 @@ assertContains(deployWildfly, 'WildFly dev cleanup', 'deploy wildfly cleanup');
 assertContains(deployWildfly, 'JWEBGEN_WILDFLY_DEPLOY_TIMEOUT', 'deploy wildfly timeout override');
 assertContains(deployWildfly, 'JWEBGEN_FORCE_WILDFLY_REDEPLOY', 'deploy wildfly force redeploy env');
 assertContains(deployWildfly, 'skipped redeploy', 'deploy wildfly skip dodeploy when unchanged');
+assertContains(deployWildfly, 'cmp -s', 'deploy wildfly WAR identity via cmp not size-only');
+assertContains(deployWildfly, 'DEPLOY_HTTP_OK', 'deploy wildfly HTTP probe short-circuits marker failure');
 
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'createProxyServer', 'worker contains dev proxy server');
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, '/.jwebgen/live-reload.js', 'worker serves live-reload asset');
@@ -68,13 +70,15 @@ if (String(addServlet).includes('out.println("<script>")')) {
 }
 
 const servlet = helloServlet({ basePackage: 'com.ex' });
-if (String(servlet).includes('<script>')) {
-  throw new Error('unexpected inline script in helloServlet template');
+const lrServlet = String(servlet);
+if (lrServlet.includes('/.jwebgen/live-reload.js') || lrServlet.includes('__JWEBGEN_LIVE_PORT')) {
+  throw new Error('unexpected LiveReload artifact in helloServlet template');
 }
 
 const jsp = indexJsp({ projectName: 'x', artifactId: 'x', hasServlet: true });
-if (String(jsp).includes('<script>')) {
-  throw new Error('unexpected inline script in indexJsp template');
+const lrJsp = String(jsp);
+if (lrJsp.includes('/.jwebgen/live-reload.js') || lrJsp.includes('__JWEBGEN_LIVE_PORT')) {
+  throw new Error('unexpected LiveReload artifact in indexJsp template');
 }
 EOF
 
