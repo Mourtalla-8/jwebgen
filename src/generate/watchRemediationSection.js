@@ -20,6 +20,7 @@ wait_for_worker_cycle() {
   local deadline=$((SECONDS + timeout_sec))
   local build_state=""
   local deploy_state=""
+  local seen_running=0
   while (( SECONDS < deadline )); do
     if [[ ! -f "$STATE_FILE" ]]; then
       sleep 1
@@ -27,7 +28,10 @@ wait_for_worker_cycle() {
     fi
     build_state="$(sed -n 's/.*"build":"\\([^"]*\\)".*/\\1/p' "$STATE_FILE" 2>/dev/null | tail -n 1)"
     deploy_state="$(sed -n 's/.*"deploy":"\\([^"]*\\)".*/\\1/p' "$STATE_FILE" 2>/dev/null | tail -n 1)"
-    if [[ "$build_state" != "running" && "$deploy_state" != "running" ]]; then
+    if [[ "$build_state" = "running" || "$deploy_state" = "running" ]]; then
+      seen_running=1
+    fi
+    if [[ "$seen_running" = "1" && "$build_state" != "running" && "$deploy_state" != "running" ]]; then
       return 0
     fi
     sleep 1

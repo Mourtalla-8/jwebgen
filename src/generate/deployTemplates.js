@@ -12,11 +12,11 @@ if [[ "$(uname -s 2>/dev/null || echo unknown)" != "Linux" ]]; then
 fi
 
 # Colors for logs
-RED='\\033[0;31m'
-GREEN='\\033[0;32m'
-YELLOW='\\033[1;33m'
-BLUE='\\033[0;34m'
-NC='\\033[0m' # No Color
+RED='\\\\033[0;31m'
+GREEN='\\\\033[0;32m'
+YELLOW='\\\\033[1;33m'
+BLUE='\\\\033[0;34m'
+NC='\\\\033[0m' # No Color
 
 APP_NAME=${shellQuote(appName)}
 SCRIPT_DIR="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
@@ -99,8 +99,15 @@ ensure_tomcat_dev_reloadable_context() {
     return 0
   fi
   if grep -q '<Context' "$ctx" 2>/dev/null; then
-    if ! run_privileged sed -i '/<Context/s/<Context/<Context reloadable="true"/' "$ctx" 2>/dev/null; then
-      log_warn "Could not add reloadable=true to META-INF/context.xml; servlet class updates may need a Tomcat restart."
+    # First try to replace existing reloadable attribute, otherwise insert it
+    if grep -qE '<Context[^>]*[[:space:]]reloadable=' "$ctx" 2>/dev/null; then
+      if ! run_privileged sed -i -E 's/(<Context[^>]*[[:space:]])reloadable="[^"]*"/\1reloadable="true"/' "$ctx" 2>/dev/null; then
+        log_warn "Could not update reloadable attribute in META-INF/context.xml; servlet class updates may need a Tomcat restart."
+      fi
+    else
+      if ! run_privileged sed -i '/<Context/s/<Context/<Context reloadable="true"/' "$ctx" 2>/dev/null; then
+        log_warn "Could not add reloadable=true to META-INF/context.xml; servlet class updates may need a Tomcat restart."
+      fi
     fi
   fi
 }
@@ -366,9 +373,14 @@ if [[ -f "$WAR_FILE" && -f "$DEPLOY_DIR/$APP_NAME.war" ]] && cmp -s "$WAR_FILE" 
 fi
 
 if [[ "$war_unchanged" = "1" && "\${JWEBGEN_FORCE_WILDFLY_REDEPLOY:-0}" != "1" ]]; then
-  echo "WildFly: skipped redeploy (set JWEBGEN_FORCE_WILDFLY_REDEPLOY=1 to force)."
-  echo "Deployed (WildFly): http://localhost:8080/$APP_NAME/"
-  exit 0
+  # Verify app is actually up before skipping redeploy
+  if [[ -f "$DEPLOY_DIR/$APP_NAME.war.deployed" ]] && command -v curl >/dev/null 2>&1 && curl -sS --max-time 2 "http://localhost:8080/$APP_NAME/" >/dev/null 2>&1; then
+    echo "WildFly: skipped redeploy (set JWEBGEN_FORCE_WILDFLY_REDEPLOY=1 to force)."
+    echo "Deployed (WildFly): http://localhost:8080/$APP_NAME/"
+    exit 0
+  else
+    echo "WAR unchanged but app not reachable; proceeding with deployment verification."
+  fi
 fi
 
 if [[ "$war_unchanged" = "0" ]]; then
