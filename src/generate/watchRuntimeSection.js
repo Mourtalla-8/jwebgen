@@ -309,7 +309,11 @@ restart_worker() {
     kill "$WORKER_PID" 2>/dev/null || true
     wait "$WORKER_PID" 2>/dev/null || true
     WORKER_PID=""
-    sleep 0.45
+    local grace_ms="\${JWEBGEN_WORKER_RESTART_GRACE_MS:-900}"
+    if [[ ! "\$grace_ms" =~ ^[0-9]+$ ]]; then
+      grace_ms=900
+    fi
+    sleep "$(awk -v m="\$grace_ms" 'BEGIN { printf "%.3f", m/1000 }' 2>/dev/null || echo 0.9)"
   fi
   start_worker
   LAST_WORKER_RESTART_AT="$(date +%s 2>/dev/null || echo 0)"

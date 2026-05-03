@@ -176,9 +176,26 @@ if [[ "\${JWEBGEN_DEV:-0}" = "1" ]]; then
   fi
   rm -f "$ROOT_DIR/target/$APP_NAME.war" 2>/dev/null || true
   
-  # Help Tomcat detect changes
-  if [[ -f "$TOMCAT_DIR/webapps/$APP_NAME/META-INF/context.xml" ]]; then
-    if ! run_privileged touch "$TOMCAT_DIR/webapps/$APP_NAME/META-INF/context.xml"; then
+  # Tomcat reload hints (exploded deploy): always bump a standard descriptor when present.
+  if [[ -f "$DEST_DIR/WEB-INF/web.xml" ]]; then
+    if ! run_privileged touch "$DEST_DIR/WEB-INF/web.xml"; then
+      log_error "Unable to refresh Tomcat deployment descriptor (WEB-INF/web.xml)."
+      log_info "Run 'sudo -v' then retry."
+      echo "__JWEBGEN_EVENT__ deploy_sudo_required" >&2
+      exit 1
+    fi
+  elif [[ -d "$DEST_DIR/WEB-INF/classes" ]]; then
+    if ! run_privileged touch "$DEST_DIR/WEB-INF/classes"; then
+      log_error "Unable to refresh Tomcat WEB-INF/classes timestamp."
+      log_info "Run 'sudo -v' then retry."
+      echo "__JWEBGEN_EVENT__ deploy_sudo_required" >&2
+      exit 1
+    fi
+  else
+    log_warn "No WEB-INF/web.xml or WEB-INF/classes under deployed app; Tomcat may not reload until you add one or restart the server."
+  fi
+  if [[ -f "$DEST_DIR/META-INF/context.xml" ]]; then
+    if ! run_privileged touch "$DEST_DIR/META-INF/context.xml"; then
       log_error "Unable to refresh Tomcat context metadata."
       log_info "Run 'sudo -v' then retry."
       echo "__JWEBGEN_EVENT__ deploy_sudo_required" >&2
@@ -315,13 +332,27 @@ if [[ "$CLEANUP_DEV_MODE" = "1" ]]; then
 fi
 current_size="$(stat -c '%s' "$WAR_FILE" 2>/dev/null || echo 0)"
 deployed_size="$(stat -c '%s' "$DEPLOY_DIR/$APP_NAME.war" 2>/dev/null || echo -1)"
+war_unchanged=0
 if [[ "$current_size" != "0" && "$current_size" = "$deployed_size" ]]; then
+  war_unchanged=1
   echo "WAR unchanged; keeping existing artifact copy."
-elif ! run_privileged cp "$WAR_FILE" "$DEPLOY_DIR/$APP_NAME.war"; then
-  echo "Permissions insuffisantes pour copier le WAR."
-  echo "Lance 'sudo -v' puis relance."
-  echo "__JWEBGEN_EVENT__ deploy_sudo_required" >&2
-  exit 1
+fi
+
+if [[ "$war_unchanged" = "1" && "\${JWEBGEN_FORCE_WILDFLY_REDEPLOY:-0}" != "1" ]]; then
+  echo "WildFly: skipped redeploy (set JWEBGEN_FORCE_WILDFLY_REDEPLOY=1 to force)."
+  echo "Deployed (WildFly): http://localhost:8080/$APP_NAME/"
+  exit 0
+fi
+
+if [[ "$war_unchanged" = "0" ]]; then
+  if ! run_privileged cp "$WAR_FILE" "$DEPLOY_DIR/$APP_NAME.war"; then
+    echo "Permissions insuffisantes pour copier le WAR."
+    echo "Lance 'sudo -v' puis relance."
+    echo "__JWEBGEN_EVENT__ deploy_sudo_required" >&2
+    exit 1
+  fi
+else
+  echo "WAR unchanged but force redeploy requested (JWEBGEN_FORCE_WILDFLY_REDEPLOY=1)."
 fi
 
 run_privileged touch "$DEPLOY_DIR/$APP_NAME.war.dodeploy" || true

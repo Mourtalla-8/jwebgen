@@ -198,28 +198,36 @@ function listenOnce(server, port, host) {
 async function startProxyServer() {
   let candidate = preferredProxyPort;
   for (let tries = 0; tries < 60; tries++) {
-    try {
-      await listenOnce(proxy, candidate, '127.0.0.1');
+    let bound = false;
+    for (let stall = 0; stall < 14; stall++) {
+      try {
+        await listenOnce(proxy, candidate, '127.0.0.1');
+        bound = true;
+        break;
+      } catch (err) {
+        if (err?.code !== 'EADDRINUSE') {
+          console.error('[jwebgen] Proxy server error:', err);
+          process.exit(1);
+        }
+        await new Promise((r) => setTimeout(r, 70 + stall * 45));
+      }
+    }
+    if (bound) {
       proxyPort = candidate;
       state.proxyPort = proxyPort;
       syncPublicUrls();
       saveState();
       return;
-    } catch (err) {
-      if (err?.code !== 'EADDRINUSE') {
-        console.error('[jwebgen] Proxy server error:', err);
-        process.exit(1);
-      }
-      const owner = await portOwner(candidate);
-      emit('proxy_port_busy', { port: candidate, owner: owner || '' });
-      const next = await findFreePort(candidate + 1);
-      if (!next) {
-        console.error('[jwebgen] Proxy server error: no free port for fallback');
-        process.exit(1);
-      }
-      emit('proxy_port_fallback', { fromPort: candidate, toPort: next });
-      candidate = next;
     }
+    const owner = await portOwner(candidate);
+    emit('proxy_port_busy', { port: candidate, owner: owner || '' });
+    const next = await findFreePort(candidate + 1);
+    if (!next) {
+      console.error('[jwebgen] Proxy server error: no free port for fallback');
+      process.exit(1);
+    }
+    emit('proxy_port_fallback', { fromPort: candidate, toPort: next });
+    candidate = next;
   }
   console.error('[jwebgen] Proxy server error: could not bind after retries');
   process.exit(1);
@@ -317,6 +325,10 @@ async function rebuild() {
   }
 }
 function queueRebuild() {
+  if (running) {
+    queued = true;
+    return;
+  }
   const now = Date.now();
   // Protect against very bursty editor writes (tmp swap, multi-write saves).
   if (now - lastBuildQueuedAt < 200) return;
@@ -326,6 +338,12 @@ function queueRebuild() {
 }
 function isDir(p) { try { return statSync(p).isDirectory(); } catch { return false; } }
 const watched = new Map();
+const srcDirPrefix = path.join(root, 'src') + path.sep;
+function isUnderSrc(fullPath) {
+  const norm = fullPath.replace(/\\\\/g, '/');
+  const pref = srcDirPrefix.replace(/\\\\/g, '/');
+  return norm === pref.slice(0, -1) || norm.startsWith(pref);
+}
 const RELOAD_RELEVANT_EXT = new Set([
   '.java', '.jsp', '.jspx', '.tag', '.tagx',
   '.html', '.xhtml', '.css', '.js', '.mjs',
@@ -337,11 +355,11 @@ function shouldTriggerRebuild(dir, fileName) {
   if (name.endsWith('.swp') || name.endsWith('.tmp') || name.endsWith('~') || name.endsWith('.war')) return false;
   const full = path.join(dir, name);
   if (full.includes('/target/')) return false;
+  if (name === 'pom.xml') return full === path.join(root, 'pom.xml');
+  if (name === 'web.xml' || name === 'context.xml') return isUnderSrc(full);
   const ext = path.extname(name).toLowerCase();
-  if (RELOAD_RELEVANT_EXT.has(ext)) return true;
-  if (name === 'pom.xml') return true;
-  if (name === 'web.xml' || name === 'context.xml') return true;
-  return false;
+  if (!RELOAD_RELEVANT_EXT.has(ext)) return false;
+  return isUnderSrc(full);
 }
 function walkAndWatch(dir) {
   if (!isDir(dir)) return;

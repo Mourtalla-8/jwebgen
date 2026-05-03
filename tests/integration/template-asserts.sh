@@ -25,6 +25,7 @@ assertContains(watch, '"$UI_PAUSE_FILE" "$$"', 'watch worker/dashboard parent pi
 assertContains(watch, '[i]nspect / [x]kill port / [f]refresh / [a]help / [q]uit', 'watch staged kill options');
 assertContains(watch, '[r]edeploy+restart / [i]nspect / [f]refresh / [a]help / [q]uit', 'watch wildfly http000 restart-first options');
 assertContains(watch, 'wait_for_worker_cycle()', 'watch redeploy state-based wait');
+assertContains(watch, 'JWEBGEN_WORKER_RESTART_GRACE_MS', 'watch worker restart grace');
 assertContains(watch, 'Deployment failed. [f]refresh / [a]help / [q]uit', 'watch deploy remediation options');
 assertContains(watch, "Option is not available in this menu.", 'watch strict key parser');
 if (String(watch).includes('[r]etester')) {
@@ -40,12 +41,16 @@ if (String(watch).includes('[s]udo')) {
 const deployTomcat = makeDeployServerScript({ appName: 'appx', serverTarget: 'tomcat' });
 assertContains(deployTomcat, '--cleanup-dev', 'deploy tomcat');
 assertContains(deployTomcat, 'Tomcat dev cleanup', 'deploy tomcat cleanup');
+assertContains(deployTomcat, 'WEB-INF/web.xml', 'deploy tomcat web.xml reload hint');
+assertContains(deployTomcat, 'Unable to refresh Tomcat deployment descriptor (WEB-INF/web.xml).', 'deploy tomcat strict web.xml refresh');
 assertContains(deployTomcat, 'Unable to refresh Tomcat context metadata.', 'deploy tomcat strict context refresh');
 
 const deployWildfly = makeDeployServerScript({ appName: 'appx', serverTarget: 'wildfly' });
 assertContains(deployWildfly, '--cleanup-dev', 'deploy wildfly');
 assertContains(deployWildfly, 'WildFly dev cleanup', 'deploy wildfly cleanup');
 assertContains(deployWildfly, 'JWEBGEN_WILDFLY_DEPLOY_TIMEOUT', 'deploy wildfly timeout override');
+assertContains(deployWildfly, 'JWEBGEN_FORCE_WILDFLY_REDEPLOY', 'deploy wildfly force redeploy env');
+assertContains(deployWildfly, 'skipped redeploy', 'deploy wildfly skip dodeploy when unchanged');
 
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'createProxyServer', 'worker contains dev proxy server');
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, '/.jwebgen/live-reload.js', 'worker serves live-reload asset');
