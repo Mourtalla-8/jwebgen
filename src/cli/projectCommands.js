@@ -94,10 +94,15 @@ export async function showStatus({ findProjectRoot }) {
     return;
   }
 
-  const wildflyHome = String(process.env.WILDFLY_HOME || cfg.WILDFLY_HOME || '/opt/wildfly').trim();
+  const defaultWildflyHome = process.platform === 'win32' ? '' : '/opt/wildfly';
+  const wildflyHome = String(process.env.WILDFLY_HOME || cfg.WILDFLY_HOME || defaultWildflyHome).trim();
   const deployments = String(
-    process.env.WILDFLY_DEPLOYMENTS || cfg.WILDFLY_DEPLOYMENTS || path.join(wildflyHome, 'standalone', 'deployments')
+    process.env.WILDFLY_DEPLOYMENTS || cfg.WILDFLY_DEPLOYMENTS || (wildflyHome ? path.join(wildflyHome, 'standalone', 'deployments') : '')
   ).trim();
+  if (!deployments) {
+    console.log(pc.yellow('Deployment: unknown (configure WILDFLY_DEPLOYMENTS or WILDFLY_HOME in env/.jwebgenrc)'));
+    return;
+  }
   const deployed = path.join(deployments, `${appName}.war`);
   if (existsSync(deployed)) {
     console.log(pc.green('Deployment: present'));

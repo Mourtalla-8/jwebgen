@@ -102,7 +102,7 @@ function parseExports(text) {
     if (!m) continue;
     const key = m[1];
     let value = m[2].trim();
-    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith('\\'') && value.endsWith('\\''))) {
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
       value = value.slice(1, -1);
     }
     env[key] = value;
@@ -126,10 +126,14 @@ async function readMavenAppName() {
   if (!existsSync(pomPath)) return path.basename(rootDir);
   try {
     const xml = await readFile(pomPath, 'utf8');
-    const fm = xml.match(/<finalName>\\s*([^<]+?)\\s*<\\/finalName>/);
-    if (fm?.[1]) return fm[1].trim();
     const noParent = xml.replace(/<parent>[\\s\\S]*?<\\/parent>/gi, '');
-    const am = noParent.match(/<artifactId>\\s*([^<]+?)\\s*<\\/artifactId>/);
+    const noProfiles = noParent.replace(/<profiles>[\\s\\S]*?<\\/profiles>/gi, '');
+    const buildBlock = noProfiles.match(/<build>\\s*([\\s\\S]*?)<\\/build>/i);
+    if (buildBlock?.[1]) {
+      const fm = buildBlock[1].match(/<finalName>\\s*([^<]+?)\\s*<\\/finalName>/i);
+      if (fm?.[1]) return fm[1].trim();
+    }
+    const am = noProfiles.match(/<artifactId>\\s*([^<]+?)\\s*<\\/artifactId>/);
     if (am?.[1]) return am[1].trim();
   } catch {
     /* ignore */
@@ -155,7 +159,13 @@ function selectWarFile({ targetDir, appName, wars }) {
   const preferred = path.join(targetDir, appName + '.war');
   if (existsSync(preferred)) return preferred;
   if (wars.length === 1) return path.join(targetDir, wars[0]);
-  return wars[wars.length - 1] ? path.join(targetDir, wars[wars.length - 1]) : '';
+  if (wars.length > 1) {
+    const candidates = wars.join(', ');
+    throw new Error(
+      'Multiple WAR files found in target/ without exact match for appName "' + appName + '": ' + candidates
+    );
+  }
+  return '';
 }
 
 async function deployTomcat({ cfg, cleanupOnly, appName }) {
@@ -214,8 +224,17 @@ async function deployTomcat({ cfg, cleanupOnly, appName }) {
 }
 
 async function deployWildfly({ cfg, cleanupOnly, appName }) {
-  const wildflyHome = String(process.env.WILDFLY_HOME || cfg.WILDFLY_HOME || '/opt/wildfly').trim();
-  const deployments = String(process.env.WILDFLY_DEPLOYMENTS || cfg.WILDFLY_DEPLOYMENTS || path.join(wildflyHome, 'standalone', 'deployments')).trim();
+  const defaultWildflyHome = process.platform === 'win32' ? '' : '/opt/wildfly';
+  const wildflyHome = String(process.env.WILDFLY_HOME || cfg.WILDFLY_HOME || defaultWildflyHome).trim();
+  const deployments = String(
+    process.env.WILDFLY_DEPLOYMENTS || cfg.WILDFLY_DEPLOYMENTS || (wildflyHome ? path.join(wildflyHome, 'standalone', 'deployments') : '')
+  ).trim();
+  const resolvedDeployments = deployments ? path.resolve(deployments) : '';
+  const rootPath = resolvedDeployments ? path.parse(resolvedDeployments).root : '';
+  if (!resolvedDeployments || resolvedDeployments === rootPath) {
+    console.error('WildFly deployments path is not configured. Set WILDFLY_DEPLOYMENTS (or WILDFLY_HOME) in env/.jwebgenrc.');
+    process.exit(1);
+  }
   const destWar = path.join(deployments, appName + '.war');
 
   await ensureDir(deployments);
