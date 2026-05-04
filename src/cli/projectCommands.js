@@ -15,6 +15,15 @@ export function resolveStatusHttpPort(cfg = {}) {
   return '8080';
 }
 
+/** Map `pgrep` exit codes to running / not running / unknown (for tests and parity with BSD pgrep). */
+export function serverRunningFromPgrepResult(result) {
+  const code = result.exitCode;
+  if (code === 0) return true;
+  if (code === 1) return false;
+  if (String(result.stderr || '').trim()) return null;
+  return null;
+}
+
 async function probeServerRuntime(serverTarget) {
   if (process.platform === 'win32') {
     const pattern =
@@ -46,10 +55,7 @@ async function probeServerRuntime(serverTarget) {
   try {
     const pattern = serverTarget === 'tomcat' ? 'tomcat' : 'standalone.sh|org.jboss.as.standalone';
     const result = await execa('pgrep', ['-f', pattern], { timeout: 2000, reject: false });
-    if (result.exitCode === 0) return true;
-    if (result.exitCode === 1) return false;
-    if (String(result.stderr || '').trim()) return null;
-    return null;
+    return serverRunningFromPgrepResult(result);
   } catch {
     return null;
   }
