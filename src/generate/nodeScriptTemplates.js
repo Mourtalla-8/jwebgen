@@ -430,7 +430,7 @@ await writeFile(dashboardScript, DEV_DASHBOARD_SCRIPT_TEMPLATE, 'utf8');
 
 const env = { ...process.env, JWEBGEN_DEV: '1', JWEBGEN_SERVER_TARGET: target };
 const worker = spawn(process.execPath, [workerScript, stateFile, eventsFile, pauseFile, String(process.pid)], { cwd: workDir, env, stdio: 'inherit' });
-const dash = spawn(process.execPath, [dashboardScript, stateFile, pauseFile, String(process.pid)], { cwd: workDir, env, stdio: 'ignore' });
+const dash = spawn(process.execPath, [dashboardScript, stateFile, pauseFile, String(process.pid)], { cwd: workDir, env, stdio: ['ignore', 'inherit', 'inherit'] });
 
 const shutdown = () => {
   try { worker.kill('SIGTERM'); } catch {}

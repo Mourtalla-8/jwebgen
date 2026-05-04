@@ -78,6 +78,7 @@ assertContains(nodeDev, 'DEV_WORKER_SCRIPT_TEMPLATE', 'dev.mjs embeds worker tem
 assertContains(nodeDev, '.jwebgen-worker.mjs', 'dev.mjs writes worker script');
 assertContains(nodeDev, '.jwebgen-dashboard.mjs', 'dev.mjs writes dashboard script');
 assertContains(nodeDev, 'Select server target for dev', 'dev.mjs prompts target when unset');
+assertContains(nodeDev, 'persistServerTarget', 'dev.mjs persists chosen server target');
 const nodeWatch = makeNodeWatchScript();
 assertContains(nodeWatch, 'dev.mjs', 'watch.mjs reuses dev.mjs runtime');
 
