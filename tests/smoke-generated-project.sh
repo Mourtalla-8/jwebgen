@@ -30,8 +30,15 @@ mkdir -p "$FAKE_TOMCAT/webapps/smokeapp"
 touch "$FAKE_TOMCAT/webapps/smokeapp/.jwebgen-smoke"
 
 echo "[smoke] jwebgen --status (expect configured target + port in URL)"
-OUT="$(cd "$TMP_ROOT/smokeapp" && TOMCAT_HOME="$FAKE_TOMCAT" node "$ROOT_DIR/bin/jwebgen.js" --status 2>&1)" || true
+set +e
+OUT="$(cd "$TMP_ROOT/smokeapp" && TOMCAT_HOME="$FAKE_TOMCAT" node "$ROOT_DIR/bin/jwebgen.js" --status 2>&1)"
+status_out=$?
+set -e
 echo "$OUT"
+if [ "$status_out" -ne 0 ]; then
+  echo "FAIL: jwebgen --status exited with code $status_out (output above)" >&2
+  exit "$status_out"
+fi
 echo "$OUT" | grep -q 'Server: tomcat' || fail "status should show tomcat target"
 echo "$OUT" | grep -q 'http://localhost:8099/' || fail "status URL should use JWEBGEN_HTTP_PORT"
 
