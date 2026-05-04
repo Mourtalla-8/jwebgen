@@ -4,6 +4,22 @@ All notable changes to this project should be documented in this file.
 
 This project follows Semantic Versioning.
 
+## [2.2.1] - 2026-05-04
+
+### Changed (generated projects)
+
+- **Dev worker:** `build`/`deploy` steps prefer `*.mjs` when present; Tomcat engine checks use `systemctl` on Linux only (no `bash`); non-Linux hosts skip `systemctl` and rely on HTTP / port diagnostics.
+- **Deploy (Node):** Tomcat and WildFly Linux convenience defaults apply only on `process.platform === 'linux'`; WildFly deploy uses a resolved deployments directory for `mkdir` and WAR paths.
+
+### Changed (CLI)
+
+- **`--status`:** Application URLs honor `JWEBGEN_HTTP_PORT` (env, then `.jwebgen/.jwebgenrc`) instead of always `8080`; server running/stopped uses `pgrep` on Unix and a Java command-line probe on Windows where possible.
+- **Defaults:** Tomcat/WildFly implicit path hints match deploy scripts (Linux-only defaults; macOS/Windows require explicit `TOMCAT_HOME` / `WILDFLY_HOME` or deployments path).
+
+### Changed (tooling)
+
+- **CI:** macOS and Windows run golden fixture checks, template assertions, and `node --check` on generated `*.mjs` entrypoints in addition to lint and unit tests.
+
 ## [2.2.0] - 2026-05-04
 
 ### Changed (generated projects)

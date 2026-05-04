@@ -6,6 +6,52 @@ import { execa } from 'execa';
 import { jwebgenConfigPath, jwebgenMetaDir, jwebgenScriptsDir } from '../project/jwebgenLayout.js';
 import { readJwebgenExports } from '../project/jwebgenRc.js';
 
+/** Effective HTTP app port for status URLs (matches deploy/dev tooling). */
+export function resolveStatusHttpPort(cfg = {}) {
+  const fromEnv = String(process.env.JWEBGEN_HTTP_PORT || '').trim();
+  if (fromEnv) return fromEnv;
+  const fromCfg = String(cfg.JWEBGEN_HTTP_PORT || '').trim();
+  if (fromCfg) return fromCfg;
+  return '8080';
+}
+
+async function probeServerRuntime(serverTarget) {
+  if (process.platform === 'win32') {
+    const pattern =
+      serverTarget === 'tomcat'
+        ? /tomcat|catalina\.startup|bootstrap\.jar/i
+        : /wildfly|jboss\.modules|standalone|jboss\.home/i;
+    try {
+      const { stdout, exitCode } = await execa(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-NoLogo',
+          '-NonInteractive',
+          '-ExecutionPolicy',
+          'Bypass',
+          '-Command',
+          'Get-CimInstance Win32_Process | Where-Object { $_.Name -eq "java.exe" } | ForEach-Object { $_.CommandLine }'
+        ],
+        { timeout: 12000, windowsHide: true, reject: false }
+      );
+      if (exitCode !== 0 && !stdout) return null;
+      const text = String(stdout || '');
+      if (!text.trim()) return false;
+      return pattern.test(text);
+    } catch {
+      return null;
+    }
+  }
+  try {
+    const pattern = serverTarget === 'tomcat' ? 'tomcat' : 'standalone.sh|org.jboss.as.standalone';
+    const { stdout } = await execa('pgrep', ['-f', pattern], { timeout: 2000 });
+    return Boolean(stdout.trim());
+  } catch {
+    return null;
+  }
+}
+
 export async function runClean({ findProjectRoot }) {
   const projectRoot = findProjectRoot();
   if (!projectRoot) {
@@ -52,32 +98,28 @@ export async function showStatus({ findProjectRoot }) {
     return;
   }
 
-  try {
-    if (serverTarget === 'tomcat') {
-      const { stdout } = await execa('pgrep', ['-f', 'tomcat'], { timeout: 2000 });
-      if (stdout.trim()) {
-        console.log(pc.green('Tomcat: running'));
-      } else {
-        console.log(pc.yellow('Tomcat: stopped'));
-        console.log(pc.yellow('To start Tomcat: sudo systemctl start tomcat10 (or equivalent)'));
-      }
+  const running = await probeServerRuntime(serverTarget);
+  if (running === null) {
+    console.log(pc.yellow('Server: unknown status (process probe unavailable)'));
+  } else if (serverTarget === 'tomcat') {
+    if (running) {
+      console.log(pc.green('Tomcat: running'));
     } else {
-      const { stdout } = await execa('pgrep', ['-f', 'standalone.sh|org.jboss.as.standalone'], { timeout: 2000 });
-      if (stdout.trim()) {
-        console.log(pc.green('WildFly: running'));
-      } else {
-        console.log(pc.yellow('WildFly: stopped'));
-        console.log(pc.yellow('To start WildFly: systemctl start wildfly (if configured) or standalone.sh'));
-      }
+      console.log(pc.yellow('Tomcat: stopped'));
+      console.log(pc.yellow('To start Tomcat: sudo systemctl start tomcat10 (or equivalent)'));
     }
-  } catch {
-    console.log(pc.yellow('Server: unknown status (pgrep unavailable)'));
+  } else if (running) {
+    console.log(pc.green('WildFly: running'));
+  } else {
+    console.log(pc.yellow('WildFly: stopped'));
+    console.log(pc.yellow('To start WildFly: systemctl start wildfly (if configured) or standalone.sh'));
   }
 
   const appName = await readAppNameFromPom(projectRoot, path.basename(projectRoot));
+  const statusPort = resolveStatusHttpPort(cfg);
   if (serverTarget === 'tomcat') {
     const tomcatHome = String(process.env.TOMCAT_HOME || process.env.TOMCAT10 || cfg.TOMCAT_HOME || cfg.TOMCAT10 || '').trim();
-    const defaultHome = process.platform === 'win32' ? '' : '/var/lib/tomcat10';
+    const defaultHome = process.platform === 'linux' ? '/var/lib/tomcat10' : '';
     const home = tomcatHome || defaultHome;
     if (!home) {
       console.log(pc.yellow('Deployment: unknown (configure TOMCAT_HOME or .jwebgen/.jwebgenrc)'));
@@ -87,14 +129,14 @@ export async function showStatus({ findProjectRoot }) {
     const explodedPath = path.join(home, 'webapps', appName);
     if (existsSync(warPath) || existsSync(explodedPath)) {
       console.log(pc.green('Deployment: present'));
-      console.log(pc.cyan(`URL : http://localhost:8080/${appName}/`));
+      console.log(pc.cyan(`URL : http://localhost:${statusPort}/${appName}/`));
     } else {
       console.log(pc.yellow('Deployment: absent'));
     }
     return;
   }
 
-  const defaultWildflyHome = process.platform === 'win32' ? '' : '/opt/wildfly';
+  const defaultWildflyHome = process.platform === 'linux' ? '/opt/wildfly' : '';
   const wildflyHome = String(process.env.WILDFLY_HOME || cfg.WILDFLY_HOME || defaultWildflyHome).trim();
   const deployments = String(
     process.env.WILDFLY_DEPLOYMENTS || cfg.WILDFLY_DEPLOYMENTS || (wildflyHome ? path.join(wildflyHome, 'standalone', 'deployments') : '')
@@ -106,7 +148,7 @@ export async function showStatus({ findProjectRoot }) {
   const deployed = path.join(deployments, `${appName}.war`);
   if (existsSync(deployed)) {
     console.log(pc.green('Deployment: present'));
-    console.log(pc.cyan(`URL : http://localhost:8080/${appName}/`));
+    console.log(pc.cyan(`URL : http://localhost:${statusPort}/${appName}/`));
   } else {
     console.log(pc.yellow('Deployment: absent'));
   }

@@ -6,10 +6,10 @@ CLI generator for Java web projects (Servlet/JSP) with helper scripts for build,
 
 ### Prerequisites
 
-- Node.js 20.12+ (required to run the `jwebgen` CLI)
+- Node.js 20.12+ (required to run the `jwebgen` CLI and the generated `*.mjs` scripts)
 - Java JDK 11+
 - Maven
-- Linux is the primary supported runtime for generated deploy/dev scripts (systemd-based flow)
+- Tier-1 targets: Linux, macOS, and Windows — generated projects use **Node-first** scripts (`build.mjs`, `deploy.mjs`, `dev.mjs`, `watch.mjs`); optional `.sh` files remain convenience wrappers where applicable
 
 ### Install globally from source
 
@@ -87,8 +87,8 @@ If Tomcat, WildFly, or another HTTP service is active on port `8080` at the same
 
 ## Machine compatibility
 
-- Official target: Linux with systemd (best support for generated deploy/dev scripts).
-- Best effort: macOS/Windows when manually adapting server setup and path conventions.
+- **Tier-1:** Linux, macOS, and Windows for CLI + generated Node entrypoints.
+- Set Tomcat/WildFly paths yourself when not using Linux distro defaults (`jwebgen --status` reflects configured paths and `JWEBGEN_HTTP_PORT` for URLs).
 - Minimum toolchain:
   - Node.js 20.12+ for CLI and dev/watch
   - Java JDK 11+

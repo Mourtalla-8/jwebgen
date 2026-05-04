@@ -73,6 +73,8 @@ assertContains(nodeDeploy, 'readMavenAppName', 'deploy.mjs resolves deploy name 
 assertContains(nodeDeploy, 'selectWarFile', 'deploy.mjs selects preferred WAR by app name');
 assertContains(nodeDeploy, 'chooseServerTargetInteractively', 'deploy.mjs prompts target when unset');
 assertContains(nodeDeploy, 'persistServerTarget', 'deploy.mjs persists chosen server target');
+assertContains(nodeDeploy, "process.platform === 'linux' ? '/var/lib/tomcat10' : ''", 'deploy.mjs Linux-only Tomcat default path');
+assertContains(nodeDeploy, "process.platform === 'linux' ? '/opt/wildfly' : ''", 'deploy.mjs Linux-only WildFly default path');
 const nodeDev = makeNodeDevScript();
 assertContains(nodeDev, 'DEV_WORKER_SCRIPT_TEMPLATE', 'dev.mjs embeds worker template');
 assertContains(nodeDev, '.jwebgen-worker.mjs', 'dev.mjs writes worker script');
@@ -85,6 +87,9 @@ assertContains(nodeWatch, 'dev.mjs', 'watch.mjs reuses dev.mjs runtime');
 assertContains(watch, 'xmllint', 'watch resolve_app_name uses structured POM read');
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'createProxyServer', 'worker contains dev proxy server');
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, '/.jwebgen/live-reload.js', 'worker serves live-reload asset');
+assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'spawn(process.execPath, [mjsPath]', 'worker prefers Node .mjs build/deploy when present');
+assertContains(DEV_WORKER_SCRIPT_TEMPLATE, "process.platform !== 'linux'", 'worker skips systemctl when not Linux');
+assertContains(DEV_WORKER_SCRIPT_TEMPLATE, "spawn('systemctl', ['is-active', '--quiet', serverUnit]", 'worker uses systemctl on Linux without bash');
 
 const client = makeLiveReloadClientScript();
 assertContains(client, "searchParams.set('_jwg'", 'devAssets live reload cache-bust refresh');

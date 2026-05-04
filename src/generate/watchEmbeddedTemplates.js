@@ -407,13 +407,21 @@ function walkAndWatch(dir) {
 
 function runScript(script) {
   return new Promise((resolve, reject) => {
-    const p = spawn('./.jwebgen/scripts/' + script, [], { cwd: root, stdio: verbose ? 'inherit' : ['ignore', 'pipe', 'pipe'], shell: false });
+    const scriptsDir = path.join(root, '.jwebgen', 'scripts');
+    const mjsName = script.replace(/\\.sh$/, '.mjs');
+    const mjsPath = path.join(scriptsDir, mjsName);
+    const shPath = path.join(scriptsDir, script);
+    const useNode = existsSync(mjsPath);
+    const p = useNode
+      ? spawn(process.execPath, [mjsPath], { cwd: root, stdio: verbose ? 'inherit' : ['ignore', 'pipe', 'pipe'], shell: false })
+      : spawn(shPath, [], { cwd: root, stdio: verbose ? 'inherit' : ['ignore', 'pipe', 'pipe'], shell: false });
     let logs = '';
     if (!verbose) {
       p.stdout?.on('data', (c) => { logs += String(c); if (logs.length > 20000) logs = logs.slice(-20000); });
       p.stderr?.on('data', (c) => { logs += String(c); if (logs.length > 20000) logs = logs.slice(-20000); });
     }
-    p.on('exit', (code) => code === 0 ? resolve() : reject(new Error((logs || script + ' failed').trim())));
+    p.on('error', (err) => reject(err));
+    p.on('exit', (code) => (code === 0 ? resolve() : reject(new Error((logs || script + ' failed').trim()))));
   });
 }
 function serverUp() {
@@ -444,7 +452,12 @@ function serverUp() {
         mgmtReq.end();
         return;
       }
-      const p = spawn('bash', ['-lc', 'systemctl is-active --quiet ' + serverUnit + ' 2>/dev/null'], { stdio: 'ignore' });
+      if (process.platform !== 'linux') {
+        checkPortOwner();
+        return;
+      }
+      const p = spawn('systemctl', ['is-active', '--quiet', serverUnit], { stdio: 'ignore' });
+      p.on('error', () => checkPortOwner());
       p.on('exit', (code) => {
         if (code === 0) return resolve({ ok: true, status: 'app_down' });
         checkPortOwner();
