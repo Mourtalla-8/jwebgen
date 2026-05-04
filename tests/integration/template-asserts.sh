@@ -6,7 +6,7 @@ cd "$ROOT_DIR"
 
 node --input-type=module <<'EOF'
 import { makeWatchScript } from './src/generate/watchTemplate.js';
-import { makeDeployServerScript } from './src/generate/deployTemplates.js';
+import { makeDeployServerScript, makeDeploySelectorScript } from './src/generate/deployTemplates.js';
 import { makeLiveReloadSnippet, makeAddServletScript, makeLiveReloadClientScript } from './src/generate/devAssets.js';
 import { makeNodeBuildScript, makeNodeDeployScript, makeNodeDevScript, makeNodeWatchScript } from './src/generate/scriptTemplates.js';
 import { helloServlet, indexJsp } from './src/templates.js';
@@ -56,14 +56,23 @@ assertContains(deployWildfly, 'skipped redeploy', 'deploy wildfly skip dodeploy 
 assertContains(deployWildfly, 'cmp -s', 'deploy wildfly WAR identity via cmp not size-only');
 assertContains(deployWildfly, 'DEPLOY_HTTP_OK', 'deploy wildfly HTTP probe short-circuits marker failure');
 assertContains(deployWildfly, 'wildfly_cleanup_artifacts_remain', 'deploy wildfly cleanup checks all marker files');
+const deploySelector = makeDeploySelectorScript();
+assertContains(deploySelector, 'Select server target for deployment', 'deploy selector prompts target when unset');
+assertContains(deploySelector, 'JWEBGEN_SERVER_TARGET', 'deploy selector persists chosen target');
 
 const nodeBuild = makeNodeBuildScript();
 assertContains(nodeBuild, '#!/usr/bin/env node', 'build.mjs shebang');
 assertContains(nodeBuild, 'mavenExecutable', 'build.mjs selects maven executable per OS');
 assertContains(nodeBuild, 'mvn.cmd', 'build.mjs handles Windows mvn.cmd');
 assertContains(nodeBuild, "from 'node:child_process'", 'build.mjs imports child_process');
+assertContains(nodeBuild, 'cmd.exe', 'build.mjs run helper supports Windows wrappers');
 const nodeDeploy = makeNodeDeployScript();
-assertContains(nodeDeploy, 'deploy.sh', 'deploy.mjs delegates to deploy.sh');
+assertContains(nodeDeploy, 'deployTomcat', 'deploy.mjs contains tomcat deploy adapter');
+assertContains(nodeDeploy, 'deployWildfly', 'deploy.mjs contains wildfly deploy adapter');
+assertContains(nodeDeploy, 'readMavenAppName', 'deploy.mjs resolves deploy name from pom.xml');
+assertContains(nodeDeploy, 'selectWarFile', 'deploy.mjs selects preferred WAR by app name');
+assertContains(nodeDeploy, 'chooseServerTargetInteractively', 'deploy.mjs prompts target when unset');
+assertContains(nodeDeploy, 'persistServerTarget', 'deploy.mjs persists chosen server target');
 const nodeDev = makeNodeDevScript();
 assertContains(nodeDev, 'dev.sh', 'dev.mjs delegates to dev.sh');
 const nodeWatch = makeNodeWatchScript();
