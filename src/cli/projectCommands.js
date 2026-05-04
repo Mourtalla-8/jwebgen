@@ -249,17 +249,19 @@ async function readAppNameFromPom(projectRoot, fallback) {
     const pom = await readFile(pomPath, 'utf8');
     // Remove the <parent>...</parent> block to avoid picking up parent artifactId
     const pomWithoutParent = pom.replace(/<parent>\s*[\s\S]*?<\/parent>/gi, '');
+    // Drop <profiles> so build/finalName in a profile is not mistaken for the main <build>
+    const pomForBuild = pomWithoutParent.replace(/<profiles>\s*[\s\S]*?<\/profiles>/gi, '');
 
-    // First try to find finalName within the <build> block
-    const buildBlockMatch = pomWithoutParent.match(/<build>\s*([\s\S]*?)<\/build>/i);
+    // First try to find finalName within the top-level <build> block
+    const buildBlockMatch = pomForBuild.match(/<build>\s*([\s\S]*?)<\/build>/i);
     if (buildBlockMatch?.[1]) {
       const buildContent = buildBlockMatch[1];
       const finalNameMatch = buildContent.match(/<finalName>\s*([^<\s][^<]*)\s*<\/finalName>/i);
       if (finalNameMatch?.[1]) return String(finalNameMatch[1]).trim();
     }
 
-    // Fallback to project artifactId (with parent block already removed)
-    const artifactMatch = pomWithoutParent.match(/<artifactId>\s*([^<\s][^<]*)\s*<\/artifactId>/i);
+    // Fallback to project artifactId (parent + profiles stripped)
+    const artifactMatch = pomForBuild.match(/<artifactId>\s*([^<\s][^<]*)\s*<\/artifactId>/i);
     if (artifactMatch?.[1]) return String(artifactMatch[1]).trim();
   } catch {
     return fallback;

@@ -64,7 +64,7 @@ export function makeLiveReloadSnippet() {
             console.log('[LiveReload] Reloading page...');
             try {
               var u = new URL(window.location.href);
-              u.searchParams.set('_jwg', String(Date.now()));
+              u.searchParams.set('_jwg', String((typeof performance !== 'undefined' && performance.now) ? performance.now() : Math.random()));
               window.location.replace(u.toString());
             } catch (e) {
               window.location.reload();
@@ -121,7 +121,7 @@ export function makeLiveReloadClientScript() {
           console.log('[LiveReload] Reloading page...');
           try {
             var u = new URL(window.location.href);
-            u.searchParams.set('_jwg', String(Date.now()));
+            u.searchParams.set('_jwg', String((typeof performance !== 'undefined' && performance.now) ? performance.now() : Math.random()));
             window.location.replace(u.toString());
           } catch (e) {
             window.location.reload();

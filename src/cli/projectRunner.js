@@ -69,6 +69,13 @@ export async function runProjectScript(scriptName, args = [], options = {}, deps
       throw error;
     }
     console.error(pc.red(`${scriptName} failed: ${msg}`));
+    const rawOut = [error?.stderr, error?.stdout, error?.all]
+      .filter((chunk) => chunk != null && String(chunk).trim() !== '')
+      .map((chunk) => String(chunk));
+    if (rawOut.length) {
+      const combined = rawOut.join('\n');
+      if (combined !== msg) console.error(combined);
+    }
     error.jwebgenHandled = true;
     throw error;
   }

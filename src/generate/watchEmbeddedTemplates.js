@@ -118,7 +118,8 @@ function createProxyServer() {
     const url = String(req.url || '/');
     if (url.startsWith('/.jwebgen/live-reload.js')) return serveProxyClient(res);
     // Pass-through proxy to local server, injecting only for HTML.
-    const upstreamHeaders = { ...req.headers, host: '127.0.0.1:' + httpPort };
+    const upstreamHeaders = { ...req.headers };
+    upstreamHeaders.host = req.headers.host || upstreamHeaders.host;
     upstreamHeaders['accept-encoding'] = 'identity';
     const upstream = http.request(
       {

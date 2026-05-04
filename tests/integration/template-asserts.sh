@@ -64,6 +64,13 @@ assertContains(DEV_WORKER_SCRIPT_TEMPLATE, '/.jwebgen/live-reload.js', 'worker s
 const client = makeLiveReloadClientScript();
 assertContains(client, "searchParams.set('_jwg'", 'devAssets live reload cache-bust refresh');
 assertContains(client, 'livePorts', 'devAssets live reload client fallback ports');
+assertContains(client, 'location.reload(', 'devAssets live reload reload fallback');
+if (String(client).includes('Date.now(')) {
+  throw new Error('unexpected legacy Date.now cache-bust in live reload client');
+}
+if (String(client).includes('_lr')) {
+  throw new Error('unexpected legacy _lr token in live reload client');
+}
 
 const addServlet = makeAddServletScript({ basePackage: 'com.ex', appName: 'jwebgen' });
 assertContains(addServlet, 'jwebgen --build', 'add-servlet next steps build command');
