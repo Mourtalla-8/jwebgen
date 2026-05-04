@@ -74,9 +74,12 @@ assertContains(nodeDeploy, 'selectWarFile', 'deploy.mjs selects preferred WAR by
 assertContains(nodeDeploy, 'chooseServerTargetInteractively', 'deploy.mjs prompts target when unset');
 assertContains(nodeDeploy, 'persistServerTarget', 'deploy.mjs persists chosen server target');
 const nodeDev = makeNodeDevScript();
-assertContains(nodeDev, 'dev.sh', 'dev.mjs delegates to dev.sh');
+assertContains(nodeDev, 'DEV_WORKER_SCRIPT_TEMPLATE', 'dev.mjs embeds worker template');
+assertContains(nodeDev, '.jwebgen-worker.mjs', 'dev.mjs writes worker script');
+assertContains(nodeDev, '.jwebgen-dashboard.mjs', 'dev.mjs writes dashboard script');
+assertContains(nodeDev, 'Select server target for dev', 'dev.mjs prompts target when unset');
 const nodeWatch = makeNodeWatchScript();
-assertContains(nodeWatch, 'watch.sh', 'watch.mjs delegates to watch.sh');
+assertContains(nodeWatch, 'dev.mjs', 'watch.mjs reuses dev.mjs runtime');
 
 assertContains(watch, 'xmllint', 'watch resolve_app_name uses structured POM read');
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'createProxyServer', 'worker contains dev proxy server');

@@ -1,3 +1,5 @@
+import { DEV_DASHBOARD_SCRIPT_TEMPLATE, DEV_WORKER_SCRIPT_TEMPLATE } from './watchEmbeddedTemplates.js';
+
 function nodeShebang() {
   return '#!/usr/bin/env node';
 }
@@ -342,9 +344,123 @@ if (target === 'tomcat') {
 }
 
 export function makeNodeDevScript() {
-  return `${scriptHeader({ name: 'dev' })}${delegateToBash({ bashName: 'dev.sh' })}`;
+  // Node-first dev entrypoint. Equivalent to running watch.sh with JWEBGEN_DEV=1.
+  // Embed worker/dashboard code so generated projects remain standalone.
+  return `${scriptHeader({ name: 'dev' })}
+import path from 'node:path';
+import { existsSync } from 'node:fs';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { createInterface } from 'node:readline/promises';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const rootDir = path.resolve(__dirname, '../..');
+
+function parseExports(text) {
+  const env = {};
+  for (const rawLine of String(text || '').split(/\\r?\\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) continue;
+    const m = line.match(/^export\\s+([A-Z0-9_]+)=(.*)$/);
+    if (!m) continue;
+    const key = m[1];
+    let value = m[2].trim();
+    if ((value.startsWith('\"') && value.endsWith('\"')) || (value.startsWith(\"'\") && value.endsWith(\"'\"))) {
+      value = value.slice(1, -1);
+    }
+    env[key] = value;
+  }
+  return env;
+}
+
+async function loadProjectConfig() {
+  const cfgPath = path.join(rootDir, '.jwebgen', '.jwebgenrc');
+  if (!existsSync(cfgPath)) return {};
+  try {
+    const raw = await (await import('node:fs/promises')).readFile(cfgPath, 'utf8');
+    return parseExports(raw);
+  } catch {
+    return {};
+  }
+}
+
+async function persistServerTarget(target) {
+  const cfgDir = path.join(rootDir, '.jwebgen');
+  const cfgPath = path.join(cfgDir, '.jwebgenrc');
+  await mkdir(cfgDir, { recursive: true });
+  let raw = '';
+  if (existsSync(cfgPath)) {
+    try { raw = await (await import('node:fs/promises')).readFile(cfgPath, 'utf8'); } catch { raw = ''; }
+  }
+  const line = 'export JWEBGEN_SERVER_TARGET=\"' + target + '\"';
+  const has = /^\\s*export\\s+JWEBGEN_SERVER_TARGET=.*$/m.test(raw);
+  let next = '';
+  if (has) next = raw.replace(/^\\s*export\\s+JWEBGEN_SERVER_TARGET=.*$/m, line);
+  else if (raw.trim().length === 0) next = line + '\\n';
+  else next = raw.endsWith('\\n') ? raw + line + '\\n' : raw + '\\n' + line + '\\n';
+  await writeFile(cfgPath, next, 'utf8');
+}
+
+async function chooseServerTargetInteractively() {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    console.error('Server target is not configured. Run in an interactive terminal to choose tomcat/wildfly,');
+    console.error('or set JWEBGEN_SERVER_TARGET (or .jwebgen/.jwebgenrc) before running dev.');
+    process.exit(1);
+  }
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    console.log('Select server target for dev:');
+    console.log('  1) tomcat');
+    console.log('  2) wildfly');
+    while (true) {
+      const a = String(await rl.question('Choose target [1/2, t/w]: ')).trim().toLowerCase();
+      if (a === '1' || a === 't' || a === 'tomcat') return 'tomcat';
+      if (a === '2' || a === 'w' || a === 'wildfly') return 'wildfly';
+      console.log('Invalid choice. Enter 1 (tomcat) or 2 (wildfly).');
+    }
+  } finally { rl.close(); }
+}
+
+function resolveServerTarget({ cfg }) {
+  const v = String(process.env.JWEBGEN_SERVER_TARGET || cfg.JWEBGEN_SERVER_TARGET || '').trim();
+  if (v === 'tomcat' || v === 'wildfly') return v;
+  return '';
+}
+
+const cfg = await loadProjectConfig();
+let target = resolveServerTarget({ cfg });
+if (!target) { target = await chooseServerTargetInteractively(); await persistServerTarget(target); }
+
+const workDir = rootDir;
+const stateFile = path.join(workDir, '.jwebgen', '.jwebgen-dev-state.json');
+const eventsFile = path.join(workDir, '.jwebgen', '.jwebgen-dev-events.jsonl');
+const pauseFile = path.join(workDir, '.jwebgen', '.jwebgen-ui-pause');
+const workerScript = path.join(workDir, '.jwebgen', '.jwebgen-worker.mjs');
+const dashboardScript = path.join(workDir, '.jwebgen', '.jwebgen-dashboard.mjs');
+
+await mkdir(path.join(workDir, '.jwebgen'), { recursive: true });
+const DEV_WORKER_SCRIPT_TEMPLATE = ${JSON.stringify(DEV_WORKER_SCRIPT_TEMPLATE)};
+const DEV_DASHBOARD_SCRIPT_TEMPLATE = ${JSON.stringify(DEV_DASHBOARD_SCRIPT_TEMPLATE)};
+await writeFile(workerScript, DEV_WORKER_SCRIPT_TEMPLATE, 'utf8');
+await writeFile(dashboardScript, DEV_DASHBOARD_SCRIPT_TEMPLATE, 'utf8');
+
+const env = { ...process.env, JWEBGEN_DEV: '1', JWEBGEN_SERVER_TARGET: target };
+const worker = spawn(process.execPath, [workerScript, stateFile, eventsFile, pauseFile, String(process.pid)], { cwd: workDir, env, stdio: 'inherit' });
+const dash = spawn(process.execPath, [dashboardScript, stateFile, pauseFile, String(process.pid)], { cwd: workDir, env, stdio: 'ignore' });
+
+const shutdown = () => {
+  try { worker.kill('SIGTERM'); } catch {}
+  try { dash.kill('SIGTERM'); } catch {}
+};
+process.on('SIGINT', () => { shutdown(); process.exit(130); });
+process.on('SIGTERM', () => { shutdown(); process.exit(143); });
+worker.on('exit', (code) => { shutdown(); process.exit(code == null ? 1 : code); });
+`;
 }
 
 export function makeNodeWatchScript() {
-  return `${scriptHeader({ name: 'watch' })}${delegateToBash({ bashName: 'watch.sh' })}`;
+  // Node-first watch entrypoint (same runtime as dev, without forcing JWEBGEN_DEV=1).
+  return `${scriptHeader({ name: 'watch' })}\n// This script intentionally reuses dev.mjs implementation.\nimport { fileURLToPath } from 'node:url';\nimport path from 'node:path';\nimport { spawn } from 'node:child_process';\nconst __filename = fileURLToPath(import.meta.url);\nconst __dirname = path.dirname(__filename);\nconst dev = path.join(__dirname, 'dev.mjs');\nconst child = spawn(process.execPath, [dev, ...process.argv.slice(2)], { stdio: 'inherit' });\nchild.on('exit', (code) => process.exit(code == null ? 1 : code));\n`;
 }
