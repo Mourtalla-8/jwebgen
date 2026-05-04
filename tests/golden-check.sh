@@ -6,6 +6,16 @@ cd "$ROOT_DIR"
 
 fail() { echo "FAIL: $1" >&2; exit 1; }
 
+mktemp_mjs() {
+  # GNU mktemp supports --suffix; BSD mktemp (macOS) does not.
+  # Use a template so we still get a .mjs extension.
+  if mktemp --suffix=.mjs >/dev/null 2>&1; then
+    mktemp --suffix=.mjs
+    return 0
+  fi
+  mktemp -t "jwebgen.XXXXXX.mjs"
+}
+
 echo "[golden] ensure fixtures exist (tests/fixtures-current)"
 [[ -d "tests/fixtures-current/tomcat/.jwebgen/scripts" ]] || fail "missing tests/fixtures-current/tomcat/.jwebgen/scripts"
 [[ -d "tests/fixtures-current/wildfly/.jwebgen/scripts" ]] || fail "missing tests/fixtures-current/wildfly/.jwebgen/scripts"
@@ -17,8 +27,8 @@ for env in tomcat wildfly; do
   bash -n "tests/fixtures-current/$env/.jwebgen/scripts/dev.sh"
   bash -n "tests/fixtures-current/$env/.jwebgen/scripts/watch.sh"
 
-  worker_tmp="$(mktemp --suffix=.mjs)"
-  dashboard_tmp="$(mktemp --suffix=.mjs)"
+  worker_tmp="$(mktemp_mjs)"
+  dashboard_tmp="$(mktemp_mjs)"
   awk '
     /cat > "\$WORKER_SCRIPT" <<'\''EOF'\''/ { in_worker=1; next }
     /cat > "\$DASHBOARD_SCRIPT" <<'\''EOF'\''/ { in_worker=0; in_dashboard=1; next }
