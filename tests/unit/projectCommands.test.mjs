@@ -4,7 +4,21 @@ import path from 'node:path';
 import os from 'node:os';
 import { existsSync } from 'node:fs';
 import { mkdtemp, mkdir, writeFile, readFile } from 'node:fs/promises';
-import { runMigrate } from '../../src/cli/projectCommands.js';
+import { resolveStatusHttpPort, runMigrate } from '../../src/cli/projectCommands.js';
+
+test('resolveStatusHttpPort prefers env over config then 8080', () => {
+  const prev = process.env.JWEBGEN_HTTP_PORT;
+  try {
+    process.env.JWEBGEN_HTTP_PORT = '9090';
+    assert.equal(resolveStatusHttpPort({ JWEBGEN_HTTP_PORT: '8081' }), '9090');
+    delete process.env.JWEBGEN_HTTP_PORT;
+    assert.equal(resolveStatusHttpPort({ JWEBGEN_HTTP_PORT: '8081' }), '8081');
+    assert.equal(resolveStatusHttpPort({}), '8080');
+  } finally {
+    if (prev === undefined) delete process.env.JWEBGEN_HTTP_PORT;
+    else process.env.JWEBGEN_HTTP_PORT = prev;
+  }
+});
 
 async function setupProjectRoot(name = 'appx') {
   const tmpRoot = await mkdtemp(path.join(os.tmpdir(), 'jwebgen-migrate-'));

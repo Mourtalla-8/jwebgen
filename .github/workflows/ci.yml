@@ -46,7 +46,20 @@ jobs:
         if: runner.os != 'Linux'
         run: node bin/jwebgen.js --help
 
+      - name: Golden fixtures (macOS/Windows)
+        if: runner.os != 'Linux'
+        run: bash ./tests/golden-check.sh
+
+      - name: Template asserts (macOS/Windows)
+        if: runner.os != 'Linux'
+        run: bash ./tests/integration/template-asserts.sh
+
       - name: CLI new smoke (macOS/Windows)
         if: runner.os != 'Linux'
         run: |
           node -e "const fs=require('node:fs'); const os=require('node:os'); const path=require('node:path'); const cp=require('node:child_process'); const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'jwebgen-smoke-')); cp.execFileSync(process.execPath,[path.join(process.cwd(),'bin','jwebgen.js'),'--new','myapp','--yes'],{cwd:tmp,stdio:'inherit'});"
+
+      - name: Generated Node entrypoints --check (macOS/Windows)
+        if: runner.os != 'Linux'
+        run: |
+          node -e "const fs=require('node:fs'); const os=require('node:os'); const path=require('node:path'); const cp=require('node:child_process'); const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'jwebgen-mjs-')); cp.execFileSync(process.execPath,[path.join(process.cwd(),'bin','jwebgen.js'),'--new','mjsapp','--yes'],{cwd:tmp,stdio:'inherit'}); const d=path.join(tmp,'mjsapp','.jwebgen','scripts'); for (const f of ['build.mjs','deploy.mjs','dev.mjs','watch.mjs']) { cp.execFileSync(process.execPath,['--check',path.join(d,f)],{stdio:'inherit'}); }"
