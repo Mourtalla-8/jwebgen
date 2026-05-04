@@ -31,11 +31,25 @@ resolve_app_name() {
   local pom_file="$ROOT_DIR/pom.xml"
   local value=""
   if [[ -f "$pom_file" ]]; then
-    # First try to find finalName within the <build> block
-    value="$(sed -n '/<build>/,/<\\/build>/{ s:.*<finalName>\\([^<]*\\)</finalName>.*:\\1:p }' "$pom_file" | head -n 1 | tr -d '[:space:]')"
-    if [[ -z "$value" ]]; then
-      # Fallback to artifactId, but skip the <parent> block to avoid picking up parent artifactId
-      value="$(sed '/<parent>/,/<\\/parent>/d' "$pom_file" | sed -n 's:.*<artifactId>\\([^<]*\\)</artifactId>.*:\\1:p' | head -n 1 | tr -d '[:space:]')"
+    if command -v xmllint >/dev/null 2>&1; then
+      value="$(xmllint --noent --xpath 'string(/*[local-name()="project"]/*[local-name()="build"]/*[local-name()="finalName"])' "$pom_file" 2>/dev/null || true)"
+      value="$(printf '%s' "$value" | tr -d '[:space:]')"
+      if [[ -z "$value" ]]; then
+        value="$(xmllint --noent --xpath 'string(/*[local-name()="project"]/*[local-name()="artifactId"])' "$pom_file" 2>/dev/null || true)"
+        value="$(printf '%s' "$value" | tr -d '[:space:]')"
+      fi
+    elif command -v xmlstarlet >/dev/null 2>&1; then
+      value="$(xmlstarlet sel -t -v '/*[local-name()="project"]/*[local-name()="build"]/*[local-name()="finalName"]' "$pom_file" 2>/dev/null || true)"
+      value="$(printf '%s' "$value" | tr -d '[:space:]')"
+      if [[ -z "$value" ]]; then
+        value="$(xmlstarlet sel -t -v '/*[local-name()="project"]/*[local-name()="artifactId"]' "$pom_file" 2>/dev/null || true)"
+        value="$(printf '%s' "$value" | tr -d '[:space:]')"
+      fi
+    else
+      value="$(sed -n '/<build>/,/<\\/build>/{ s:.*<finalName>\\([^<]*\\)</finalName>.*:\\1:p }' "$pom_file" | head -n 1 | tr -d '[:space:]')"
+      if [[ -z "$value" ]]; then
+        value="$(sed '/<parent>/,/<\\/parent>/d' "$pom_file" | sed -n 's:.*<artifactId>\\([^<]*\\)</artifactId>.*:\\1:p' | head -n 1 | tr -d '[:space:]')"
+      fi
     fi
   fi
   if [[ -n "$value" ]]; then

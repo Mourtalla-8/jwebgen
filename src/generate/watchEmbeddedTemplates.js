@@ -175,6 +175,8 @@ function createProxyServer() {
           delete headers['last-modified'];
           delete headers['if-none-match'];
           delete headers['if-modified-since'];
+          delete headers['content-security-policy'];
+          delete headers['content-security-policy-report-only'];
           headers['cache-control'] = 'no-store';
           headers['pragma'] = 'no-cache';
           headers['expires'] = '0';

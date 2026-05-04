@@ -310,7 +310,7 @@ restart_worker() {
     wait "$WORKER_PID" 2>/dev/null || true
     WORKER_PID=""
     local grace_ms="\${JWEBGEN_WORKER_RESTART_GRACE_MS:-900}"
-    if [[ ! "\$grace_ms" =~ ^[0-9]+$ ]]; then
+    if [[ ! "\$grace_ms" =~ ^[1-9][0-9]*$ ]]; then
       grace_ms=900
     fi
     sleep "$(awk -v m="\$grace_ms" 'BEGIN { printf "%.3f", m/1000 }' 2>/dev/null || echo 0.9)"

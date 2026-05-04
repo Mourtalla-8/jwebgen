@@ -302,6 +302,19 @@ run_privileged() {
   sudo -n "$@"
 }
 
+wildfly_cleanup_artifacts_remain() {
+  [[ -e "$DEPLOY_DIR/$APP_NAME.war" ]] || \\
+  [[ -e "$DEPLOY_DIR/$APP_NAME.war.deployed" ]] || \\
+  [[ -e "$DEPLOY_DIR/$APP_NAME.war.failed" ]] || \\
+  [[ -e "$DEPLOY_DIR/$APP_NAME.war.undeployed" ]] || \\
+  [[ -e "$DEPLOY_DIR/$APP_NAME.war.skipdeploy" ]] || \\
+  [[ -e "$DEPLOY_DIR/$APP_NAME.war.pending" ]] || \\
+  [[ -e "$DEPLOY_DIR/$APP_NAME.war.isdeploying" ]] || \\
+  [[ -e "$DEPLOY_DIR/$APP_NAME.war.isundeploying" ]] || \\
+  [[ -e "$DEPLOY_DIR/$APP_NAME.war.status" ]] || \\
+  [[ -e "$DEPLOY_DIR/$APP_NAME.war.dodeploy" ]]
+}
+
 if [[ "$CLEANUP_DEV_MODE" = "0" && ( -z "$WAR_FILE" || ! -f "$WAR_FILE" ) ]]; then
   echo "No WAR file found. Run ./.jwebgen/scripts/build.sh first"
   echo "__JWEBGEN_EVENT__ deploy_error" >&2
@@ -349,7 +362,7 @@ if [[ "$CLEANUP_DEV_MODE" = "1" ]]; then
     "$DEPLOY_DIR/$APP_NAME.war.dodeploy"; then
     sleep 0.3
   fi
-  if [[ -e "$DEPLOY_DIR/$APP_NAME.war" || -e "$DEPLOY_DIR/$APP_NAME.war.deployed" || -e "$DEPLOY_DIR/$APP_NAME.war.failed" ]]; then
+  if wildfly_cleanup_artifacts_remain; then
     if ! run_privileged rm -f \
       "$DEPLOY_DIR/$APP_NAME.war" \
       "$DEPLOY_DIR/$APP_NAME.war.deployed" \
@@ -366,6 +379,12 @@ if [[ "$CLEANUP_DEV_MODE" = "1" ]]; then
       echo "__JWEBGEN_EVENT__ deploy_sudo_required" >&2
       exit 1
     fi
+  fi
+  if wildfly_cleanup_artifacts_remain; then
+    echo "Permissions insuffisantes pour nettoyer $APP_NAME dans $DEPLOY_DIR."
+    echo "Lance 'sudo -v' puis relance."
+    echo "__JWEBGEN_EVENT__ deploy_sudo_required" >&2
+    exit 1
   fi
   echo "Dev cleanup completed for $APP_NAME (WildFly)."
   exit 0

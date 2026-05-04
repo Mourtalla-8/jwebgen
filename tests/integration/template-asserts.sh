@@ -54,6 +54,9 @@ assertContains(deployWildfly, 'JWEBGEN_FORCE_WILDFLY_REDEPLOY', 'deploy wildfly 
 assertContains(deployWildfly, 'skipped redeploy', 'deploy wildfly skip dodeploy when unchanged');
 assertContains(deployWildfly, 'cmp -s', 'deploy wildfly WAR identity via cmp not size-only');
 assertContains(deployWildfly, 'DEPLOY_HTTP_OK', 'deploy wildfly HTTP probe short-circuits marker failure');
+assertContains(deployWildfly, 'wildfly_cleanup_artifacts_remain', 'deploy wildfly cleanup checks all marker files');
+
+assertContains(watch, 'xmllint', 'watch resolve_app_name uses structured POM read');
 
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'createProxyServer', 'worker contains dev proxy server');
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, '/.jwebgen/live-reload.js', 'worker serves live-reload asset');
