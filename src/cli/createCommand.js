@@ -44,7 +44,6 @@ export async function runCreateCommand(deps) {
     ensureBuildTools,
     gitignore,
     helloServlet,
-    devLiveReloadFilter,
     indexJsp,
     pomXml,
     readmeMd,
@@ -202,13 +201,9 @@ export async function runCreateCommand(deps) {
 
   try {
     const pkgPath = packageToPath(basePackage);
-    const filterPackage = `${basePackage}.dev`;
-    const filterPackagePath = packageToPath(filterPackage);
     const scriptsDir = jwebgenScriptsDir(workDir);
     await mkdir(path.join(workDir, 'src/main/java', pkgPath), { recursive: true });
-    await mkdir(path.join(workDir, 'src/main/java', filterPackagePath), { recursive: true });
     await mkdir(path.join(workDir, 'src/main/webapp/WEB-INF'), { recursive: true });
-    await mkdir(path.join(workDir, 'src/main/webapp/.jwebgen'), { recursive: true });
     await mkdir(scriptsDir, { recursive: true });
 
     await writeFileSafe(
@@ -225,11 +220,6 @@ export async function runCreateCommand(deps) {
     );
 
     if (addServlet) await writeFileSafe(path.join(workDir, 'src/main/java', pkgPath, 'HelloServlet.java'), helloServlet({ basePackage }));
-    await writeFileSafe(
-      path.join(workDir, 'src/main/java', filterPackagePath, 'DevLiveReloadFilter.java'),
-      devLiveReloadFilter({ basePackage: filterPackage })
-    );
-    await writeFileSafe(path.join(workDir, 'src/main/webapp/.jwebgen/live-reload.js'), makeLiveReloadClientScript());
     if (addJsp) {
       await writeFileSafe(path.join(workDir, 'src/main/webapp', 'index.jsp'), indexJsp({ projectName, artifactId, hasServlet: addServlet }));
     }
@@ -255,6 +245,7 @@ export async function runCreateCommand(deps) {
       })
     );
     await writeFileSafe(path.join(workDir, '.jwebgen', 'DEV.md'), makeDevMd({ appName: deployedAppName, serverTarget: serverTarget || 'unset' }));
+    await writeFileSafe(path.join(workDir, '.jwebgen', 'live-reload.js'), makeLiveReloadClientScript());
     await writeFileSafe(path.join(scriptsDir, 'build.sh'), makeBuildScript());
     await writeFileSafe(path.join(scriptsDir, 'deploy.sh'), makeDeploySelectorScript());
     await writeFileSafe(
@@ -315,10 +306,10 @@ export async function runCreateCommand(deps) {
   }
 
   console.log(pc.cyan('\nQuick development commands:'));
-  console.log(pc.cyan('- ./.jwebgen/scripts/build.sh'));
-  console.log(pc.cyan('- ./.jwebgen/scripts/deploy.sh'));
-  console.log(pc.cyan('- ./.jwebgen/scripts/dev.sh'));
-  console.log(pc.cyan('- ./.jwebgen/scripts/watch.sh'));
+  console.log(pc.cyan('- jwebgen --build'));
+  console.log(pc.cyan('- jwebgen --deploy'));
+  console.log(pc.cyan('- jwebgen --dev'));
+  console.log(pc.cyan('- jwebgen --watch'));
   if (addServlet) console.log(pc.cyan('- jwebgen --servlet HelloServlet'));
   outro(pc.cyan('Done.'));
 }

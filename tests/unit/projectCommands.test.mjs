@@ -29,6 +29,7 @@ function makeMigrateDeps(projectRoot, detectedTarget = 'tomcat') {
     makeDevScript: () => '#!/usr/bin/env bash\n',
     makeWatchScript: () => '#!/usr/bin/env bash\n',
     makeAddServletScript: () => '#!/usr/bin/env bash\n',
+    makeLiveReloadClientScript: () => 'console.log(\"lr\")\n',
     makeExecutable: async () => {},
     legacyDeployScript: 'deploy-tomcat.sh'
   };
@@ -56,6 +57,20 @@ test('runMigrate writes detected target when .jwebgenrc is missing', async () =>
 
   const cfg = await readFile(path.join(projectRoot, '.jwebgen', '.jwebgenrc'), 'utf8');
   assert.match(cfg, /export JWEBGEN_SERVER_TARGET="wildfly"/);
+});
+
+test('runMigrate keeps server unset when no target is explicitly configured', async () => {
+  const projectRoot = await setupProjectRoot('demoapp-unset');
+  await writeFile(
+    path.join(projectRoot, '.jwebgen', 'scripts', 'dev.sh'),
+    '#!/usr/bin/env bash\necho dev\n',
+    'utf8'
+  );
+
+  await runMigrate(makeMigrateDeps(projectRoot, 'tomcat'));
+
+  const cfgPath = path.join(projectRoot, '.jwebgen', '.jwebgenrc');
+  assert.equal(existsSync(cfgPath), false);
 });
 
 test('runMigrate does not delete generated deploy-tomcat.sh', async () => {

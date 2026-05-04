@@ -12,7 +12,6 @@ import {
 import pc from 'picocolors';
 import {
   gitignore,
-  devLiveReloadFilter,
   helloServlet,
   indexJsp,
   pomXml,
@@ -124,7 +123,6 @@ async function main(cli = {}) {
     makeExecutable,
     ensureBuildTools,
     gitignore,
-    devLiveReloadFilter,
     helloServlet,
     indexJsp,
     pomXml,
@@ -171,6 +169,7 @@ async function runMigrate() {
     makeDevScript: makeDevScriptImpl,
     makeWatchScript: makeWatchScriptImpl,
     makeAddServletScript: ({ basePackage }) => makeAddServletScriptImpl({ basePackage, appName: APP_NAME }),
+    makeLiveReloadClientScript: makeLiveReloadClientScriptImpl,
     makeExecutable,
     legacyDeployScript: LEGACY_DEPLOY_SCRIPT
   });

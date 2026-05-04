@@ -83,7 +83,7 @@ export async function showStatus({ findProjectRoot }) {
     console.log(pc.yellow('Server: unknown status (pgrep unavailable)'));
   }
 
-  const appName = path.basename(projectRoot);
+  const appName = await readAppNameFromPom(projectRoot, path.basename(projectRoot));
   if (serverTarget === 'tomcat') {
     const tomcatDir = process.env.TOMCAT10 || '/var/lib/tomcat10';
     const warPath = path.join(tomcatDir, 'webapps', `${appName}.war`);
@@ -118,6 +118,7 @@ export async function runMigrate({
   makeDevScript,
   makeWatchScript,
   makeAddServletScript,
+  makeLiveReloadClientScript,
   makeExecutable,
   legacyDeployScript
 }) {
@@ -129,8 +130,14 @@ export async function runMigrate({
 
   const scriptsDir = jwebgenScriptsDir(projectRoot);
   await mkdir(scriptsDir, { recursive: true });
-  const appName = path.basename(projectRoot);
-  const serverTarget = detectServerTargetFromProject(projectRoot);
+  const appName = await readAppNameFromPom(projectRoot, path.basename(projectRoot));
+  const configuredTarget = await readConfiguredServerTarget(projectRoot);
+  const legacyScriptTarget = await detectExplicitServerTargetFromDevScript(projectRoot);
+  const detectedTarget = detectServerTargetFromProject(projectRoot);
+  const serverTarget =
+    configuredTarget
+    || legacyScriptTarget
+    || (detectedTarget === 'wildfly' ? 'wildfly' : '');
 
   await writeFileSafe(path.join(scriptsDir, 'build.sh'), makeBuildScript());
   await writeFileSafe(path.join(scriptsDir, 'deploy.sh'), makeDeploySelectorScript());
@@ -147,6 +154,7 @@ export async function runMigrate({
   const basePackage = await inferBasePackage(projectRoot, appName);
   await writeFileSafe(path.join(scriptsDir, 'add-servlet.sh'), makeAddServletScript({ basePackage }));
   await writeProjectConfigServerTarget(projectRoot, serverTarget);
+  await writeFileSafe(path.join(projectRoot, '.jwebgen', 'live-reload.js'), makeLiveReloadClientScript());
 
   const reservedScriptNames = new Set([
     'deploy.sh',
@@ -208,6 +216,7 @@ async function writeProjectConfigServerTarget(projectRoot, detectedTarget) {
 
   const existingTarget = extractServerTarget(raw);
   const effectiveTarget = existingTarget || detectedTarget;
+  if (!effectiveTarget) return;
   const line = `export JWEBGEN_SERVER_TARGET="${effectiveTarget}"`;
   const hasServerLine = /^export\s+JWEBGEN_SERVER_TARGET=.*$/m.test(raw);
 
@@ -221,6 +230,58 @@ async function writeProjectConfigServerTarget(projectRoot, detectedTarget) {
   }
 
   await writeFile(cfgPath, nextRaw, 'utf8');
+}
+
+async function readConfiguredServerTarget(projectRoot) {
+  const cfgPath = jwebgenConfigPath(projectRoot);
+  if (!existsSync(cfgPath)) return '';
+  try {
+    return extractServerTarget(await readFile(cfgPath, 'utf8'));
+  } catch {
+    return '';
+  }
+}
+
+async function readAppNameFromPom(projectRoot, fallback) {
+  const pomPath = path.join(projectRoot, 'pom.xml');
+  if (!existsSync(pomPath)) return fallback;
+  try {
+    const pom = await readFile(pomPath, 'utf8');
+    // Remove the <parent>...</parent> block to avoid picking up parent artifactId
+    const pomWithoutParent = pom.replace(/<parent>\s*[\s\S]*?<\/parent>/gi, '');
+    // Drop <profiles> so build/finalName in a profile is not mistaken for the main <build>
+    const pomForBuild = pomWithoutParent.replace(/<profiles>\s*[\s\S]*?<\/profiles>/gi, '');
+
+    // First try to find finalName within the top-level <build> block
+    const buildBlockMatch = pomForBuild.match(/<build>\s*([\s\S]*?)<\/build>/i);
+    if (buildBlockMatch?.[1]) {
+      const buildContent = buildBlockMatch[1];
+      const finalNameMatch = buildContent.match(/<finalName>\s*([^<\s][^<]*)\s*<\/finalName>/i);
+      if (finalNameMatch?.[1]) return String(finalNameMatch[1]).trim();
+    }
+
+    // Fallback to project artifactId (parent + profiles stripped)
+    const artifactMatch = pomForBuild.match(/<artifactId>\s*([^<\s][^<]*)\s*<\/artifactId>/i);
+    if (artifactMatch?.[1]) return String(artifactMatch[1]).trim();
+  } catch {
+    return fallback;
+  }
+  return fallback;
+}
+
+async function detectExplicitServerTargetFromDevScript(projectRoot) {
+  const devPath = path.join(jwebgenScriptsDir(projectRoot), 'dev.sh');
+  if (!existsSync(devPath)) return '';
+  try {
+    const raw = await readFile(devPath, 'utf8');
+    const direct = raw.match(/^\s*export\s+JWEBGEN_SERVER_TARGET="?([a-zA-Z0-9_-]+)"?\s*$/m);
+    const fallback = raw.match(/JWEBGEN_SERVER_TARGET:-([a-zA-Z0-9_-]+)/);
+    const target = String(direct?.[1] || fallback?.[1] || '').toLowerCase();
+    if (target === 'tomcat' || target === 'wildfly') return target;
+    return '';
+  } catch {
+    return '';
+  }
 }
 
 function extractServerTarget(raw) {
