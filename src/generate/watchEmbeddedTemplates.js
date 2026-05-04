@@ -1,6 +1,7 @@
 export const DEV_WORKER_SCRIPT_TEMPLATE = `import http from 'node:http';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
+import net from 'node:net';
 import { readdirSync, statSync, watch as fsWatch, writeFileSync, appendFileSync, readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 
@@ -76,11 +77,16 @@ function portOwner(port) {
 }
 function findFreePort(startAt) {
   return new Promise((resolve) => {
-    const cmd = "node -e \\"const net=require('node:net');let p=" + startAt + ";const max=p+50;(function t(){if(p>max){process.exit(1);}const s=net.createServer();s.once('error',()=>{p++;t();});s.once('listening',()=>{s.close(()=>{console.log(p);process.exit(0);});});s.listen(p,'127.0.0.1');})();\\"";
-    const p = spawn('bash', ['-lc', cmd], { stdio: ['ignore', 'pipe', 'ignore'] });
-    let out = '';
-    p.stdout.on('data', (c) => { out += String(c); });
-    p.on('exit', (code) => resolve(code === 0 ? Number(out.trim()) : null));
+    const max = startAt + 50;
+    let p = startAt;
+    const tryNext = () => {
+      if (p > max) return resolve(null);
+      const s = net.createServer();
+      s.once('error', () => { p += 1; tryNext(); });
+      s.once('listening', () => s.close(() => resolve(p)));
+      s.listen(p, '127.0.0.1');
+    };
+    tryNext();
   });
 }
 function wsAccept(key) {
