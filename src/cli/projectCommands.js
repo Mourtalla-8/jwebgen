@@ -45,8 +45,11 @@ async function probeServerRuntime(serverTarget) {
   }
   try {
     const pattern = serverTarget === 'tomcat' ? 'tomcat' : 'standalone.sh|org.jboss.as.standalone';
-    const { stdout } = await execa('pgrep', ['-f', pattern], { timeout: 2000 });
-    return Boolean(stdout.trim());
+    const result = await execa('pgrep', ['-f', pattern], { timeout: 2000, reject: false });
+    if (result.exitCode === 0) return true;
+    if (result.exitCode === 1) return false;
+    if (String(result.stderr || '').trim()) return null;
+    return null;
   } catch {
     return null;
   }

@@ -7,13 +7,17 @@ cd "$ROOT_DIR"
 fail() { echo "FAIL: $1" >&2; exit 1; }
 
 mktemp_mjs() {
-  # GNU mktemp supports --suffix; BSD mktemp (macOS) does not.
-  # Use a template so we still get a .mjs extension.
-  if mktemp --suffix=.mjs >/dev/null 2>&1; then
-    mktemp --suffix=.mjs
+  # GNU mktemp supports --suffix; BSD mktemp (macOS) requires XXXXXX at the end.
+  # Keep the resulting filename ending with .mjs so `node --check` treats it as ESM.
+  local tmpdir="${TMPDIR:-/tmp}"
+  if mktemp --version >/dev/null 2>&1; then
+    mktemp --suffix=.mjs "${tmpdir%/}/jwebgen.XXXXXX"
     return 0
   fi
-  mktemp -t "jwebgen.XXXXXX.mjs"
+  local base
+  base="$(mktemp -t jwebgen.XXXXXX)"
+  mv "$base" "$base.mjs"
+  printf '%s\n' "$base.mjs"
 }
 
 echo "[golden] ensure fixtures exist (tests/fixtures-current)"
