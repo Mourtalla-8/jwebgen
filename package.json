@@ -20,6 +20,7 @@
     "test": "npm run test:unit && bash ./tests/golden-check.sh && bash ./tests/integration/template-asserts.sh && bash ./tests/integration/run-matrix.sh",
     "check:syntax": "bash ./tests/check-syntax.sh",
     "lint": "eslint .",
+    "smoke:generated": "bash ./tests/smoke-generated-project.sh",
     "check": "npm run check:syntax && npm run lint && npm run test",
     "release:verify": "npm pack --dry-run >/dev/null && npm run check"
   },

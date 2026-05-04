@@ -27,6 +27,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Smoke generated project (all platforms)
+        run: bash ./tests/smoke-generated-project.sh
+
       - name: Run checks (Linux)
         if: runner.os == 'Linux'
         run: npm run check

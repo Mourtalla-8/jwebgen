@@ -4,7 +4,14 @@ import path from 'node:path';
 import os from 'node:os';
 import { existsSync } from 'node:fs';
 import { mkdtemp, mkdir, writeFile, readFile } from 'node:fs/promises';
-import { resolveStatusHttpPort, runMigrate } from '../../src/cli/projectCommands.js';
+import { resolveStatusHttpPort, runMigrate, serverRunningFromPgrepResult } from '../../src/cli/projectCommands.js';
+
+test('serverRunningFromPgrepResult maps pgrep exit codes', () => {
+  assert.equal(serverRunningFromPgrepResult({ exitCode: 0, stderr: '' }), true);
+  assert.equal(serverRunningFromPgrepResult({ exitCode: 1, stderr: '' }), false);
+  assert.equal(serverRunningFromPgrepResult({ exitCode: 2, stderr: '' }), null);
+  assert.equal(serverRunningFromPgrepResult({ exitCode: 2, stderr: 'no pgrep' }), null);
+});
 
 test('resolveStatusHttpPort prefers env over config then 8080', () => {
   const prev = process.env.JWEBGEN_HTTP_PORT;

@@ -19,6 +19,8 @@ This project follows Semantic Versioning.
 ### Changed (tooling)
 
 - **CI:** macOS and Windows run golden fixture checks, template assertions, and `node --check` on generated `*.mjs` entrypoints in addition to lint and unit tests.
+- **CI:** all platforms run `tests/smoke-generated-project.sh` after `npm ci` (create project, `node --check` on `*.mjs`, `--status` URL with `JWEBGEN_HTTP_PORT`).
+- **Tests:** `serverRunningFromPgrepResult` covers `pgrep` exit-code mapping for `--status`.
 
 ## [2.2.0] - 2026-05-04
 
