@@ -490,7 +490,43 @@ if [[ -z "$TARGET" && -f "$SCRIPT_DIR/../.jwebgenrc" ]]; then
   TARGET="\${JWEBGEN_SERVER_TARGET:-}"
 fi
 
-TARGET="\${TARGET:-tomcat}"
+if [[ -z "$TARGET" ]]; then
+  if [[ -t 0 && -t 1 ]]; then
+    echo "Select server target for deployment:"
+    echo "  1) tomcat"
+    echo "  2) wildfly"
+    while true; do
+      read -r -p "Choose target [1/2, t/w]: " ans
+      case "\${ans,,}" in
+        1|t|tomcat)
+          TARGET="tomcat"
+          ;;
+        2|w|wildfly)
+          TARGET="wildfly"
+          ;;
+        *)
+          echo "Invalid choice. Enter 1 (tomcat) or 2 (wildfly)."
+          continue
+          ;;
+      esac
+      break
+    done
+    mkdir -p "$SCRIPT_DIR/.." 2>/dev/null || true
+    if [[ -f "$SCRIPT_DIR/../.jwebgenrc" ]]; then
+      if grep -qE '^[[:space:]]*export[[:space:]]+JWEBGEN_SERVER_TARGET=' "$SCRIPT_DIR/../.jwebgenrc" 2>/dev/null; then
+        sed -i -E 's|^[[:space:]]*export[[:space:]]+JWEBGEN_SERVER_TARGET=.*$|export JWEBGEN_SERVER_TARGET="'"$TARGET"'"|' "$SCRIPT_DIR/../.jwebgenrc" 2>/dev/null || true
+      else
+        printf '\nexport JWEBGEN_SERVER_TARGET="%s"\n' "$TARGET" >> "$SCRIPT_DIR/../.jwebgenrc" 2>/dev/null || true
+      fi
+    else
+      printf 'export JWEBGEN_SERVER_TARGET="%s"\n' "$TARGET" > "$SCRIPT_DIR/../.jwebgenrc" 2>/dev/null || true
+    fi
+  else
+    echo "Server target is not configured. Run in an interactive terminal to choose tomcat/wildfly,"
+    echo "or set JWEBGEN_SERVER_TARGET (or .jwebgen/.jwebgenrc) before deploying."
+    exit 1
+  fi
+fi
 
 case "$TARGET" in
   tomcat)

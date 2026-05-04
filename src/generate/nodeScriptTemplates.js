@@ -88,6 +88,7 @@ import path from 'node:path';
 import { existsSync } from 'node:fs';
 import { cp, mkdir, rm, writeFile, readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+import { createInterface } from 'node:readline/promises';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -121,6 +122,53 @@ async function loadProjectConfig() {
   }
 }
 
+async function persistServerTarget(target) {
+  const cfgDir = path.join(rootDir, '.jwebgen');
+  const cfgPath = path.join(cfgDir, '.jwebgenrc');
+  await mkdir(cfgDir, { recursive: true });
+  let raw = '';
+  if (existsSync(cfgPath)) {
+    try {
+      raw = await readFile(cfgPath, 'utf8');
+    } catch {
+      raw = '';
+    }
+  }
+  const line = 'export JWEBGEN_SERVER_TARGET="' + target + '"';
+  const hasServerLine = /^\\s*export\\s+JWEBGEN_SERVER_TARGET=.*$/m.test(raw);
+  let nextRaw = '';
+  if (hasServerLine) {
+    nextRaw = raw.replace(/^\\s*export\\s+JWEBGEN_SERVER_TARGET=.*$/m, line);
+  } else if (raw.trim().length === 0) {
+    nextRaw = line + '\\n';
+  } else {
+    nextRaw = raw.endsWith('\\n') ? raw + line + '\\n' : raw + '\\n' + line + '\\n';
+  }
+  await writeFile(cfgPath, nextRaw, 'utf8');
+}
+
+async function chooseServerTargetInteractively() {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    console.error('Server target is not configured. Run in an interactive terminal to choose tomcat/wildfly,');
+    console.error('or set JWEBGEN_SERVER_TARGET (or .jwebgen/.jwebgenrc) before deploying.');
+    process.exit(1);
+  }
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    console.log('Select server target for deployment:');
+    console.log('  1) tomcat');
+    console.log('  2) wildfly');
+    while (true) {
+      const answer = String(await rl.question('Choose target [1/2, t/w]: ')).trim().toLowerCase();
+      if (answer === '1' || answer === 't' || answer === 'tomcat') return 'tomcat';
+      if (answer === '2' || answer === 'w' || answer === 'wildfly') return 'wildfly';
+      console.log('Invalid choice. Enter 1 (tomcat) or 2 (wildfly).');
+    }
+  } finally {
+    rl.close();
+  }
+}
+
 async function readMavenAppName() {
   const pomPath = path.join(rootDir, 'pom.xml');
   if (!existsSync(pomPath)) return path.basename(rootDir);
@@ -144,7 +192,7 @@ async function readMavenAppName() {
 function resolveServerTarget({ cfg }) {
   const v = String(process.env.JWEBGEN_SERVER_TARGET || cfg.JWEBGEN_SERVER_TARGET || '').trim();
   if (v === 'tomcat' || v === 'wildfly') return v;
-  return 'tomcat';
+  return '';
 }
 
 function isDevMode() {
@@ -278,7 +326,11 @@ async function deployWildfly({ cfg, cleanupOnly, appName }) {
 
 const cfg = await loadProjectConfig();
 const appName = await readMavenAppName();
-const target = resolveServerTarget({ cfg });
+let target = resolveServerTarget({ cfg });
+if (!target) {
+  target = await chooseServerTargetInteractively();
+  await persistServerTarget(target);
+}
 const cleanupOnly = process.argv.includes('--cleanup-dev');
 
 if (target === 'tomcat') {
