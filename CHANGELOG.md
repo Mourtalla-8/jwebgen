@@ -4,6 +4,22 @@ All notable changes to this project should be documented in this file.
 
 This project follows Semantic Versioning.
 
+## [2.2.0] - 2026-05-04
+
+### Changed (generated projects)
+
+- **Dev / watch:** LiveReload tooling and scripts remain under `.jwebgen/`; the dev proxy preserves the browser `Host` header (`accept-encoding` still forced to `identity`); injected HTML drops restrictive CSP in dev; HEAD / 204 / 304 responses are streamed without injection; injected HTML is marked non-cacheable; worker restart grace (`JWEBGEN_WORKER_RESTART_GRACE_MS`) accepts only positive integers (invalid values fall back to 900 ms).
+- **Deploy:** Tomcat deployment refreshes `META-INF/context.xml` reload semantics (`reloadable`, flexible quoting); WildFly respects `JWEBGEN_HTTP_PORT` for probes and URLs; unchanged-WAR fast path skips redundant `.dodeploy` when the app is healthy; WildFly `--cleanup-dev` removes and verifies the full set of deployment marker files.
+- **CLI:** Application name from `pom.xml` ignores `<profiles>` blocks when resolving the top-level `<build>` / `<finalName>` and primary `<artifactId>`; `--cleanup-dev` failures surface captured stderr unless the deploy script explicitly signals `deploy_sudo_required`.
+
+### Changed (LiveReload client template)
+
+- Reload via URL refresh uses `_jwg` query cache-busting without relying on `Date.now()` in the published client string.
+
+### Fixed
+
+- Cleanup/deploy diagnostics (sudo hints gated on marker output); Tomcat context.xml sed escaping in generated scripts; assorted WildFly and proxy edge cases from review.
+
 ## [2.1.0] - 2026-04-30
 
 ### Changed (generated projects)

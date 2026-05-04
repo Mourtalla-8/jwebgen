@@ -44,11 +44,16 @@ export async function runProjectScript(scriptName, args = [], options = {}, deps
     process.exit(1);
   }
 
+  const isCleanupDeploy =
+    scriptName === canonicalDeployScript && Array.isArray(args) && args.includes('--cleanup-dev');
+  /** Pipe stderr so deploy_sudo_required marker can be detected on failure (stdio inherit drops it). */
+  const stdio = isCleanupDeploy ? ['inherit', 'inherit', 'pipe'] : 'inherit';
+
   try {
     if (scriptPath.endsWith('.mjs')) {
       await execa(process.execPath, [scriptPath, ...args], { cwd: projectRoot, stdio: 'inherit', env });
     } else {
-      await execa(scriptPath, args, { cwd: projectRoot, stdio: 'inherit', env });
+      await execa(scriptPath, args, { cwd: projectRoot, stdio, env });
     }
   } catch (error) {
     if (error?.code === 'EACCES' || String(error?.message || '').includes('EACCES')) {
@@ -60,7 +65,24 @@ export async function runProjectScript(scriptName, args = [], options = {}, deps
       throw error;
     }
     const msg = error?.shortMessage || error?.message || String(error);
+    const marker = '__JWEBGEN_EVENT__ deploy_sudo_required';
+    const markerPresent = [msg, error?.stderr, error?.stdout, error?.all]
+      .filter(Boolean)
+      .some((chunk) => String(chunk).includes(marker));
+    if (isCleanupDeploy && markerPresent) {
+      console.error(pc.yellow('Cleanup failed for target server directories.'));
+      console.error(pc.yellow('If this is a permission issue, run: sudo -v && jwebgen --clean --deploy'));
+      error.jwebgenHandled = true;
+      throw error;
+    }
     console.error(pc.red(`${scriptName} failed: ${msg}`));
+    const rawOut = [error?.stderr, error?.stdout, error?.all]
+      .filter((chunk) => chunk != null && String(chunk).trim() !== '')
+      .map((chunk) => String(chunk));
+    if (rawOut.length) {
+      const combined = rawOut.join('\n');
+      if (combined !== msg) console.error(combined);
+    }
     error.jwebgenHandled = true;
     throw error;
   }

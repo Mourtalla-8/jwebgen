@@ -62,9 +62,13 @@ export function makeLiveReloadSnippet() {
           var data = JSON.parse(event.data);
           if (data.command === 'reload') {
             console.log('[LiveReload] Reloading page...');
-            var url = window.location.href;
-            url += (url.indexOf('?') === -1 ? '?' : '&') + '_lr=' + Date.now();
-            window.location.replace(url);
+            try {
+              var u = new URL(window.location.href);
+              u.searchParams.set('_jwg', String((typeof performance !== 'undefined' && performance.now) ? performance.now() : Math.random()));
+              window.location.replace(u.toString());
+            } catch (e) {
+              window.location.reload();
+            }
           }
         };
         ws.onclose = function() {
@@ -115,9 +119,13 @@ export function makeLiveReloadClientScript() {
         var data = JSON.parse(event.data);
         if (data.command === 'reload') {
           console.log('[LiveReload] Reloading page...');
-          var url = window.location.href;
-          url += (url.indexOf('?') === -1 ? '?' : '&') + '_lr=' + Date.now();
-          window.location.replace(url);
+          try {
+            var u = new URL(window.location.href);
+            u.searchParams.set('_jwg', String((typeof performance !== 'undefined' && performance.now) ? performance.now() : Math.random()));
+            window.location.replace(u.toString());
+          } catch (e) {
+            window.location.reload();
+          }
         }
       };
       ws.onclose = function() {
@@ -188,7 +196,6 @@ public class $CLASS_NAME extends HttpServlet {
       out.println("<h1>$CLASS_NAME</h1>");
       out.println("<p>Servlet generated with ${appName}.</p>");
       out.println("<p>URL: $URL_PATTERN</p>");
-      out.println("<p>LiveReload is injected automatically in dev mode.</p>");
       out.println("</body>");
       out.println("</html>");
     }

@@ -126,3 +126,34 @@ test('dispatches servlet command and normalizes class name', async () => {
   assert.equal(scriptName, 'add-servlet.sh');
   assert.deepEqual(scriptArgs, ['HelloServlet']);
 });
+
+test('dispatches servlet command without double-suffix when servlet already at edges', async () => {
+  let captured = [];
+  await dispatchCommand('servlet', ['BonjourServlet'], {
+    main: async () => {},
+    showHelp: () => {},
+    parseCliOptions,
+    runProjectScript: async (_name, args) => {
+      captured = args;
+    },
+    runMigrate: async () => {},
+    runClean: async () => {},
+    showStatus: async () => {},
+    onUnknown: () => {}
+  });
+  assert.deepEqual(captured, ['BonjourServlet']);
+
+  await dispatchCommand('servlet', ['servletbonjour'], {
+    main: async () => {},
+    showHelp: () => {},
+    parseCliOptions,
+    runProjectScript: async (_name, args) => {
+      captured = args;
+    },
+    runMigrate: async () => {},
+    runClean: async () => {},
+    showStatus: async () => {},
+    onUnknown: () => {}
+  });
+  assert.deepEqual(captured, ['Servletbonjour']);
+});

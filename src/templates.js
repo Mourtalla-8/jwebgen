@@ -96,7 +96,6 @@ public class HelloServlet extends HttpServlet {
             out.println("</head>");
             out.println("<body>");
             out.println("<h1>Hello from Jakarta Servlet!</h1>");
-            out.println("<p>LiveReload is injected by DevLiveReloadFilter in dev mode.</p>");
             out.println("</body>");
             out.println("</html>");
         }
@@ -121,7 +120,6 @@ export function indexJsp({ projectName, artifactId, hasServlet }) {
   <h1>${htmlEscape(projectName)}</h1>
   <p>WebApp generated with jwebgen.</p>
 ${servletLink}
-  <p>LiveReload is injected by DevLiveReloadFilter in dev mode.</p>
 </body>
 </html>
 `;

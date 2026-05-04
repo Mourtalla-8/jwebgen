@@ -12,11 +12,11 @@ if [[ "$(uname -s 2>/dev/null || echo unknown)" != "Linux" ]]; then
 fi
 
 # Colors for logs
-RED='\\033[0;31m'
-GREEN='\\033[0;32m'
-YELLOW='\\033[1;33m'
-BLUE='\\033[0;34m'
-NC='\\033[0m' # No Color
+RED='\\\\033[0;31m'
+GREEN='\\\\033[0;32m'
+YELLOW='\\\\033[1;33m'
+BLUE='\\\\033[0;34m'
+NC='\\\\033[0m' # No Color
 
 APP_NAME=${shellQuote(appName)}
 SCRIPT_DIR="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
@@ -78,6 +78,43 @@ run_privileged() {
   sudo -n "$@"
 }
 
+# Servlet / @WebServlet class changes need a reloadable Context; JSP can update without it.
+ensure_tomcat_dev_reloadable_context() {
+  local ctx="$DEST_DIR/META-INF/context.xml"
+  if ! run_privileged mkdir -p "$DEST_DIR/META-INF"; then
+    log_error "Unable to create $DEST_DIR/META-INF."
+    echo "__JWEBGEN_EVENT__ deploy_sudo_required" >&2
+    exit 1
+  fi
+  if [[ ! -f "$ctx" ]]; then
+    if ! printf '%s\\n' '<?xml version="1.0" encoding="UTF-8"?>' '<Context reloadable="true" />' | run_privileged tee "$ctx" >/dev/null; then
+      log_error "Unable to write default META-INF/context.xml for Tomcat dev reload."
+      log_info "Run 'sudo -v' then retry."
+      echo "__JWEBGEN_EVENT__ deploy_sudo_required" >&2
+      exit 1
+    fi
+    return 0
+  fi
+  if grep -qE 'reloadable[[:space:]]*=[[:space:]]*("true"|'"'"'true'"'"')' "$ctx" 2>/dev/null; then
+    return 0
+  fi
+  if grep -q '<Context' "$ctx" 2>/dev/null; then
+    # Replace existing reloadable="..." or reloadable='...' (flexible whitespace), else insert on <Context.
+    if grep -qE 'reloadable[[:space:]]*=' "$ctx" 2>/dev/null; then
+      if ! run_privileged sed -i -E 's/reloadable[[:space:]]*=[[:space:]]*"[^"]*"/reloadable="true"/g' "$ctx" 2>/dev/null; then
+        log_warn "Could not update reloadable attribute in META-INF/context.xml; servlet class updates may need a Tomcat restart."
+      fi
+      if ! run_privileged sed -i -E 's/reloadable[[:space:]]*=[[:space:]]*'"'"'[^'"'"']*'"'"'/reloadable="true"/g' "$ctx" 2>/dev/null; then
+        log_warn "Could not update reloadable attribute in META-INF/context.xml; servlet class updates may need a Tomcat restart."
+      fi
+    else
+      if ! run_privileged sed -i '/<Context/s/<Context/<Context reloadable="true"/' "$ctx" 2>/dev/null; then
+        log_warn "Could not add reloadable=true to META-INF/context.xml; servlet class updates may need a Tomcat restart."
+      fi
+    fi
+  fi
+}
+
 EXPLODED_APP_DIR="$ROOT_DIR/target/$APP_NAME"
 
 if [[ "$CLEANUP_DEV_MODE" = "0" && "\${JWEBGEN_DEV:-0}" = "1" ]]; then
@@ -122,6 +159,17 @@ fi
 
 if [[ "$CLEANUP_DEV_MODE" = "1" ]]; then
   if ! run_privileged rm -rf "$TOMCAT_DIR/webapps/$APP_NAME" "$TOMCAT_DIR/webapps/$APP_NAME.war"; then
+    sleep 0.3
+  fi
+  if [[ -e "$TOMCAT_DIR/webapps/$APP_NAME" || -e "$TOMCAT_DIR/webapps/$APP_NAME.war" ]]; then
+    if ! run_privileged rm -rf "$TOMCAT_DIR/webapps/$APP_NAME" "$TOMCAT_DIR/webapps/$APP_NAME.war"; then
+      log_error "Insufficient permissions to clean $APP_NAME in $TOMCAT_DIR/webapps."
+      log_info "Run 'sudo -v' then retry."
+      echo "__JWEBGEN_EVENT__ deploy_sudo_required" >&2
+      exit 1
+    fi
+  fi
+  if [[ -e "$TOMCAT_DIR/webapps/$APP_NAME" || -e "$TOMCAT_DIR/webapps/$APP_NAME.war" ]]; then
     log_error "Insufficient permissions to clean $APP_NAME in $TOMCAT_DIR/webapps."
     log_info "Run 'sudo -v' then retry."
     echo "__JWEBGEN_EVENT__ deploy_sudo_required" >&2
@@ -157,12 +205,41 @@ if [[ "\${JWEBGEN_DEV:-0}" = "1" ]]; then
     fi
   fi
 
-  rm -f "$TOMCAT_DIR/webapps/$APP_NAME.war" 2>/dev/null || true
+  if ! run_privileged rm -f "$TOMCAT_DIR/webapps/$APP_NAME.war"; then
+    log_error "Insufficient permissions to remove stale WAR in $TOMCAT_DIR/webapps."
+    log_info "Run 'sudo -v' then retry."
+    echo "__JWEBGEN_EVENT__ deploy_sudo_required" >&2
+    exit 1
+  fi
   rm -f "$ROOT_DIR/target/$APP_NAME.war" 2>/dev/null || true
+
+  ensure_tomcat_dev_reloadable_context
   
-  # Help Tomcat detect changes
-  if [[ -f "$TOMCAT_DIR/webapps/$APP_NAME/META-INF/context.xml" ]]; then
-    run_privileged touch "$TOMCAT_DIR/webapps/$APP_NAME/META-INF/context.xml" || true
+  # Tomcat reload hints (exploded deploy): always bump a standard descriptor when present.
+  if [[ -f "$DEST_DIR/WEB-INF/web.xml" ]]; then
+    if ! run_privileged touch "$DEST_DIR/WEB-INF/web.xml"; then
+      log_error "Unable to refresh Tomcat deployment descriptor (WEB-INF/web.xml)."
+      log_info "Run 'sudo -v' then retry."
+      echo "__JWEBGEN_EVENT__ deploy_sudo_required" >&2
+      exit 1
+    fi
+  elif [[ -d "$DEST_DIR/WEB-INF/classes" ]]; then
+    if ! run_privileged touch "$DEST_DIR/WEB-INF/classes"; then
+      log_error "Unable to refresh Tomcat WEB-INF/classes timestamp."
+      log_info "Run 'sudo -v' then retry."
+      echo "__JWEBGEN_EVENT__ deploy_sudo_required" >&2
+      exit 1
+    fi
+  else
+    log_warn "No WEB-INF/web.xml or WEB-INF/classes under deployed app; Tomcat may not reload until you add one or restart the server."
+  fi
+  if [[ -f "$DEST_DIR/META-INF/context.xml" ]]; then
+    if ! run_privileged touch "$DEST_DIR/META-INF/context.xml"; then
+      log_error "Unable to refresh Tomcat context metadata."
+      log_info "Run 'sudo -v' then retry."
+      echo "__JWEBGEN_EVENT__ deploy_sudo_required" >&2
+      exit 1
+    fi
   fi
 else
   run_privileged rm -rf "$TOMCAT_DIR/webapps/$APP_NAME" "$TOMCAT_DIR/webapps/$APP_NAME.war" || true
@@ -201,6 +278,7 @@ fi
 APP_NAME=${shellQuote(appName)}
 SCRIPT_DIR="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+APP_HTTP_PORT="\${JWEBGEN_HTTP_PORT:-8080}"
 
 WAR_FILE=""
 if [[ -d "$ROOT_DIR/target" ]]; then
@@ -222,6 +300,19 @@ run_privileged() {
     return 1
   fi
   sudo -n "$@"
+}
+
+wildfly_cleanup_artifacts_remain() {
+  [[ -e "$DEPLOY_DIR/$APP_NAME.war" ]] || \\
+  [[ -e "$DEPLOY_DIR/$APP_NAME.war.deployed" ]] || \\
+  [[ -e "$DEPLOY_DIR/$APP_NAME.war.failed" ]] || \\
+  [[ -e "$DEPLOY_DIR/$APP_NAME.war.undeployed" ]] || \\
+  [[ -e "$DEPLOY_DIR/$APP_NAME.war.skipdeploy" ]] || \\
+  [[ -e "$DEPLOY_DIR/$APP_NAME.war.pending" ]] || \\
+  [[ -e "$DEPLOY_DIR/$APP_NAME.war.isdeploying" ]] || \\
+  [[ -e "$DEPLOY_DIR/$APP_NAME.war.isundeploying" ]] || \\
+  [[ -e "$DEPLOY_DIR/$APP_NAME.war.status" ]] || \\
+  [[ -e "$DEPLOY_DIR/$APP_NAME.war.dodeploy" ]]
 }
 
 if [[ "$CLEANUP_DEV_MODE" = "0" && ( -z "$WAR_FILE" || ! -f "$WAR_FILE" ) ]]; then
@@ -269,6 +360,27 @@ if [[ "$CLEANUP_DEV_MODE" = "1" ]]; then
     "$DEPLOY_DIR/$APP_NAME.war.isundeploying" \
     "$DEPLOY_DIR/$APP_NAME.war.status" \
     "$DEPLOY_DIR/$APP_NAME.war.dodeploy"; then
+    sleep 0.3
+  fi
+  if wildfly_cleanup_artifacts_remain; then
+    if ! run_privileged rm -f \
+      "$DEPLOY_DIR/$APP_NAME.war" \
+      "$DEPLOY_DIR/$APP_NAME.war.deployed" \
+      "$DEPLOY_DIR/$APP_NAME.war.undeployed" \
+      "$DEPLOY_DIR/$APP_NAME.war.failed" \
+      "$DEPLOY_DIR/$APP_NAME.war.skipdeploy" \
+      "$DEPLOY_DIR/$APP_NAME.war.pending" \
+      "$DEPLOY_DIR/$APP_NAME.war.isdeploying" \
+      "$DEPLOY_DIR/$APP_NAME.war.isundeploying" \
+      "$DEPLOY_DIR/$APP_NAME.war.status" \
+      "$DEPLOY_DIR/$APP_NAME.war.dodeploy"; then
+      echo "Permissions insuffisantes pour nettoyer $APP_NAME dans $DEPLOY_DIR."
+      echo "Lance 'sudo -v' puis relance."
+      echo "__JWEBGEN_EVENT__ deploy_sudo_required" >&2
+      exit 1
+    fi
+  fi
+  if wildfly_cleanup_artifacts_remain; then
     echo "Permissions insuffisantes pour nettoyer $APP_NAME dans $DEPLOY_DIR."
     echo "Lance 'sudo -v' puis relance."
     echo "__JWEBGEN_EVENT__ deploy_sudo_required" >&2
@@ -277,11 +389,32 @@ if [[ "$CLEANUP_DEV_MODE" = "1" ]]; then
   echo "Dev cleanup completed for $APP_NAME (WildFly)."
   exit 0
 fi
-if ! run_privileged cp "$WAR_FILE" "$DEPLOY_DIR/$APP_NAME.war"; then
-  echo "Permissions insuffisantes pour copier le WAR."
-  echo "Lance 'sudo -v' puis relance."
-  echo "__JWEBGEN_EVENT__ deploy_sudo_required" >&2
-  exit 1
+war_unchanged=0
+if [[ -f "$WAR_FILE" && -f "$DEPLOY_DIR/$APP_NAME.war" ]] && cmp -s "$WAR_FILE" "$DEPLOY_DIR/$APP_NAME.war" 2>/dev/null; then
+  war_unchanged=1
+  echo "WAR unchanged; keeping existing artifact copy."
+fi
+
+if [[ "$war_unchanged" = "1" && "\${JWEBGEN_FORCE_WILDFLY_REDEPLOY:-0}" != "1" ]]; then
+  # Verify app is actually up before skipping redeploy
+  if [[ -f "$DEPLOY_DIR/$APP_NAME.war.deployed" ]] && command -v curl >/dev/null 2>&1 && curl -sS --max-time 2 "http://127.0.0.1:$APP_HTTP_PORT/$APP_NAME/" >/dev/null 2>&1; then
+    echo "WildFly: skipped redeploy (set JWEBGEN_FORCE_WILDFLY_REDEPLOY=1 to force)."
+    echo "Deployed (WildFly): http://localhost:$APP_HTTP_PORT/$APP_NAME/"
+    exit 0
+  else
+    echo "WAR unchanged but app not reachable; proceeding with deployment verification."
+  fi
+fi
+
+if [[ "$war_unchanged" = "0" ]]; then
+  if ! run_privileged cp "$WAR_FILE" "$DEPLOY_DIR/$APP_NAME.war"; then
+    echo "Permissions insuffisantes pour copier le WAR."
+    echo "Lance 'sudo -v' puis relance."
+    echo "__JWEBGEN_EVENT__ deploy_sudo_required" >&2
+    exit 1
+  fi
+else
+  echo "WAR unchanged but force redeploy requested (JWEBGEN_FORCE_WILDFLY_REDEPLOY=1)."
 fi
 
 run_privileged touch "$DEPLOY_DIR/$APP_NAME.war.dodeploy" || true
@@ -292,7 +425,12 @@ DEPLOYED_MARKER="$DEPLOY_DIR/$APP_NAME.war.deployed"
 INPROGRESS_MARKER="$DEPLOY_DIR/$APP_NAME.war.isdeploying"
 STATUS_MARKER="$DEPLOY_DIR/$APP_NAME.war.status"
 
-deadline=$((SECONDS + 20))
+DEPLOY_TIMEOUT="\${JWEBGEN_WILDFLY_DEPLOY_TIMEOUT:-20}"
+if [[ ! "$DEPLOY_TIMEOUT" =~ ^[0-9]+$ ]] || (( DEPLOY_TIMEOUT < 5 )); then
+  DEPLOY_TIMEOUT=20
+fi
+deadline=$((SECONDS + DEPLOY_TIMEOUT))
+DEPLOY_HTTP_OK=0
 while (( SECONDS < deadline )); do
   if [[ -f "$FAILED_MARKER" ]]; then
     echo "WildFly deployment failed."
@@ -305,20 +443,28 @@ while (( SECONDS < deadline )); do
   if [[ -f "$DEPLOYED_MARKER" ]]; then
     break
   fi
+  if command -v curl >/dev/null 2>&1 && curl -sS --max-time 2 "http://127.0.0.1:$APP_HTTP_PORT/$APP_NAME/" >/dev/null 2>&1; then
+    DEPLOY_HTTP_OK=1
+    break
+  fi
   sleep 1
 done
 
-if [[ ! -f "$DEPLOYED_MARKER" ]]; then
-  if [[ -f "$INPROGRESS_MARKER" ]]; then
-    echo "WildFly deployment still in progress (timeout)."
-  else
-    echo "WildFly deployment not confirmed (.deployed marker missing)."
+if [[ -f "$DEPLOYED_MARKER" || "$DEPLOY_HTTP_OK" = "1" ]]; then
+  if [[ "$DEPLOY_HTTP_OK" = "1" && ! -f "$DEPLOYED_MARKER" ]]; then
+    echo "WildFly: application reachable (continuing without .deployed marker)."
   fi
-  echo "__JWEBGEN_EVENT__ deploy_error" >&2
-  exit 1
+  echo "Deployed (WildFly): http://localhost:$APP_HTTP_PORT/$APP_NAME/"
+  exit 0
 fi
 
-echo "Deployed (WildFly): http://localhost:8080/$APP_NAME/"
+if [[ -f "$INPROGRESS_MARKER" ]]; then
+  echo "WildFly deployment still in progress (timeout)."
+else
+  echo "WildFly deployment not confirmed (.deployed marker missing)."
+fi
+echo "__JWEBGEN_EVENT__ deploy_error" >&2
+exit 1
 `;
   }
 
