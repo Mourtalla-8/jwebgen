@@ -45,24 +45,6 @@ function run(command, args = [], options = {}) {
 `;
 }
 
-function delegateToBash({ bashName }) {
-  return `${embeddedSpawnRun()}
-import { fileURLToPath } from 'node:url';
-import path from 'node:path';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-if (process.platform === 'win32') {
-  console.error('This action is not available on Windows yet (bash script fallback is unavailable).');
-  process.exit(1);
-}
-
-const bashPath = path.join(__dirname, ${JSON.stringify(bashName)});
-await run('bash', [bashPath, ...process.argv.slice(2)]);
-`;
-}
-
 export function makeNodeBuildScript() {
   return `${scriptHeader({ name: 'build' })}${embeddedSpawnRun()}
 import { fileURLToPath } from 'node:url';
