@@ -183,6 +183,7 @@ async function runMigrate() {
     makeNodeDevScript: makeNodeDevScriptImpl,
     makeNodeWatchScript: makeNodeWatchScriptImpl,
     makeAddServletScript: ({ basePackage }) => makeAddServletScriptImpl({ basePackage, appName: APP_NAME }),
+    makeLiveReloadClientScript: makeLiveReloadClientScriptImpl,
     makeExecutable,
     legacyDeployScript: LEGACY_DEPLOY_SCRIPT
   });

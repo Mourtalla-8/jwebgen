@@ -259,6 +259,7 @@ export async function runCreateCommand(deps) {
       })
     );
     await writeFileSafe(path.join(workDir, '.jwebgen', 'DEV.md'), makeDevMd({ appName: deployedAppName, serverTarget: serverTarget || 'unset' }));
+    await writeFileSafe(path.join(workDir, '.jwebgen', 'live-reload.js'), makeLiveReloadClientScript());
     await writeFileSafe(path.join(scriptsDir, 'build.sh'), makeBuildScript());
     await writeFileSafe(path.join(scriptsDir, 'deploy.sh'), makeDeploySelectorScript());
     await writeFileSafe(
@@ -327,10 +328,10 @@ export async function runCreateCommand(deps) {
   }
 
   console.log(pc.cyan('\nQuick development commands:'));
-  console.log(pc.cyan('- ./.jwebgen/scripts/build.sh'));
-  console.log(pc.cyan('- ./.jwebgen/scripts/deploy.sh'));
-  console.log(pc.cyan('- ./.jwebgen/scripts/dev.sh'));
-  console.log(pc.cyan('- ./.jwebgen/scripts/watch.sh'));
+  console.log(pc.cyan('- jwebgen --build'));
+  console.log(pc.cyan('- jwebgen --deploy'));
+  console.log(pc.cyan('- jwebgen --dev'));
+  console.log(pc.cyan('- jwebgen --watch'));
   if (addServlet) console.log(pc.cyan('- jwebgen --servlet HelloServlet'));
   outro(pc.cyan('Done.'));
 }

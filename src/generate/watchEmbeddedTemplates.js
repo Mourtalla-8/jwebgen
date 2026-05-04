@@ -1,7 +1,7 @@
 export const DEV_WORKER_SCRIPT_TEMPLATE = `import http from 'node:http';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { readdirSync, statSync, watch as fsWatch, writeFileSync, appendFileSync } from 'node:fs';
+import { readdirSync, statSync, watch as fsWatch, writeFileSync, appendFileSync, readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 
 const root = process.cwd();
@@ -19,6 +19,8 @@ const serverUnit =
     : 'tomcat10';
 const preferredLivePort = Number(process.env.JWEBGEN_LIVE_PORT || 35729);
 let livePort = preferredLivePort;
+const preferredProxyPort = Number(process.env.JWEBGEN_PROXY_PORT || 8081);
+let proxyPort = preferredProxyPort;
 const wsClients = new Set();
 
 const state = {
@@ -28,10 +30,18 @@ const state = {
   server: 'checking',
   app: 'checking',
   live: 'starting',
-  url: 'http://localhost:' + httpPort + '/' + appName + '/',
+  url: 'http://localhost:' + proxyPort + '/' + appName + '/',
+  appUrl: 'http://localhost:' + httpPort + '/' + appName + '/',
+  proxyUrl: 'http://localhost:' + proxyPort + '/' + appName + '/',
   serverCheckUrl: serverTarget === 'wildfly' ? 'http://127.0.0.1:9990' : 'http://127.0.0.1:' + httpPort,
-  livePort
+  livePort,
+  proxyPort
 };
+function syncPublicUrls() {
+  state.proxyUrl = 'http://localhost:' + proxyPort + '/' + appName + '/';
+  state.appUrl = 'http://localhost:' + httpPort + '/' + appName + '/';
+  state.url = state.proxyUrl;
+}
 function saveState() { writeFileSync(stateFile, JSON.stringify(state), 'utf8'); }
 function emit(type, details = {}) { appendFileSync(eventsFile, JSON.stringify({ type, ts: Date.now(), ...details }) + '\\n', 'utf8'); }
 function parseListenOwner(text, port) {
@@ -83,37 +93,166 @@ function wsSend(socket, text) {
     : Buffer.from([0x81, 126, (payload.length >> 8) & 0xff, payload.length & 0xff]);
   socket.write(Buffer.concat([header, payload]));
 }
+function injectLiveReload(html, tag) {
+  const lower = String(html).toLowerCase();
+  const idx = lower.lastIndexOf('</body>');
+  if (idx < 0) return String(html) + tag;
+  return String(html).slice(0, idx) + tag + String(html).slice(idx);
+}
+function proxyScriptTag() {
+  return '<script>window.__JWEBGEN_LIVE_PORT=' + String(livePort) + ';</script><script src=\"/.jwebgen/live-reload.js\"></script>';
+}
+function serveProxyClient(res) {
+  const assetPath = path.join(root, '.jwebgen', 'live-reload.js');
+  if (!existsSync(assetPath)) {
+    res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+    res.end('missing .jwebgen/live-reload.js\\n');
+    return;
+  }
+  const body = readFileSync(assetPath, 'utf8');
+  res.writeHead(200, { 'content-type': 'application/javascript; charset=utf-8', 'cache-control': 'no-store' });
+  res.end(body);
+}
+function createProxyServer() {
+  return http.createServer((req, res) => {
+    const url = String(req.url || '/');
+    if (url.startsWith('/.jwebgen/live-reload.js')) return serveProxyClient(res);
+    // Pass-through proxy to local server, injecting only for HTML.
+    const upstreamHeaders = { ...req.headers };
+    upstreamHeaders.host = req.headers.host || upstreamHeaders.host;
+    upstreamHeaders['accept-encoding'] = 'identity';
+    const upstream = http.request(
+      {
+        hostname: '127.0.0.1',
+        port: httpPort,
+        method: req.method || 'GET',
+        path: url,
+        headers: upstreamHeaders
+      },
+      (up) => {
+        const ct = String(up.headers['content-type'] || '');
+        const isHtml = ct.toLowerCase().includes('text/html');
+        if (!isHtml) {
+          res.writeHead(up.statusCode || 200, up.headers);
+          up.pipe(res);
+          return;
+        }
+        if (req.method === 'HEAD' || [204, 304].includes(up.statusCode)) {
+          res.writeHead(up.statusCode || 200, up.headers);
+          up.pipe(res);
+          return;
+        }
+        // Force identity transfer/encoding and strip compression metadata for HTML
+        delete up.headers['transfer-encoding'];
+        delete up.headers['content-encoding'];
+        delete up.headers['content-length'];
+        delete up.headers['te'];
+        delete up.headers['vary'];
+        let body = '';
+        let truncated = false;
+        up.setEncoding('utf8');
+        up.on('data', (c) => {
+          if (truncated) return;
+          body += String(c);
+          if (body.length > 2_000_000) {
+            // Safety cap: do not buffer unbounded responses.
+            if (!truncated) {
+              console.warn('[jwebgen] Response body exceeds 2MB limit, replacing with fallback HTML');
+              truncated = true;
+            }
+            body = '<!doctype html><html><body><h1>Content too large</h1></body></html>';
+          }
+        });
+        up.on('end', () => {
+          const injected = injectLiveReload(body, proxyScriptTag());
+          const headers = { ...up.headers };
+          delete headers['transfer-encoding'];
+          delete headers['content-encoding'];
+          delete headers['content-length'];
+          delete headers['te'];
+          delete headers['vary'];
+          // Remove cache validators so browsers don't reuse cached HTML with old injected port
+          delete headers['etag'];
+          delete headers['last-modified'];
+          delete headers['if-none-match'];
+          delete headers['if-modified-since'];
+          delete headers['content-security-policy'];
+          delete headers['content-security-policy-report-only'];
+          headers['cache-control'] = 'no-store';
+          headers['pragma'] = 'no-cache';
+          headers['expires'] = '0';
+          res.writeHead(up.statusCode || 200, headers);
+          res.end(injected, 'utf8');
+        });
+      }
+    );
+    upstream.on('error', () => {
+      res.writeHead(502, { 'content-type': 'text/plain; charset=utf-8' });
+      res.end('proxy error\\n');
+    });
+    req.pipe(upstream);
+  });
+}
 function notifyReload() {
   const msg = JSON.stringify({ command: 'reload' });
   for (const s of wsClients) { try { wsSend(s, msg); } catch {} }
 }
+function listenOnce(server, port, host) {
+  return new Promise((resolve, reject) => {
+    const onErr = (e) => {
+      server.removeListener('listening', onOk);
+      reject(e);
+    };
+    const onOk = () => {
+      server.removeListener('error', onErr);
+      resolve();
+    };
+    server.once('error', onErr);
+    server.once('listening', onOk);
+    if (host) server.listen(port, host);
+    else server.listen(port);
+  });
+}
+async function startProxyServer() {
+  let candidate = preferredProxyPort;
+  for (let tries = 0; tries < 60; tries++) {
+    let bound = false;
+    for (let stall = 0; stall < 14; stall++) {
+      try {
+        await listenOnce(proxy, candidate, '127.0.0.1');
+        bound = true;
+        break;
+      } catch (err) {
+        if (err?.code !== 'EADDRINUSE') {
+          console.error('[jwebgen] Proxy server error:', err);
+          process.exit(1);
+        }
+        await new Promise((r) => setTimeout(r, 70 + stall * 45));
+      }
+    }
+    if (bound) {
+      proxyPort = candidate;
+      state.proxyPort = proxyPort;
+      syncPublicUrls();
+      saveState();
+      return;
+    }
+    const owner = await portOwner(candidate);
+    emit('proxy_port_busy', { port: candidate, owner: owner || '' });
+    const next = await findFreePort(candidate + 1);
+    if (!next) {
+      console.error('[jwebgen] Proxy server error: no free port for fallback');
+      process.exit(1);
+    }
+    emit('proxy_port_fallback', { fromPort: candidate, toPort: next });
+    candidate = next;
+  }
+  console.error('[jwebgen] Proxy server error: could not bind after retries');
+  process.exit(1);
+}
 const wsServer = http.createServer((_, res) => {
   res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
   res.end('jwebgen live\\n');
-});
-wsServer.on('error', (err) => {
-  if (err?.code === 'EADDRINUSE') {
-    (async () => {
-      const busyPort = livePort;
-      const owner = await portOwner(busyPort);
-      const fallback = await findFreePort(busyPort + 1);
-      state.live = 'port busy (' + busyPort + ')';
-      saveState();
-      emit('live_port_busy', { port: busyPort, owner: owner || '' });
-      if (fallback) {
-        livePort = fallback;
-        state.livePort = livePort;
-        wsServer.listen(livePort, () => {
-          state.live = 'ready (ws://localhost:' + livePort + ')';
-          saveState();
-          emit('live_port_fallback', { fromPort: busyPort, toPort: livePort });
-        });
-      }
-    })().catch(() => {});
-    return;
-  }
-  state.live = 'error';
-  saveState();
 });
 wsServer.on('upgrade', (req, socket) => {
   const key = req.headers['sec-websocket-key'];
@@ -124,11 +263,41 @@ wsServer.on('upgrade', (req, socket) => {
   socket.on('close', () => wsClients.delete(socket));
   socket.on('error', () => wsClients.delete(socket));
 });
-wsServer.listen(livePort, () => {
-  state.livePort = livePort;
-  state.live = 'ready (ws://localhost:' + livePort + ')';
+async function startWsServer() {
+  let candidate = preferredLivePort;
+  for (let tries = 0; tries < 60; tries++) {
+    try {
+      await listenOnce(wsServer, candidate, '127.0.0.1');
+      livePort = candidate;
+      state.livePort = livePort;
+      state.live = 'ready (ws://localhost:' + livePort + ')';
+      saveState();
+      return;
+    } catch (err) {
+      if (err?.code !== 'EADDRINUSE') {
+        state.live = 'error';
+        saveState();
+        return;
+      }
+      const owner = await portOwner(candidate);
+      emit('live_port_busy', { port: candidate, owner: owner || '' });
+      const next = await findFreePort(candidate + 1);
+      if (!next) {
+        state.live = 'error';
+        saveState();
+        return;
+      }
+      emit('live_port_fallback', { fromPort: candidate, toPort: next });
+      candidate = next;
+    }
+  }
+  state.live = 'error';
   saveState();
-});
+}
+startWsServer().catch(() => {});
+const proxy = createProxyServer();
+startProxyServer().catch(() => process.exit(1));
+process.on('exit', () => { try { proxy.close(); } catch {} });
 process.on('exit', () => { try { wsServer.close(); } catch {} });
 if (parentPid > 1) {
   setInterval(() => {
@@ -144,6 +313,8 @@ let running = false;
 let queued = false;
 let timer = null;
 let lastBuildQueuedAt = 0;
+let lastDeployFinishedAt = 0;
+const DOUBLE_RELOAD = process.env.JWEBGEN_DOUBLE_RELOAD === '1';
 async function rebuild() {
   if (running) { queued = true; return; }
   running = true;
@@ -154,6 +325,8 @@ async function rebuild() {
     await runScript('deploy.sh');
     state.deploy = 'ok'; state.phase = 'idle'; saveState();
     notifyReload();
+    if (DOUBLE_RELOAD) setTimeout(() => notifyReload(), 600);
+    lastDeployFinishedAt = Date.now();
   } catch (err) {
     const msg = String(err?.message || '');
     const failedDuringDeploy = state.deploy === 'running';
@@ -170,15 +343,25 @@ async function rebuild() {
   }
 }
 function queueRebuild() {
+  if (running) {
+    queued = true;
+    return;
+  }
   const now = Date.now();
   // Protect against very bursty editor writes (tmp swap, multi-write saves).
-  if (now - lastBuildQueuedAt < 120) return;
+  if (now - lastBuildQueuedAt < 200) return;
   lastBuildQueuedAt = now;
   clearTimeout(timer);
-  timer = setTimeout(() => rebuild(), 250);
+  timer = setTimeout(() => rebuild(), 400);
 }
 function isDir(p) { try { return statSync(p).isDirectory(); } catch { return false; } }
 const watched = new Map();
+const srcDirPrefix = path.join(root, 'src') + path.sep;
+function isUnderSrc(fullPath) {
+  const norm = fullPath.replace(/\\\\/g, '/');
+  const pref = srcDirPrefix.replace(/\\\\/g, '/');
+  return norm === pref.slice(0, -1) || norm.startsWith(pref);
+}
 const RELOAD_RELEVANT_EXT = new Set([
   '.java', '.jsp', '.jspx', '.tag', '.tagx',
   '.html', '.xhtml', '.css', '.js', '.mjs',
@@ -190,11 +373,11 @@ function shouldTriggerRebuild(dir, fileName) {
   if (name.endsWith('.swp') || name.endsWith('.tmp') || name.endsWith('~') || name.endsWith('.war')) return false;
   const full = path.join(dir, name);
   if (full.includes('/target/')) return false;
+  if (name === 'pom.xml') return full === path.join(root, 'pom.xml');
+  if (name === 'web.xml' || name === 'context.xml') return isUnderSrc(full);
   const ext = path.extname(name).toLowerCase();
-  if (RELOAD_RELEVANT_EXT.has(ext)) return true;
-  if (name === 'pom.xml') return true;
-  if (name === 'web.xml' || name === 'context.xml') return true;
-  return false;
+  if (!RELOAD_RELEVANT_EXT.has(ext)) return false;
+  return isUnderSrc(full);
 }
 function walkAndWatch(dir) {
   if (!isDir(dir)) return;
@@ -230,7 +413,7 @@ function runScript(script) {
 function serverUp() {
   return new Promise((resolve) => {
     const appUrl = new URL('/' + appName + '/', 'http://127.0.0.1:' + httpPort).toString();
-    const req = http.request(appUrl, { method: 'GET', timeout: 1500 }, (res) => {
+    const req = http.request(appUrl, { method: 'GET', timeout: 1500, headers: { 'accept-encoding': 'identity' } }, (res) => {
       const code = Number(res.statusCode || 0);
       res.resume();
       if (code >= 200 && code < 400) return resolve({ ok: true, status: 'up' });
@@ -241,19 +424,30 @@ function serverUp() {
     req.end();
 
     function checkEngine() {
-      const cmd = serverTarget === 'tomcat'
-        ? 'systemctl is-active --quiet ' + serverUnit + ' 2>/dev/null'
-        : 'curl -sS --max-time 2 http://127.0.0.1:9990/ >/dev/null 2>&1';
-      const p = spawn('bash', ['-lc', cmd], { stdio: 'ignore' });
-      p.on('exit', async (code) => {
-        if (code === 0) {
-          if (serverTarget === 'wildfly') return resolve({ ok: true, status: 'app_down_000', httpStatus: 0 });
-          return resolve({ ok: true, status: 'app_down' });
-        }
-        const owner = await portOwner(httpPort);
-        if (owner) return resolve({ ok: false, status: 'port_conflict', owner });
-        resolve({ ok: false, status: 'down' });
+      if (running || Date.now() - lastDeployFinishedAt < 2200) {
+        return resolve({ ok: true, status: 'app_down' });
+      }
+      if (serverTarget === 'wildfly') {
+        const mgmtReq = http.request('http://127.0.0.1:9990/', { method: 'GET', timeout: 1500, headers: { 'accept-encoding': 'identity' } }, (mgmtRes) => {
+          mgmtRes.resume();
+          if (Number(mgmtRes.statusCode || 0) > 0) return resolve({ ok: true, status: 'app_down_000', httpStatus: 0 });
+          checkPortOwner();
+        });
+        mgmtReq.on('error', () => checkPortOwner());
+        mgmtReq.on('timeout', () => { mgmtReq.destroy(); checkPortOwner(); });
+        mgmtReq.end();
+        return;
+      }
+      const p = spawn('bash', ['-lc', 'systemctl is-active --quiet ' + serverUnit + ' 2>/dev/null'], { stdio: 'ignore' });
+      p.on('exit', (code) => {
+        if (code === 0) return resolve({ ok: true, status: 'app_down' });
+        checkPortOwner();
       });
+    }
+    async function checkPortOwner() {
+      const owner = await portOwner(httpPort);
+      if (owner) return resolve({ ok: false, status: 'port_conflict', owner });
+      resolve({ ok: false, status: 'down' });
     }
   });
 }
@@ -281,13 +475,11 @@ setInterval(async () => {
     }
   }
 }, 1200).unref();
-walkAndWatch(path.join(root, 'src'));
 walkAndWatch(root);
 // Keep watcher coverage up to date when new directories appear.
 setInterval(() => {
-  walkAndWatch(path.join(root, 'src'));
   walkAndWatch(root);
-}, 3000).unref();
+}, 9000).unref();
 saveState();
 rebuild();
 `;
@@ -304,22 +496,23 @@ function loadState() { try { return JSON.parse(readFileSync(stateFile, 'utf8'));
 function render() {
   if (pauseFile && existsSync(pauseFile)) return;
   const s = loadState(); if (!s) return;
+  const LW = 22;
   const phase = s.phase === 'running' ? color('1;34', '● cycle') : color('1;32', '✓ idle');
   const build = s.build?.startsWith('ok') ? color('0;32', s.build) : s.build?.startsWith('error') ? color('0;31', s.build) : color('1;33', s.build);
   const deploy = s.deploy?.startsWith('ok') ? color('0;32', s.deploy) : s.deploy?.startsWith('error') ? color('0;31', s.deploy) : color('1;33', s.deploy);
   const server = s.server === 'up' ? color('0;32', 'up') : s.server === 'down' ? color('0;31', 'down') : color('1;33', s.server);
   const app = s.app === 'up' ? color('0;32', 'up') : s.app === 'down' ? color('0;31', 'down') : color('1;33', s.app ?? 'checking');
-  const live = s.live?.startsWith('ready') ? color('0;34', s.live) : color('0;31', s.live ?? 'error');
-  const url = color('0;32', s.url ?? '');
-  const probe = color('2;37', s.serverCheckUrl ?? '');
-  const label = (k) => color('2;37', String(k).padEnd(8, ' '));
-  const kv = (k, v) => label(k) + ': ' + v;
+  const reloadUrl = color('0;32', s.proxyUrl || s.url || '');
+  const directUrl = color('2;37', s.appUrl || '');
+  const lbl = (k) => color('2;37', String(k).padEnd(LW));
+  const kv = (k, v) => lbl(k) + color('2;37', ': ') + v;
+  const kvPair = (k1, v1, k2, v2) => '  ' + kv(k1, v1) + '   ' + kv(k2, v2) + '\\n';
   const controls = color('2;37', '[f] refresh');
   const out = color('1;36', 'jwebgen --dev') + '  ' + phase + '\\n'
-    + '  ' + kv('build', build) + '   ' + kv('deploy', deploy) + '\\n'
-    + '  ' + kv('server', server) + '   ' + kv('app', app) + '   ' + kv('live', live) + '\\n'
-    + '  ' + kv('url', url) + '\\n'
-    + '  ' + kv('probe', probe) + '\\n'
+    + kvPair('build', build, 'deploy', deploy)
+    + kvPair('server', server, 'app', app)
+    + '  ' + kv('browse (LiveReload)', reloadUrl) + '\\n'
+    + '  ' + kv('browse (no reload)', directUrl) + '\\n'
     + '  ' + kv('cmd', controls);
   process.stderr.write('\\x1b[?1l\\x1b[?1049h\\x1b[?25l\\x1b[H\\x1b[2J' + out + '\\n');
 }
