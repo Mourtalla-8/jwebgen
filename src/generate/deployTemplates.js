@@ -101,7 +101,7 @@ ensure_tomcat_dev_reloadable_context() {
   if grep -q '<Context' "$ctx" 2>/dev/null; then
     # First try to replace existing reloadable attribute, otherwise insert it
     if grep -qE '<Context[^>]*[[:space:]]reloadable=' "$ctx" 2>/dev/null; then
-      if ! run_privileged sed -i -E 's/(<Context[^>]*[[:space:]])reloadable="[^"]*"/\1reloadable="true"/' "$ctx" 2>/dev/null; then
+      if ! run_privileged sed -i -E 's/(<Context[^>]*[[:space:]])reloadable="[^"]*"/\\1reloadable="true"/' "$ctx" 2>/dev/null; then
         log_warn "Could not update reloadable attribute in META-INF/context.xml; servlet class updates may need a Tomcat restart."
       fi
     else
