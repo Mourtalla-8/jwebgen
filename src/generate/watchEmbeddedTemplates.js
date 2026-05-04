@@ -136,6 +136,11 @@ function createProxyServer() {
           up.pipe(res);
           return;
         }
+        if (req.method === 'HEAD' || [204, 304].includes(up.statusCode)) {
+          res.writeHead(up.statusCode || 200, up.headers);
+          up.pipe(res);
+          return;
+        }
         // Force identity transfer/encoding and strip compression metadata for HTML
         delete up.headers['transfer-encoding'];
         delete up.headers['content-encoding'];
@@ -170,6 +175,9 @@ function createProxyServer() {
           delete headers['last-modified'];
           delete headers['if-none-match'];
           delete headers['if-modified-since'];
+          headers['cache-control'] = 'no-store';
+          headers['pragma'] = 'no-cache';
+          headers['expires'] = '0';
           res.writeHead(up.statusCode || 200, headers);
           res.end(injected, 'utf8');
         });

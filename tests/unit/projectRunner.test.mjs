@@ -66,3 +66,37 @@ test('runProjectScript prints cleanup sudo guidance for cleanup-dev marker', asy
     await rm(tmpRoot, { recursive: true, force: true });
   }
 });
+
+test('runProjectScript cleanup-dev without sudo marker uses generic failure message', async () => {
+  const tmpRoot = await mkdtemp(path.join(os.tmpdir(), 'jwebgen-runner-cleanup-nomarker-'));
+  const scriptsDir = path.join(tmpRoot, '.jwebgen', 'scripts');
+  await mkdir(scriptsDir, { recursive: true });
+  const scriptPath = path.join(scriptsDir, 'deploy.sh');
+  await writeFile(
+    scriptPath,
+    '#!/usr/bin/env bash\necho "syntax error in deploy" >&2\nexit 1\n',
+    { mode: 0o755 }
+  );
+
+  const lines = [];
+  const originalError = console.error;
+  console.error = (...args) => lines.push(args.join(' '));
+
+  try {
+    await assert.rejects(
+      runProjectScript('deploy.sh', ['--cleanup-dev'], {}, {
+        findProjectRoot: () => tmpRoot,
+        detectLegacyProjectIssues: async () => [],
+        canonicalDeployScript: 'deploy.sh',
+        legacyDeployScript: 'deploy-tomcat.sh'
+      })
+    );
+    const out = lines.join('\n');
+    assert.match(out, /deploy\.sh failed:/i);
+    assert.doesNotMatch(out, /Cleanup failed for target server directories/i);
+    assert.doesNotMatch(out, /sudo -v && jwebgen --clean --deploy/);
+  } finally {
+    console.error = originalError;
+    await rm(tmpRoot, { recursive: true, force: true });
+  }
+});
