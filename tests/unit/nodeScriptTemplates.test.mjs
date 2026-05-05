@@ -40,6 +40,8 @@ test('makeNodeDeployScript wraps deploy IO with guardedAcl for permission errors
   assert.match(deploy, /async function guardedAcl/);
   assert.match(deploy, /EACCES/);
   assert.match(deploy, /EPERM/);
+  assert.match(deploy, /JWEBGEN_DEPLOY_USE_SUDO/);
+  assert.match(deploy, /spawn\('sudo'/);
   assert.match(deploy, /WILDFLY_DEPLOYMENTS/);
   assert.match(deploy, /TOMCAT_HOME\/TOMCAT10\/CATALINA_HOME/);
 });

@@ -73,6 +73,8 @@ assertContains(nodeDeploy, 'readMavenAppName', 'deploy.mjs resolves deploy name 
 assertContains(nodeDeploy, 'selectWarFile', 'deploy.mjs selects preferred WAR by app name');
 assertContains(nodeDeploy, 'chooseServerTargetInteractively', 'deploy.mjs prompts target when unset');
 assertContains(nodeDeploy, 'persistServerTarget', 'deploy.mjs persists chosen server target');
+assertContains(nodeDeploy, 'JWEBGEN_DEPLOY_USE_SUDO', 'deploy.mjs supports optional sudo deploy mode');
+assertContains(nodeDeploy, "spawn('sudo'", 'deploy.mjs can invoke sudo when enabled');
 assertContains(nodeDeploy, "process.platform === 'linux' ? '/var/lib/tomcat10' : ''", 'deploy.mjs Linux-only Tomcat default path');
 assertContains(nodeDeploy, "process.platform === 'linux' ? '/opt/wildfly' : ''", 'deploy.mjs Linux-only WildFly default path');
 const nodeDev = makeNodeDevScript();

@@ -64,7 +64,7 @@ test('runProjectScript prints cleanup sudo guidance for cleanup-dev marker', asy
     );
     const out = lines.join('\n');
     assert.match(out, /Cleanup failed for target server directories/i);
-    assert.match(out, /sudo -v && jwebgen --clean --deploy/);
+    assert.match(out, /jwebgen --clean --deploy --sudo-deploy/);
   } finally {
     console.error = originalError;
     await rm(tmpRoot, { recursive: true, force: true });
@@ -98,7 +98,7 @@ test('runProjectScript cleanup-dev without sudo marker uses generic failure mess
     const out = lines.join('\n');
     assert.match(out, /deploy\.sh failed:/i);
     assert.doesNotMatch(out, /Cleanup failed for target server directories/i);
-    assert.doesNotMatch(out, /sudo -v && jwebgen --clean --deploy/);
+    assert.doesNotMatch(out, /jwebgen --clean --deploy --sudo-deploy/);
   } finally {
     console.error = originalError;
     await rm(tmpRoot, { recursive: true, force: true });

@@ -34,6 +34,7 @@ export function parseFlags(argv = []) {
     watch: false,
     yes: false,
     verbose: false,
+    sudoDeploy: false,
     server: null, // tomcat|wildfly|null
     args: []
   };
@@ -89,6 +90,10 @@ export function parseFlags(argv = []) {
     }
     if (a === '--verbose' || a === '-v') {
       flags.verbose = true;
+      continue;
+    }
+    if (a === '--sudo-deploy') {
+      flags.sudoDeploy = true;
       continue;
     }
     if (a === '--tomcat' || a === '-t') {
@@ -164,6 +169,7 @@ export function formatFlagsHelp({ appName = 'jwebgen' } = {}) {
     `  ${cmd('--create, -c <projectName>')}${desc('Alias for --new.')}`,
     `  ${cmd('--yes, -y')}${desc('Non-interactive create mode (requires <projectName>).')}`,
     `  ${cmd('--tomcat, -t / --wildfly, -w')}${desc('Choose server target for create/dev/deploy flows.')}`,
+    `  ${cmd('--sudo-deploy')}${desc('Optional Linux-only sudo mode for deploy/cleanup script operations.')}`,
     section('Dev Note'),
     `  ${desc('If multiple servers/services listen on port 8080 on the same machine,')}`,
     `  ${desc('dev/deploy can fail with port conflicts. Keep only one HTTP server active')}`,
