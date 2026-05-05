@@ -264,9 +264,7 @@ async function runCli() {
   if (action === 'status') return await showStatus();
   if (action === 'clean') {
     if (flags.cleanDeploy) {
-      return await runProjectScript('deploy.sh', ['--cleanup-dev'], {
-        env: flags.sudoDeploy ? { JWEBGEN_DEPLOY_USE_SUDO: '1' } : {}
-      });
+      return await runProjectScript('deploy.sh', ['--cleanup-dev']);
     }
     return await runClean();
   }
@@ -279,12 +277,7 @@ async function runCli() {
       process.exit(1);
     }
     const target = await ensureServerTarget({ projectRoot, requestedTarget: flags.server });
-    return await runProjectScript('deploy.sh', flags.args, {
-      env: {
-        JWEBGEN_SERVER_TARGET: target,
-        ...(flags.sudoDeploy ? { JWEBGEN_DEPLOY_USE_SUDO: '1' } : {})
-      }
-    });
+    return await runProjectScript('deploy.sh', flags.args, { env: { JWEBGEN_SERVER_TARGET: target } });
   }
   if (action === 'dev') {
     const projectRoot = findProjectRoot();
@@ -295,10 +288,7 @@ async function runCli() {
     const target = await ensureServerTarget({ projectRoot, requestedTarget: flags.server });
     return await runProjectScript('dev.sh', flags.args, {
       verbose: flags.verbose,
-      env: {
-        JWEBGEN_SERVER_TARGET: target,
-        ...(flags.sudoDeploy ? { JWEBGEN_DEPLOY_USE_SUDO: '1' } : {})
-      }
+      env: { JWEBGEN_SERVER_TARGET: target }
     });
   }
   if (action === 'servlet') {

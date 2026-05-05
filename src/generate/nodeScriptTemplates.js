@@ -17,7 +17,7 @@ function scriptHeader({ name }) {
 /** Embedded in generated .mjs files — no npm dependencies besides Node. */
 function embeddedSpawnRun() {
   return `
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 
 function run(command, args = [], options = {}) {
   const { cwd, env = process.env } = options;
@@ -211,9 +211,11 @@ function isDevMode() {
   return String(process.env.JWEBGEN_DEV || '') === '1';
 }
 
-function isSudoDeployEnabled(cfg = {}) {
-  const raw = String(process.env.JWEBGEN_DEPLOY_USE_SUDO || cfg.JWEBGEN_DEPLOY_USE_SUDO || '').trim().toLowerCase();
-  return process.platform === 'linux' && (raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on');
+function canAutoSudo() {
+  if (process.platform !== 'linux') return false;
+  const probe = spawnSync('sudo', ['-n', 'true'], { stdio: 'ignore' });
+  // Accept both "already allowed passwordless" and "sudo exists but needs prompt".
+  return probe.status === 0 || probe.status === 1;
 }
 
 function shellQuote(value) {
@@ -248,14 +250,20 @@ function selectWarFile({ targetDir, appName, wars }) {
   return '';
 }
 
-async function guardedAcl(opLabel, fn, sudoFn, cfg = {}) {
+async function guardedAcl(opLabel, fn, sudoFn) {
   try {
     await fn();
   } catch (err) {
     if (err && (err.code === 'EACCES' || err.code === 'EPERM')) {
-      if (typeof sudoFn === 'function' && isSudoDeployEnabled(cfg)) {
-        await sudoFn();
-        return;
+      if (typeof sudoFn === 'function' && canAutoSudo()) {
+        try {
+          await sudoFn();
+          return;
+        } catch (sudoErr) {
+          console.error('Permission denied (' + opLabel + '). Automatic sudo retry failed.');
+          console.error(String(sudoErr.message || sudoErr));
+          process.exit(1);
+        }
       }
       const isWildflyOp = /wildfly/i.test(String(opLabel || ''));
       console.error('Permission denied (' + opLabel + '). The deployment destination must be writable by your user.');
@@ -272,7 +280,7 @@ async function guardedAcl(opLabel, fn, sudoFn, cfg = {}) {
             ' or use a group ACL (often needed for Linux packaging under /var/lib/tomcat10).'
         );
       }
-      console.error('Optional Linux mode: set JWEBGEN_DEPLOY_USE_SUDO=1 to retry deploy filesystem operations via sudo.');
+      console.error('On Linux, jwebgen auto-retries with sudo when available; otherwise use writable server paths.');
       console.error(String(err.message || err));
       process.exit(1);
     }
@@ -302,15 +310,15 @@ async function deployTomcat({ cfg, cleanupOnly, appName }) {
 
   await guardedAcl('creating Tomcat webapps directory', async () => {
     await ensureDir(webapps);
-  }, async () => runSudo(['mkdir', '-p', webapps]), cfg);
+  }, async () => runSudo(['mkdir', '-p', webapps]));
 
   if (cleanupOnly) {
     await guardedAcl('cleanup Tomcat exploded app', async () => {
       await rm(destExploded, { recursive: true, force: true });
-    }, async () => runSudo(['rm', '-rf', destExploded]), cfg);
+    }, async () => runSudo(['rm', '-rf', destExploded]));
     await guardedAcl('cleanup Tomcat WAR', async () => {
       await rm(destWar, { force: true });
-    }, async () => runSudo(['rm', '-f', destWar]), cfg);
+    }, async () => runSudo(['rm', '-f', destWar]));
     console.log('Tomcat cleanup complete: ' + appName);
     return;
   }
@@ -323,20 +331,20 @@ async function deployTomcat({ cfg, cleanupOnly, appName }) {
     }
     await guardedAcl('deploy (remove old Tomcat WAR)', async () => {
       await rm(destWar, { force: true });
-    }, async () => runSudo(['rm', '-f', destWar]), cfg);
+    }, async () => runSudo(['rm', '-f', destWar]));
     await guardedAcl('deploy (remove old exploded tree)', async () => {
       await rm(destExploded, { recursive: true, force: true });
-    }, async () => runSudo(['rm', '-rf', destExploded]), cfg);
+    }, async () => runSudo(['rm', '-rf', destExploded]));
     await guardedAcl('deploy exploded copy into Tomcat webapps', async () => {
       await cp(explodedSrc, destExploded, { recursive: true, force: true });
-    }, async () => runSudo(['cp', '-a', explodedSrc, destExploded]), cfg);
+    }, async () => runSudo(['cp', '-a', explodedSrc, destExploded]));
     await guardedAcl('deploy (touch exploded META-INF/context.xml)', async () => {
       const ctx = path.join(destExploded, 'META-INF', 'context.xml');
       if (existsSync(ctx)) await writeFile(ctx, await readFile(ctx));
     }, async () => {
       const ctx = path.join(destExploded, 'META-INF', 'context.xml');
       await runSudo(['sh', '-c', 'if [ -f ' + shellQuote(ctx) + ' ]; then : > ' + shellQuote(ctx) + '; fi']);
-    }, cfg);
+    });
     console.log('Deployed to Tomcat (exploded): ' + destExploded);
     return;
   }
@@ -356,13 +364,13 @@ async function deployTomcat({ cfg, cleanupOnly, appName }) {
   }
   await guardedAcl('deploy (refresh exploded dir)', async () => {
     await rm(destExploded, { recursive: true, force: true });
-  }, async () => runSudo(['rm', '-rf', destExploded]), cfg);
+  }, async () => runSudo(['rm', '-rf', destExploded]));
   await guardedAcl('deploy (remove old Tomcat WAR)', async () => {
     await rm(destWar, { force: true });
-  }, async () => runSudo(['rm', '-f', destWar]), cfg);
+  }, async () => runSudo(['rm', '-f', destWar]));
   await guardedAcl('copy WAR into Tomcat webapps', async () => {
     await cp(warFile, destWar, { force: true });
-  }, async () => runSudo(['cp', '-f', warFile, destWar]), cfg);
+  }, async () => runSudo(['cp', '-f', warFile, destWar]));
   console.log('Deployed to Tomcat: ' + destWar);
 }
 
@@ -382,7 +390,7 @@ async function deployWildfly({ cfg, cleanupOnly, appName }) {
 
   await guardedAcl('ensure WildFly deployments directory', async () => {
     await ensureDir(resolvedDeployments);
-  }, async () => runSudo(['mkdir', '-p', resolvedDeployments]), cfg);
+  }, async () => runSudo(['mkdir', '-p', resolvedDeployments]));
 
   const markers = [
     destWar,
@@ -400,7 +408,7 @@ async function deployWildfly({ cfg, cleanupOnly, appName }) {
   if (cleanupOnly) {
     await guardedAcl('WildFly cleanup markers', async () => {
       await Promise.all(markers.map((p) => rm(p, { force: true })));
-    }, async () => runSudo(['rm', '-f', ...markers]), cfg);
+    }, async () => runSudo(['rm', '-f', ...markers]));
     console.log('WildFly cleanup complete: ' + appName);
     return;
   }
@@ -420,10 +428,10 @@ async function deployWildfly({ cfg, cleanupOnly, appName }) {
   }
   await guardedAcl('copy WAR to WildFly deployments', async () => {
     await cp(warFile, destWar, { force: true });
-  }, async () => runSudo(['cp', '-f', warFile, destWar]), cfg);
+  }, async () => runSudo(['cp', '-f', warFile, destWar]));
   await guardedAcl('WildFly deploy marker (.dodeploy)', async () => {
     await writeFile(destWar + '.dodeploy', '');
-  }, async () => runSudo(['sh', '-c', ': > ' + shellQuote(destWar + '.dodeploy')]), cfg);
+  }, async () => runSudo(['sh', '-c', ': > ' + shellQuote(destWar + '.dodeploy')]));
   console.log('Deployed to WildFly: ' + destWar);
 }
 

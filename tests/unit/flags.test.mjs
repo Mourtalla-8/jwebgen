@@ -39,12 +39,6 @@ test('parseFlags supports clean deploy combo as single action', () => {
   assert.equal(parsed.actionCount, 1);
 });
 
-test('parseFlags parses sudo deploy option', () => {
-  const parsed = parseFlags(['--deploy', '--sudo-deploy']);
-  assert.equal(parsed.action, 'deploy');
-  assert.equal(parsed.flags.sudoDeploy, true);
-});
-
 test('isLikelyLegacySubcommand detects old subcommand tokens', () => {
   assert.equal(isLikelyLegacySubcommand('dev'), true);
   assert.equal(isLikelyLegacySubcommand('--dev'), false);

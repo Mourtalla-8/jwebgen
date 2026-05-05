@@ -71,7 +71,7 @@ export async function runProjectScript(scriptName, args = [], options = {}, deps
       .some((chunk) => String(chunk).includes(marker));
     if (isCleanupDeploy && markerPresent) {
       console.error(pc.yellow('Cleanup failed for target server directories.'));
-      console.error(pc.yellow('If this is a permission issue, run: jwebgen --clean --deploy --sudo-deploy'));
+      console.error(pc.yellow('If this is a permission issue, jwebgen will auto-retry with sudo on Linux when available.'));
       error.jwebgenHandled = true;
       throw error;
     }

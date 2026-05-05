@@ -752,7 +752,7 @@ cleanup() {
     local cleanup_output=""
     if ! cleanup_output="$("$ROOT_DIR/.jwebgen/scripts/deploy.sh" --cleanup-dev 2>&1)"; then
       if [[ "$cleanup_output" == *"__JWEBGEN_EVENT__ deploy_sudo_required"* ]]; then
-        ui_warn "Automatic cleanup needs elevated privileges. Run: jwebgen --clean --deploy --sudo-deploy"
+        ui_warn "Automatic cleanup needs elevated privileges. jwebgen will auto-retry with sudo on Linux when available."
       else
         ui_warn "Automatic deployment cleanup failed (non-blocking). Try: jwebgen --clean --deploy"
       fi
