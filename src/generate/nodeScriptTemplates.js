@@ -237,6 +237,44 @@ async function ensureDir(p) {
   await mkdir(p, { recursive: true });
 }
 
+async function ensureTomcatDevReloadableContext({ destExploded }) {
+  const metaInfDir = path.join(destExploded, 'META-INF');
+  const ctx = path.join(metaInfDir, 'context.xml');
+  await guardedAcl('deploy (ensure exploded META-INF directory)', async () => {
+    await ensureDir(metaInfDir);
+  }, async () => runSudo(['mkdir', '-p', metaInfDir]));
+  if (!existsSync(ctx)) {
+    const defaultContext = '<?xml version="1.0" encoding="UTF-8"?>\\n<Context reloadable="true" />\\n';
+    await guardedAcl('deploy (create exploded META-INF/context.xml)', async () => {
+      await writeFile(ctx, defaultContext, 'utf8');
+    }, async () => runSudo(['sh', '-c', ': > ' + shellQuote(ctx) + ' && chmod 664 ' + shellQuote(ctx)]));
+    return;
+  }
+  let xml = '';
+  try {
+    xml = await readFile(ctx, 'utf8');
+  } catch {
+    xml = '';
+  }
+  if (/reloadable\\s*=\\s*["']true["']/i.test(xml)) return;
+  const contextOpenTag = xml.match(/<Context\\b[^>]*>/i);
+  if (!contextOpenTag) {
+    const merged = (xml.trim().length ? xml.trim() + '\\n' : '') + '<Context reloadable="true" />\\n';
+    await guardedAcl('deploy (append reloadable Context metadata)', async () => {
+      await writeFile(ctx, merged, 'utf8');
+    }, async () => runSudo(['sh', '-c', 'printf %s ' + shellQuote(merged) + ' > ' + shellQuote(ctx)]));
+    return;
+  }
+  const updatedTag = /reloadable\\s*=\\s*["'][^"']*["']/i.test(contextOpenTag[0])
+    ? contextOpenTag[0].replace(/reloadable\\s*=\\s*["'][^"']*["']/i, 'reloadable="true"')
+    : contextOpenTag[0].replace('<Context', '<Context reloadable="true"');
+  const nextXml = xml.replace(contextOpenTag[0], updatedTag);
+  if (nextXml === xml) return;
+  await guardedAcl('deploy (set Tomcat reloadable=true)', async () => {
+    await writeFile(ctx, nextXml, 'utf8');
+  }, async () => runSudo(['sh', '-c', 'printf %s ' + shellQuote(nextXml) + ' > ' + shellQuote(ctx)]));
+}
+
 function selectWarFile({ targetDir, appName, wars }) {
   const preferred = path.join(targetDir, appName + '.war');
   if (existsSync(preferred)) return preferred;
@@ -338,6 +376,7 @@ async function deployTomcat({ cfg, cleanupOnly, appName }) {
     await guardedAcl('deploy exploded copy into Tomcat webapps', async () => {
       await cp(explodedSrc, destExploded, { recursive: true, force: true });
     }, async () => runSudo(['cp', '-a', explodedSrc, destExploded]));
+    await ensureTomcatDevReloadableContext({ destExploded });
     await guardedAcl('deploy (touch exploded META-INF/context.xml)', async () => {
       const ctx = path.join(destExploded, 'META-INF', 'context.xml');
       if (existsSync(ctx)) await writeFile(ctx, await readFile(ctx));

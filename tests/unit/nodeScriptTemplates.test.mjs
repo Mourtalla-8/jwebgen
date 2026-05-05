@@ -47,6 +47,13 @@ test('makeNodeDeployScript wraps deploy IO with guardedAcl for permission errors
   assert.match(deploy, /TOMCAT_HOME\/TOMCAT10\/CATALINA_HOME/);
 });
 
+test('makeNodeDeployScript enforces Tomcat reloadable context in dev mode', () => {
+  const deploy = makeNodeDeployScript();
+  assert.match(deploy, /ensureTomcatDevReloadableContext/);
+  assert.match(deploy, /<Context reloadable="true" \/>/);
+  assert.match(deploy, /deploy \(set Tomcat reloadable=true\)/);
+});
+
 test('makeNodeBuildScript and watch delegate stay Node-first', () => {
   assert.match(makeNodeBuildScript(), /mvn\.cmd/);
   const watch = makeNodeWatchScript();
