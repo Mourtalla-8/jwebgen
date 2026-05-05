@@ -501,9 +501,31 @@ function resolveServerTarget({ cfg }) {
   return '';
 }
 
+async function readMavenAppName() {
+  const pomPath = path.join(rootDir, 'pom.xml');
+  if (!existsSync(pomPath)) return path.basename(rootDir);
+  try {
+    const { readFile } = await import('node:fs/promises');
+    const xml = await readFile(pomPath, 'utf8');
+    const noParent = xml.replace(/<parent>[\\s\\S]*?<\\/parent>/gi, '');
+    const noProfiles = noParent.replace(/<profiles>[\\s\\S]*?<\\/profiles>/gi, '');
+    const buildBlock = noProfiles.match(/<build>\\s*([\\s\\S]*?)<\\/build>/i);
+    if (buildBlock?.[1]) {
+      const fm = buildBlock[1].match(/<finalName>\\s*([^<]+?)\\s*<\\/finalName>/i);
+      if (fm?.[1]) return fm[1].trim();
+    }
+    const am = noProfiles.match(/<artifactId>\\s*([^<]+?)\\s*<\\/artifactId>/);
+    if (am?.[1]) return am[1].trim();
+  } catch {
+    /* ignore */
+  }
+  return path.basename(rootDir);
+}
+
 const cfg = await loadProjectConfig();
 let target = resolveServerTarget({ cfg });
 if (!target) { target = await chooseServerTargetInteractively(); await persistServerTarget(target); }
+const appName = await readMavenAppName();
 
 const workDir = rootDir;
 const stateFile = path.join(workDir, '.jwebgen', '.jwebgen-dev-state.json');
@@ -518,7 +540,7 @@ const DEV_DASHBOARD_SCRIPT_TEMPLATE = ${JSON.stringify(DEV_DASHBOARD_SCRIPT_TEMP
 await writeFile(workerScript, DEV_WORKER_SCRIPT_TEMPLATE, 'utf8');
 await writeFile(dashboardScript, DEV_DASHBOARD_SCRIPT_TEMPLATE, 'utf8');
 
-const env = { ...process.env, JWEBGEN_DEV: '1', JWEBGEN_SERVER_TARGET: target };
+const env = { ...process.env, JWEBGEN_DEV: '1', JWEBGEN_SERVER_TARGET: target, JWEBGEN_APP_NAME: appName };
 const worker = spawn(process.execPath, [workerScript, stateFile, eventsFile, pauseFile, String(process.pid)], { cwd: workDir, env, stdio: 'inherit' });
 const dash = spawn(process.execPath, [dashboardScript, stateFile, pauseFile, String(process.pid)], { cwd: workDir, env, stdio: ['ignore', 'inherit', 'inherit'] });
 

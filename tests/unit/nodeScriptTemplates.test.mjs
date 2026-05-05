@@ -21,6 +21,8 @@ test('makeNodeDeployScript resolves WildFly paths from resolved deployments dir'
 test('makeNodeDevScript spawns dashboard with inherited TTY streams', () => {
   const s = makeNodeDevScript();
   assert.match(s, /\['ignore', 'inherit', 'inherit'\]/);
+  assert.match(s, /readMavenAppName/);
+  assert.match(s, /JWEBGEN_APP_NAME: appName/);
 });
 
 test('makeNodeBuildScript warns when Maven executable is missing', () => {

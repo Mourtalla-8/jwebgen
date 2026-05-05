@@ -81,6 +81,8 @@ assertContains(nodeDev, '.jwebgen-worker.mjs', 'dev.mjs writes worker script');
 assertContains(nodeDev, '.jwebgen-dashboard.mjs', 'dev.mjs writes dashboard script');
 assertContains(nodeDev, 'Select server target for dev', 'dev.mjs prompts target when unset');
 assertContains(nodeDev, 'persistServerTarget', 'dev.mjs persists chosen server target');
+assertContains(nodeDev, 'readMavenAppName', 'dev.mjs resolves app name from pom');
+assertContains(nodeDev, 'JWEBGEN_APP_NAME: appName', 'dev.mjs passes app name to worker env');
 const nodeWatch = makeNodeWatchScript();
 assertContains(nodeWatch, 'dev.mjs', 'watch.mjs reuses dev.mjs runtime');
 
