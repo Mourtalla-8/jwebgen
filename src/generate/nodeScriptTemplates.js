@@ -244,7 +244,7 @@ async function guardedAcl(opLabel, fn) {
         console.error(
           'Typical fixes: align TOMCAT_HOME/TOMCAT10/CATALINA_HOME with a writable instance for dev,' +
             ' adjust webapps ownership/chmod,' +
-            ' or use a group ACL (often needed for Linux packaging under /var/lib/tomcat/).'
+            ' or use a group ACL (often needed for Linux packaging under /var/lib/tomcat10).'
         );
       }
       console.error(String(err.message || err));
