@@ -232,12 +232,21 @@ async function guardedAcl(opLabel, fn) {
     await fn();
   } catch (err) {
     if (err && (err.code === 'EACCES' || err.code === 'EPERM')) {
+      const isWildflyOp = /wildfly/i.test(String(opLabel || ''));
       console.error('Permission denied (' + opLabel + '). The deployment destination must be writable by your user.');
-      console.error(
-        'Typical fixes: align TOMCAT_HOME with a writable instance for dev,' +
-          ' adjust webapps ownership/chmod,' +
-          ' or use a group ACL (often needed for Linux packaging under /var/lib/tomcat/).'
-      );
+      if (isWildflyOp) {
+        console.error(
+          'Typical fixes: align WILDFLY_DEPLOYMENTS (or WILDFLY_HOME) with a writable instance for dev,' +
+            ' adjust deployments ownership/chmod,' +
+            ' or use a group ACL (often needed for Linux packaging under /opt/wildfly/standalone/deployments).'
+        );
+      } else {
+        console.error(
+          'Typical fixes: align TOMCAT_HOME/TOMCAT10/CATALINA_HOME with a writable instance for dev,' +
+            ' adjust webapps ownership/chmod,' +
+            ' or use a group ACL (often needed for Linux packaging under /var/lib/tomcat/).'
+        );
+      }
       console.error(String(err.message || err));
       process.exit(1);
     }

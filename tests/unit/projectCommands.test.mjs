@@ -29,6 +29,8 @@ test('hintTomcatWhenStoppedForStatus skips systemctl wording on Windows and macO
 test('hintWildflyWhenStoppedForStatus is OS-specific', () => {
   assert.match(hintWildflyWhenStoppedForStatus('win32'), /standalone\.bat/i);
   assert.match(hintWildflyWhenStoppedForStatus('darwin'), /standalone\.sh/);
+  assert.match(hintWildflyWhenStoppedForStatus('linux'), /standalone\.sh/);
+  assert.match(hintWildflyWhenStoppedForStatus('linux'), /sudo systemctl/);
 });
 
 test('resolveStatusHttpPort prefers env over config then 8080', () => {

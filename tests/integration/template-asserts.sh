@@ -95,6 +95,8 @@ assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, 'function serverDownHint', 'dashbo
 assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, 'JWEBGEN_SERVER_TARGET', 'dashboard distinguishes Tomcat/WildFly from env');
 assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, "serverDownHint(", 'dashboard invokes serverDownHint from render wiring');
 assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, "s.server === 'down'", 'dashboard ties hint to server down state');
+assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, 'sudo systemctl start tomcat10', 'dashboard linux Tomcat hint suggests sudo');
+assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, 'prefer standalone.sh', 'dashboard linux WildFly hint prefers standalone');
 
 const client = makeLiveReloadClientScript();
 assertContains(client, "searchParams.set('_jwg'", 'devAssets live reload cache-bust refresh');
