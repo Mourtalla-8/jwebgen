@@ -48,6 +48,7 @@ test('runCreateCommand keeps typed project name casing for default directory', a
     makeDevScript: () => '#!/usr/bin/env bash\necho dev\n',
     makeWatchScript: () => '#!/usr/bin/env bash\necho watch\n',
     makeAddServletScript: () => '#!/usr/bin/env bash\necho add\n',
+    makeAddJspScript: () => '#!/usr/bin/env bash\necho add-jsp\n',
     makeLiveReloadClientScript: () => 'console.log("lr")',
     makeExecutable: async () => {},
     ensureBuildTools: async () => ({ javaOk: true, mavenOk: true }),
@@ -68,6 +69,7 @@ test('runCreateCommand keeps typed project name casing for default directory', a
     const pom = await readFile(path.join(targetDir, 'pom.xml'), 'utf8');
     assert.match(pom, /<artifactId>exo1<\/artifactId>/);
     assert.ok(writes.some((f) => f.endsWith(path.join('.jwebgen', 'live-reload.js'))));
+    assert.ok(writes.some((f) => f.endsWith(path.join('.jwebgen', 'scripts', 'add-jsp.sh'))));
     assert.ok(!writes.some((f) => f.includes(`${path.sep}DevLiveReloadFilter.java`)));
     assert.ok(!writes.some((f) => f.includes(path.join('webapp', '.jwebgen'))));
   } finally {

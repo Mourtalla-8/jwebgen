@@ -7,7 +7,7 @@ cd "$ROOT_DIR"
 node --input-type=module <<'EOF'
 import { makeWatchScript } from './src/generate/watchTemplate.js';
 import { makeDeployServerScript, makeDeploySelectorScript } from './src/generate/deployTemplates.js';
-import { makeLiveReloadSnippet, makeAddServletScript, makeLiveReloadClientScript } from './src/generate/devAssets.js';
+import { makeLiveReloadSnippet, makeAddServletScript, makeAddJspScript, makeLiveReloadClientScript } from './src/generate/devAssets.js';
 import { makeNodeBuildScript, makeNodeDeployScript, makeNodeDevScript, makeNodeWatchScript } from './src/generate/scriptTemplates.js';
 import { helloServlet, indexJsp } from './src/templates.js';
 import { DEV_WORKER_SCRIPT_TEMPLATE, DEV_DASHBOARD_SCRIPT_TEMPLATE } from './src/generate/watchEmbeddedTemplates.js';
@@ -128,12 +128,22 @@ if (String(snippet).includes('_lr')) {
 const addServlet = makeAddServletScript({ basePackage: 'com.ex', appName: 'jwebgen' });
 assertContains(addServlet, 'jwebgen --build', 'add-servlet next steps build command');
 assertContains(addServlet, 'jwebgen --dev', 'add-servlet next steps dev command');
+assertContains(addServlet, 'jakarta.servlet.ServletException', 'add-servlet includes ServletException import');
+assertContains(addServlet, 'throws ServletException, IOException', 'add-servlet doGet throws ServletException and IOException');
 if (String(addServlet).includes('out.println("<script>")')) {
   throw new Error('unexpected inline script in add-servlet output');
 }
 
+const addJsp = makeAddJspScript({ appName: 'jwebgen' });
+assertContains(addJsp, 'src/main/webapp/WEB-INF/jsp', 'add-jsp writes under WEB-INF/jsp');
+assertContains(addJsp, 'if [[ "$JSP_NAME" != *.jsp ]]; then', 'add-jsp auto-appends .jsp');
+assertContains(addJsp, 'JSP already exists:', 'add-jsp fails when file exists');
+assertContains(addJsp, 'Usage: jwebgen --jsp <name>', 'add-jsp usage message');
+
 const servlet = helloServlet({ basePackage: 'com.ex' });
 const lrServlet = String(servlet);
+assertContains(lrServlet, 'import jakarta.servlet.ServletException;', 'helloServlet includes ServletException import');
+assertContains(lrServlet, 'throws ServletException, IOException', 'helloServlet doGet throws ServletException and IOException');
 if (lrServlet.includes('/.jwebgen/live-reload.js') || lrServlet.includes('__JWEBGEN_LIVE_PORT')) {
   throw new Error('unexpected LiveReload artifact in helloServlet template');
 }

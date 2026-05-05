@@ -43,6 +43,7 @@ export async function runCreateCommand(deps) {
     makeNodeDevScript,
     makeNodeWatchScript,
     makeAddServletScript,
+    makeAddJspScript,
     makeLiveReloadClientScript,
     makeExecutable,
     ensureBuildTools,
@@ -267,6 +268,7 @@ export async function runCreateCommand(deps) {
     if (typeof makeNodeDevScript === 'function') await writeFileSafe(path.join(scriptsDir, 'dev.mjs'), makeNodeDevScript());
     if (typeof makeNodeWatchScript === 'function') await writeFileSafe(path.join(scriptsDir, 'watch.mjs'), makeNodeWatchScript());
     if (addServlet) await writeFileSafe(path.join(scriptsDir, 'add-servlet.sh'), makeAddServletScript({ basePackage }));
+    if (typeof makeAddJspScript === 'function') await writeFileSafe(path.join(scriptsDir, 'add-jsp.sh'), makeAddJspScript());
     if (serverTarget === 'tomcat' || serverTarget === 'wildfly') {
       await writeFileSafe(path.join(workDir, '.jwebgen', '.jwebgenrc'), `export JWEBGEN_SERVER_TARGET="${serverTarget}"\n`);
     }
@@ -282,7 +284,8 @@ export async function runCreateCommand(deps) {
       typeof makeNodeDeployScript === 'function' ? '.jwebgen/scripts/deploy.mjs' : null,
       typeof makeNodeDevScript === 'function' ? '.jwebgen/scripts/dev.mjs' : null,
       typeof makeNodeWatchScript === 'function' ? '.jwebgen/scripts/watch.mjs' : null,
-      addServlet ? '.jwebgen/scripts/add-servlet.sh' : null
+      addServlet ? '.jwebgen/scripts/add-servlet.sh' : null,
+      typeof makeAddJspScript === 'function' ? '.jwebgen/scripts/add-jsp.sh' : null
     ].filter(Boolean);
     for (const relativePath of scriptFiles) await makeExecutable(path.join(workDir, relativePath));
     await mkdir(path.dirname(targetDir), { recursive: true });

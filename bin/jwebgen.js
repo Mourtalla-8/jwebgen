@@ -32,6 +32,7 @@ import {
   makeLiveReloadServerScript as makeLiveReloadServerScriptImpl,
   makeLiveReloadSnippet as makeLiveReloadSnippetImpl,
   makeAddServletScript as makeAddServletScriptImpl,
+  makeAddJspScript as makeAddJspScriptImpl,
   makeDevMd as makeDevMdImpl
 } from '../src/generate/devAssets.js';
 import {
@@ -119,6 +120,7 @@ async function main(cli = {}) {
     makeNodeDevScript: makeNodeDevScriptImpl,
     makeNodeWatchScript: makeNodeWatchScriptImpl,
     makeAddServletScript: ({ basePackage }) => makeAddServletScriptImpl({ basePackage, appName: APP_NAME }),
+    makeAddJspScript: () => makeAddJspScriptImpl({ appName: APP_NAME }),
     makeLiveReloadClientScript: makeLiveReloadClientScriptImpl,
     makeExecutable,
     ensureBuildTools,
@@ -173,6 +175,7 @@ async function runMigrate() {
     makeNodeDevScript: makeNodeDevScriptImpl,
     makeNodeWatchScript: makeNodeWatchScriptImpl,
     makeAddServletScript: ({ basePackage }) => makeAddServletScriptImpl({ basePackage, appName: APP_NAME }),
+    makeAddJspScript: () => makeAddJspScriptImpl({ appName: APP_NAME }),
     makeLiveReloadClientScript: makeLiveReloadClientScriptImpl,
     makeExecutable,
     legacyDeployScript: LEGACY_DEPLOY_SCRIPT
@@ -297,6 +300,13 @@ async function runCli() {
       process.exit(1);
     }
     return await runProjectScript('add-servlet.sh', flags.args);
+  }
+  if (action === 'jsp') {
+    if (flags.args.length === 0) {
+      console.log(pc.yellow('Usage: jwebgen --jsp <name>'));
+      process.exit(1);
+    }
+    return await runProjectScript('add-jsp.sh', flags.args);
   }
   if (action === 'create') {
     const projectName = flags.args[0] || '';

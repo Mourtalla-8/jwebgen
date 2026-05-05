@@ -71,6 +71,7 @@ function makeMigrateDeps(projectRoot, detectedTarget = 'tomcat') {
     makeDevScript: () => '#!/usr/bin/env bash\n',
     makeWatchScript: () => '#!/usr/bin/env bash\n',
     makeAddServletScript: () => '#!/usr/bin/env bash\n',
+    makeAddJspScript: () => '#!/usr/bin/env bash\n',
     makeLiveReloadClientScript: () => 'console.log(\"lr\")\n',
     makeExecutable: async () => {},
     legacyDeployScript: 'deploy-tomcat.sh'
@@ -119,6 +120,12 @@ test('runMigrate does not delete generated deploy-tomcat.sh', async () => {
   const projectRoot = await setupProjectRoot('demoapp3');
   await runMigrate(makeMigrateDeps(projectRoot, 'tomcat'));
   assert.equal(existsSync(path.join(projectRoot, '.jwebgen', 'scripts', 'deploy-tomcat.sh')), true);
+});
+
+test('runMigrate generates add-jsp.sh', async () => {
+  const projectRoot = await setupProjectRoot('demoapp-jsp');
+  await runMigrate(makeMigrateDeps(projectRoot, 'tomcat'));
+  assert.equal(existsSync(path.join(projectRoot, '.jwebgen', 'scripts', 'add-jsp.sh')), true);
 });
 
 test('runMigrate skips DevLiveReloadFilter.java outside legacy path without jwebgen live-reload marker', async () => {
