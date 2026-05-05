@@ -219,7 +219,7 @@ function canAutoSudo() {
 }
 
 function shellQuote(value) {
-  return "'" + String(value).replace(/'/g, "'\"'\"'") + "'";
+  return "'" + String(value).replace(/'/g, "'\\\\''") + "'";
 }
 
 function runSudo(args = []) {
