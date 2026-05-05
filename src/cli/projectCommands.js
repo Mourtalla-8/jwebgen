@@ -259,7 +259,7 @@ export async function runMigrate({
   const basePackage = await inferBasePackage(projectRoot, appName);
   await writeFileSafe(path.join(scriptsDir, 'add-servlet.sh'), makeAddServletScript({ basePackage }));
   if (typeof makeAddJspScript === 'function') {
-    await writeFileSafe(path.join(scriptsDir, 'add-jsp.sh'), makeAddJspScript());
+    await writeFileSafe(path.join(scriptsDir, 'add-jsp.sh'), makeAddJspScript({ appName }));
   }
   await writeProjectConfigServerTarget(projectRoot, serverTarget);
   await writeFileSafe(path.join(projectRoot, '.jwebgen', 'live-reload.js'), makeLiveReloadClientScript());

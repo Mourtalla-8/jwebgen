@@ -58,6 +58,11 @@ async function setupProjectRoot(name = 'appx') {
 }
 
 function makeMigrateDeps(projectRoot, detectedTarget = 'tomcat') {
+  let jspGeneratorArgs = null;
+  const makeAddJspScript = (opts) => {
+    jspGeneratorArgs = opts;
+    return '#!/usr/bin/env bash\n';
+  };
   return {
     findProjectRoot: () => projectRoot,
     detectServerTargetFromProject: () => detectedTarget,
@@ -71,26 +76,30 @@ function makeMigrateDeps(projectRoot, detectedTarget = 'tomcat') {
     makeDevScript: () => '#!/usr/bin/env bash\n',
     makeWatchScript: () => '#!/usr/bin/env bash\n',
     makeAddServletScript: () => '#!/usr/bin/env bash\n',
-    makeAddJspScript: () => '#!/usr/bin/env bash\n',
+    makeAddJspScript,
     makeLiveReloadClientScript: () => 'console.log(\"lr\")\n',
     makeExecutable: async () => {},
-    legacyDeployScript: 'deploy-tomcat.sh'
+    legacyDeployScript: 'deploy-tomcat.sh',
+    getJspGeneratorArgs: () => jspGeneratorArgs
   };
 }
 
 test('runMigrate preserves existing server target and extra .jwebgenrc keys', async () => {
   const projectRoot = await setupProjectRoot('demoapp');
+  const deps = makeMigrateDeps(projectRoot, 'tomcat');
   await writeFile(
     path.join(projectRoot, '.jwebgen', '.jwebgenrc'),
     'export JWEBGEN_SERVER_TARGET="wildfly"\nexport JWEBGEN_HTTP_PORT="8089"\n',
     'utf8'
   );
 
-  await runMigrate(makeMigrateDeps(projectRoot, 'tomcat'));
+  await runMigrate(deps);
 
   const cfg = await readFile(path.join(projectRoot, '.jwebgen', '.jwebgenrc'), 'utf8');
   assert.match(cfg, /export JWEBGEN_SERVER_TARGET="wildfly"/);
   assert.match(cfg, /export JWEBGEN_HTTP_PORT="8089"/);
+  assert.ok(deps.getJspGeneratorArgs());
+  assert.ok(deps.getJspGeneratorArgs().appName);
 });
 
 test('runMigrate writes detected target when .jwebgenrc is missing', async () => {
@@ -124,8 +133,11 @@ test('runMigrate does not delete generated deploy-tomcat.sh', async () => {
 
 test('runMigrate generates add-jsp.sh', async () => {
   const projectRoot = await setupProjectRoot('demoapp-jsp');
-  await runMigrate(makeMigrateDeps(projectRoot, 'tomcat'));
+  const deps = makeMigrateDeps(projectRoot, 'tomcat');
+  await runMigrate(deps);
   assert.equal(existsSync(path.join(projectRoot, '.jwebgen', 'scripts', 'add-jsp.sh')), true);
+  assert.ok(deps.getJspGeneratorArgs());
+  assert.ok(deps.getJspGeneratorArgs().appName);
 });
 
 test('runMigrate skips DevLiveReloadFilter.java outside legacy path without jwebgen live-reload marker', async () => {
