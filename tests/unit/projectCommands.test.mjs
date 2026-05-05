@@ -119,6 +119,24 @@ test('runMigrate does not delete generated deploy-tomcat.sh', async () => {
   assert.equal(existsSync(path.join(projectRoot, '.jwebgen', 'scripts', 'deploy-tomcat.sh')), true);
 });
 
+test('runMigrate skips DevLiveReloadFilter.java outside legacy path without jwebgen live-reload marker', async () => {
+  const projectRoot = await setupProjectRoot('legacy-keep-other');
+  const otherDir = path.join(projectRoot, 'src', 'main', 'java', 'com', 'corp', 'stuff');
+  await mkdir(otherDir, { recursive: true });
+  const otherFile = path.join(otherDir, 'DevLiveReloadFilter.java');
+  await writeFile(otherFile, 'package com.corp.stuff;\npublic class DevLiveReloadFilter {}\n', 'utf8');
+
+  await runMigrate({
+    ...makeMigrateDeps(projectRoot, 'tomcat'),
+    makeNodeBuildScript: () => '#!/usr/bin/env node\n',
+    makeNodeDeployScript: () => '#!/usr/bin/env node\n',
+    makeNodeDevScript: () => '#!/usr/bin/env node\n',
+    makeNodeWatchScript: () => '#!/usr/bin/env node\n'
+  });
+
+  assert.equal(existsSync(otherFile), true);
+});
+
 test('runMigrate removes legacy DevLiveReloadFilter and webapp/.jwebgen/live-reload.js', async () => {
   const projectRoot = await setupProjectRoot('legacy-clean');
   const filterDir = path.join(projectRoot, 'src', 'main', 'java', 'com', 'exo', 'dev');

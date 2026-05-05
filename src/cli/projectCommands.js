@@ -18,7 +18,7 @@ export function resolveStatusHttpPort(cfg = {}) {
 /** OS-specific hint when `--status` shows Tomcat stopped (avoid Linux-only systemd on Windows). */
 export function hintTomcatWhenStoppedForStatus(platform = process.platform) {
   if (platform === 'win32') {
-    return 'To start Tomcat: install/start the Tomcat Windows service or run bin\\startup.bat; set CATALINA_HOME or TOMCAT_HOME (and Maven on PATH for build).';
+    return 'To start Tomcat: install/start the Tomcat Windows service or run bin\\startup.bat; set TOMCAT_HOME, TOMCAT10, or CATALINA_HOME the same way jwebgen status and deploy resolve Tomcat home (Maven on PATH for build).';
   }
   if (platform === 'darwin') {
     return 'To start Tomcat: use your installer, Homebrew, or bin/catalina.sh run (Apache Tomcat is not integrated with systemd on macOS).';
@@ -149,11 +149,19 @@ export async function showStatus({ findProjectRoot }) {
   const appName = await readAppNameFromPom(projectRoot, path.basename(projectRoot));
   const statusPort = resolveStatusHttpPort(cfg);
   if (serverTarget === 'tomcat') {
-    const tomcatHome = String(process.env.TOMCAT_HOME || process.env.TOMCAT10 || cfg.TOMCAT_HOME || cfg.TOMCAT10 || '').trim();
+    const tomcatHome = String(
+      process.env.TOMCAT_HOME ||
+        process.env.TOMCAT10 ||
+        process.env.CATALINA_HOME ||
+        cfg.TOMCAT_HOME ||
+        cfg.TOMCAT10 ||
+        cfg.CATALINA_HOME ||
+        ''
+    ).trim();
     const defaultHome = process.platform === 'linux' ? '/var/lib/tomcat10' : '';
     const home = tomcatHome || defaultHome;
     if (!home) {
-      console.log(pc.yellow('Deployment: unknown (configure TOMCAT_HOME or .jwebgen/.jwebgenrc)'));
+      console.log(pc.yellow('Deployment: unknown (configure TOMCAT_HOME, TOMCAT10, or CATALINA_HOME in env or .jwebgen/.jwebgenrc)'));
       return;
     }
     const warPath = path.join(home, 'webapps', `${appName}.war`);
@@ -300,6 +308,17 @@ async function cleanupLegacyJwebgenUnderSrc(projectRoot) {
         }
         if (ent.name === 'DevLiveReloadFilter.java') {
           try {
+            const relNorm = path.relative(javaRoot, full).split(path.sep).join('/');
+            const legacyGeneratedPath =
+              relNorm.endsWith('dev/DevLiveReloadFilter.java') || relNorm === 'DevLiveReloadFilter.java';
+            let text = '';
+            try {
+              text = await readFile(full, 'utf8');
+            } catch {
+              continue;
+            }
+            const legacyGeneratedContent = text.includes('/.jwebgen/live-reload.js');
+            if (!(legacyGeneratedPath || legacyGeneratedContent)) continue;
             await rm(full, { force: true });
           } catch {
             /* ignore */

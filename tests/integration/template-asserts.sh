@@ -93,6 +93,8 @@ assertContains(DEV_WORKER_SCRIPT_TEMPLATE, "spawn('systemctl', ['is-active', '--
 
 assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, 'function serverDownHint', 'dashboard embeds OS-aware server hints');
 assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, 'JWEBGEN_SERVER_TARGET', 'dashboard distinguishes Tomcat/WildFly from env');
+assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, "serverDownHint(", 'dashboard invokes serverDownHint from render wiring');
+assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, "s.server === 'down'", 'dashboard ties hint to server down state');
 
 const client = makeLiveReloadClientScript();
 assertContains(client, "searchParams.set('_jwg'", 'devAssets live reload cache-bust refresh');

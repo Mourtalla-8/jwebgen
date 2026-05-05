@@ -517,7 +517,7 @@ function serverDownHint() {
   if (process.platform === 'win32') {
     return target === 'wildfly'
       ? 'Server down: start WildFly (standalone.bat), set WILDFLY_HOME — then [f] refresh.'
-      : 'Server down: start Tomcat (startup.bat), set TOMCAT_HOME; Maven on PATH — then [f] refresh.';
+      : 'Server down: start Tomcat (startup.bat); set TOMCAT_HOME, TOMCAT10, or CATALINA_HOME — then [f] refresh.';
   }
   if (process.platform === 'darwin') {
     return target === 'wildfly'

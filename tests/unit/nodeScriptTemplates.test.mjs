@@ -27,12 +27,17 @@ test('makeNodeBuildScript warns when Maven executable is missing', () => {
   const build = makeNodeBuildScript();
   assert.match(build, /looksLikeMissingMaven/);
   assert.match(build, /Maven not found/);
+  assert.match(
+    build,
+    /Maven not found \(expected mvn\.cmd on PATH\)\. Install Apache Maven from https:\/\/maven\.apache\.org\//
+  );
 });
 
 test('makeNodeDeployScript wraps deploy IO with guardedAcl for permission errors', () => {
   const deploy = makeNodeDeployScript();
   assert.match(deploy, /async function guardedAcl/);
   assert.match(deploy, /EACCES/);
+  assert.match(deploy, /EPERM/);
 });
 
 test('makeNodeBuildScript and watch delegate stay Node-first', () => {

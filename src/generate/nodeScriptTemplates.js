@@ -25,18 +25,28 @@ function run(command, args = [], options = {}) {
   const executable = isWindows ? 'cmd.exe' : command;
   const commandArgs = isWindows ? ['/c', command, ...args] : args;
   return new Promise((resolve, reject) => {
+    let stderrCaptured = '';
     const child = spawn(executable, commandArgs, {
-      stdio: 'inherit',
+      stdio: ['ignore', 'inherit', 'pipe'],
       shell: false,
       cwd,
       env
     });
-    child.on('error', reject);
+    child.stderr?.on('data', (chunk) => {
+      stderrCaptured += String(chunk);
+    });
+    child.on('error', (err) => {
+      err.stderr = stderrCaptured;
+      reject(err);
+    });
     child.on('exit', (code, signal) => {
       if (code === 0) resolve();
       else {
         const hint = signal ? \`signal \${signal}\` : \`code \${code}\`;
-        reject(new Error(\`Command failed (\${hint}): \${command} \${args.join(' ')}\`.trim()));
+        const err = new Error(\`Command failed (\${hint}): \${command} \${args.join(' ')}\`.trim());
+        err.exitCode = code ?? undefined;
+        err.stderr = stderrCaptured;
+        reject(err);
       }
     });
   });
@@ -64,11 +74,13 @@ const mavenExecutable = process.platform === 'win32' ? 'mvn.cmd' : 'mvn';
 try {
   await run(mavenExecutable, args, { cwd: rootDir });
 } catch (err) {
+  const stderr = String(err && err.stderr !== undefined ? err.stderr : '');
   const msg = String(err && err.message !== undefined ? err.message : err);
+  const combined = msg + '\\n' + stderr;
   const spawnCode = err && err.code;
   const looksLikeMissingMaven =
     spawnCode === 'ENOENT' ||
-    (/not recognized as an internal or external command/i.test(msg) && /mvn\\.cmd|\\bmvn\\b/i.test(msg));
+    (/not recognized as an internal or external command/i.test(combined) && /\\bmvn(\\.cmd)?\\b/i.test(combined));
   if (looksLikeMissingMaven) {
     console.error(
       process.platform === 'win32'
@@ -219,7 +231,7 @@ async function guardedAcl(opLabel, fn) {
   try {
     await fn();
   } catch (err) {
-    if (err && err.code === 'EACCES') {
+    if (err && (err.code === 'EACCES' || err.code === 'EPERM')) {
       console.error('Permission denied (' + opLabel + '). The deployment destination must be writable by your user.');
       console.error(
         'Typical fixes: align TOMCAT_HOME with a writable instance for dev,' +
@@ -234,11 +246,19 @@ async function guardedAcl(opLabel, fn) {
 }
 
 async function deployTomcat({ cfg, cleanupOnly, appName }) {
-  const tomcatHome = String(process.env.TOMCAT_HOME || process.env.TOMCAT10 || cfg.TOMCAT_HOME || cfg.TOMCAT10 || '').trim();
+  const tomcatHome = String(
+    process.env.TOMCAT_HOME ||
+      process.env.TOMCAT10 ||
+      process.env.CATALINA_HOME ||
+      cfg.TOMCAT_HOME ||
+      cfg.TOMCAT10 ||
+      cfg.CATALINA_HOME ||
+      ''
+  ).trim();
   const defaultHome = process.platform === 'linux' ? '/var/lib/tomcat10' : '';
   const home = tomcatHome || defaultHome;
   if (!home) {
-    console.error('Tomcat home is not configured. Set TOMCAT_HOME (or TOMCAT10) in your environment or .jwebgen/.jwebgenrc.');
+    console.error('Tomcat home is not configured. Set TOMCAT_HOME, TOMCAT10, or CATALINA_HOME in your environment or .jwebgen/.jwebgenrc.');
     process.exit(1);
   }
   const webapps = path.join(home, 'webapps');
@@ -275,8 +295,10 @@ async function deployTomcat({ cfg, cleanupOnly, appName }) {
     await guardedAcl('deploy exploded copy into Tomcat webapps', async () => {
       await cp(explodedSrc, destExploded, { recursive: true, force: true });
     });
-    const ctx = path.join(destExploded, 'META-INF', 'context.xml');
-    if (existsSync(ctx)) await writeFile(ctx, await readFile(ctx));
+    await guardedAcl('deploy (touch exploded META-INF/context.xml)', async () => {
+      const ctx = path.join(destExploded, 'META-INF', 'context.xml');
+      if (existsSync(ctx)) await writeFile(ctx, await readFile(ctx));
+    });
     console.log('Deployed to Tomcat (exploded): ' + destExploded);
     return;
   }
