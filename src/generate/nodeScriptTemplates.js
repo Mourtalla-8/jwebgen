@@ -100,7 +100,7 @@ import { existsSync } from 'node:fs';
 import { cp, mkdir, rm, writeFile, readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { createInterface } from 'node:readline/promises';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -343,7 +343,7 @@ async function deployTomcat({ cfg, cleanupOnly, appName }) {
       if (existsSync(ctx)) await writeFile(ctx, await readFile(ctx));
     }, async () => {
       const ctx = path.join(destExploded, 'META-INF', 'context.xml');
-      await runSudo(['sh', '-c', 'if [ -f ' + shellQuote(ctx) + ' ]; then : > ' + shellQuote(ctx) + '; fi']);
+      await runSudo(['sh', '-c', 'if [ -f ' + shellQuote(ctx) + ' ]; then touch ' + shellQuote(ctx) + '; fi']);
     });
     console.log('Deployed to Tomcat (exploded): ' + destExploded);
     return;
