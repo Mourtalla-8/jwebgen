@@ -34,7 +34,7 @@ export function hintWildflyWhenStoppedForStatus(platform = process.platform) {
   if (platform === 'darwin') {
     return 'To start WildFly: run $WILDFLY_HOME/bin/standalone.sh from a terminal (or your process manager).';
   }
-  return 'To start WildFly: systemctl start wildfly if configured, otherwise run standalone.sh from WILDFLY_HOME/bin.';
+  return 'To start WildFly: run standalone.sh from WILDFLY_HOME/bin, or sudo systemctl start wildfly if a service is configured.';
 }
 
 /** Map `pgrep` exit codes to running / not running / unknown (for tests and parity with BSD pgrep). */

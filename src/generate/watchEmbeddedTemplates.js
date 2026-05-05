@@ -525,8 +525,8 @@ function serverDownHint() {
       : 'Server down: start Tomcat (catalina.sh or your install) — then [f] refresh.';
   }
   return target === 'wildfly'
-    ? 'Server down: start WildFly (systemctl or standalone.sh) — then [f] refresh.'
-    : 'Server down: start Tomcat (e.g. systemctl start tomcat10) — then [f] refresh.';
+    ? 'Server down: start WildFly (prefer standalone.sh; if configured as a service: sudo systemctl start wildfly) — then [f] refresh.'
+    : 'Server down: start Tomcat (e.g. sudo systemctl start tomcat10) — then [f] refresh.';
 }
 function render() {
   if (pauseFile && existsSync(pauseFile)) return;

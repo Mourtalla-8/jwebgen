@@ -286,7 +286,10 @@ async function runCli() {
       process.exit(1);
     }
     const target = await ensureServerTarget({ projectRoot, requestedTarget: flags.server });
-    return await runProjectScript('dev.sh', flags.args, { verbose: flags.verbose, env: { JWEBGEN_SERVER_TARGET: target } });
+    return await runProjectScript('dev.sh', flags.args, {
+      verbose: flags.verbose,
+      env: { JWEBGEN_SERVER_TARGET: target }
+    });
   }
   if (action === 'servlet') {
     if (flags.args.length === 0) {

@@ -21,6 +21,8 @@ test('makeNodeDeployScript resolves WildFly paths from resolved deployments dir'
 test('makeNodeDevScript spawns dashboard with inherited TTY streams', () => {
   const s = makeNodeDevScript();
   assert.match(s, /\['ignore', 'inherit', 'inherit'\]/);
+  assert.match(s, /readMavenAppName/);
+  assert.match(s, /JWEBGEN_APP_NAME: appName/);
 });
 
 test('makeNodeBuildScript warns when Maven executable is missing', () => {
@@ -38,6 +40,18 @@ test('makeNodeDeployScript wraps deploy IO with guardedAcl for permission errors
   assert.match(deploy, /async function guardedAcl/);
   assert.match(deploy, /EACCES/);
   assert.match(deploy, /EPERM/);
+  assert.match(deploy, /canAutoSudo/);
+  assert.match(deploy, /spawnSync\('sudo'/);
+  assert.match(deploy, /spawn\('sudo'/);
+  assert.match(deploy, /WILDFLY_DEPLOYMENTS/);
+  assert.match(deploy, /TOMCAT_HOME\/TOMCAT10\/CATALINA_HOME/);
+});
+
+test('makeNodeDeployScript enforces Tomcat reloadable context in dev mode', () => {
+  const deploy = makeNodeDeployScript();
+  assert.match(deploy, /ensureTomcatDevReloadableContext/);
+  assert.match(deploy, /<Context reloadable="true" \/>/);
+  assert.match(deploy, /deploy \(set Tomcat reloadable=true\)/);
 });
 
 test('makeNodeBuildScript and watch delegate stay Node-first', () => {

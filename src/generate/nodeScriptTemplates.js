@@ -17,7 +17,7 @@ function scriptHeader({ name }) {
 /** Embedded in generated .mjs files — no npm dependencies besides Node. */
 function embeddedSpawnRun() {
   return `
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 
 function run(command, args = [], options = {}) {
   const { cwd, env = process.env } = options;
@@ -100,6 +100,7 @@ import { existsSync } from 'node:fs';
 import { cp, mkdir, rm, writeFile, readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { createInterface } from 'node:readline/promises';
+import { spawn, spawnSync } from 'node:child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -210,8 +211,68 @@ function isDevMode() {
   return String(process.env.JWEBGEN_DEV || '') === '1';
 }
 
+function canAutoSudo() {
+  if (process.platform !== 'linux') return false;
+  const probe = spawnSync('sudo', ['-n', 'true'], { stdio: 'ignore' });
+  // Accept both "already allowed passwordless" and "sudo exists but needs prompt".
+  return probe.status === 0 || probe.status === 1;
+}
+
+function shellQuote(value) {
+  return "'" + String(value).replace(/'/g, "'\\\\''") + "'";
+}
+
+function runSudo(args = []) {
+  return new Promise((resolve, reject) => {
+    const child = spawn('sudo', args, { stdio: 'inherit', shell: false });
+    child.on('error', reject);
+    child.on('exit', (code, signal) => {
+      if (code === 0) resolve();
+      else reject(new Error('sudo failed (' + (signal ? 'signal ' + signal : 'code ' + code) + '): ' + args.join(' ')));
+    });
+  });
+}
+
 async function ensureDir(p) {
   await mkdir(p, { recursive: true });
+}
+
+async function ensureTomcatDevReloadableContext({ destExploded }) {
+  const metaInfDir = path.join(destExploded, 'META-INF');
+  const ctx = path.join(metaInfDir, 'context.xml');
+  await guardedAcl('deploy (ensure exploded META-INF directory)', async () => {
+    await ensureDir(metaInfDir);
+  }, async () => runSudo(['mkdir', '-p', metaInfDir]));
+  if (!existsSync(ctx)) {
+    const defaultContext = '<?xml version="1.0" encoding="UTF-8"?>\\n<Context reloadable="true" />\\n';
+    await guardedAcl('deploy (create exploded META-INF/context.xml)', async () => {
+      await writeFile(ctx, defaultContext, 'utf8');
+    }, async () => runSudo(['sh', '-c', ': > ' + shellQuote(ctx) + ' && chmod 664 ' + shellQuote(ctx)]));
+    return;
+  }
+  let xml = '';
+  try {
+    xml = await readFile(ctx, 'utf8');
+  } catch {
+    xml = '';
+  }
+  if (/reloadable\\s*=\\s*["']true["']/i.test(xml)) return;
+  const contextOpenTag = xml.match(/<Context\\b[^>]*>/i);
+  if (!contextOpenTag) {
+    const merged = (xml.trim().length ? xml.trim() + '\\n' : '') + '<Context reloadable="true" />\\n';
+    await guardedAcl('deploy (append reloadable Context metadata)', async () => {
+      await writeFile(ctx, merged, 'utf8');
+    }, async () => runSudo(['sh', '-c', 'printf %s ' + shellQuote(merged) + ' > ' + shellQuote(ctx)]));
+    return;
+  }
+  const updatedTag = /reloadable\\s*=\\s*["'][^"']*["']/i.test(contextOpenTag[0])
+    ? contextOpenTag[0].replace(/reloadable\\s*=\\s*["'][^"']*["']/i, 'reloadable="true"')
+    : contextOpenTag[0].replace('<Context', '<Context reloadable="true"');
+  const nextXml = xml.replace(contextOpenTag[0], updatedTag);
+  if (nextXml === xml) return;
+  await guardedAcl('deploy (set Tomcat reloadable=true)', async () => {
+    await writeFile(ctx, nextXml, 'utf8');
+  }, async () => runSudo(['sh', '-c', 'printf %s ' + shellQuote(nextXml) + ' > ' + shellQuote(ctx)]));
 }
 
 function selectWarFile({ targetDir, appName, wars }) {
@@ -227,17 +288,37 @@ function selectWarFile({ targetDir, appName, wars }) {
   return '';
 }
 
-async function guardedAcl(opLabel, fn) {
+async function guardedAcl(opLabel, fn, sudoFn) {
   try {
     await fn();
   } catch (err) {
     if (err && (err.code === 'EACCES' || err.code === 'EPERM')) {
+      if (typeof sudoFn === 'function' && canAutoSudo()) {
+        try {
+          await sudoFn();
+          return;
+        } catch (sudoErr) {
+          console.error('Permission denied (' + opLabel + '). Automatic sudo retry failed.');
+          console.error(String(sudoErr.message || sudoErr));
+          process.exit(1);
+        }
+      }
+      const isWildflyOp = /wildfly/i.test(String(opLabel || ''));
       console.error('Permission denied (' + opLabel + '). The deployment destination must be writable by your user.');
-      console.error(
-        'Typical fixes: align TOMCAT_HOME with a writable instance for dev,' +
-          ' adjust webapps ownership/chmod,' +
-          ' or use a group ACL (often needed for Linux packaging under /var/lib/tomcat/).'
-      );
+      if (isWildflyOp) {
+        console.error(
+          'Typical fixes: align WILDFLY_DEPLOYMENTS (or WILDFLY_HOME) with a writable instance for dev,' +
+            ' adjust deployments ownership/chmod,' +
+            ' or use a group ACL (often needed for Linux packaging under /opt/wildfly/standalone/deployments).'
+        );
+      } else {
+        console.error(
+          'Typical fixes: align TOMCAT_HOME/TOMCAT10/CATALINA_HOME with a writable instance for dev,' +
+            ' adjust webapps ownership/chmod,' +
+            ' or use a group ACL (often needed for Linux packaging under /var/lib/tomcat10).'
+        );
+      }
+      console.error('On Linux, jwebgen auto-retries with sudo when available; otherwise use writable server paths.');
       console.error(String(err.message || err));
       process.exit(1);
     }
@@ -267,15 +348,15 @@ async function deployTomcat({ cfg, cleanupOnly, appName }) {
 
   await guardedAcl('creating Tomcat webapps directory', async () => {
     await ensureDir(webapps);
-  });
+  }, async () => runSudo(['mkdir', '-p', webapps]));
 
   if (cleanupOnly) {
     await guardedAcl('cleanup Tomcat exploded app', async () => {
       await rm(destExploded, { recursive: true, force: true });
-    });
+    }, async () => runSudo(['rm', '-rf', destExploded]));
     await guardedAcl('cleanup Tomcat WAR', async () => {
       await rm(destWar, { force: true });
-    });
+    }, async () => runSudo(['rm', '-f', destWar]));
     console.log('Tomcat cleanup complete: ' + appName);
     return;
   }
@@ -288,16 +369,20 @@ async function deployTomcat({ cfg, cleanupOnly, appName }) {
     }
     await guardedAcl('deploy (remove old Tomcat WAR)', async () => {
       await rm(destWar, { force: true });
-    });
+    }, async () => runSudo(['rm', '-f', destWar]));
     await guardedAcl('deploy (remove old exploded tree)', async () => {
       await rm(destExploded, { recursive: true, force: true });
-    });
+    }, async () => runSudo(['rm', '-rf', destExploded]));
     await guardedAcl('deploy exploded copy into Tomcat webapps', async () => {
       await cp(explodedSrc, destExploded, { recursive: true, force: true });
-    });
+    }, async () => runSudo(['cp', '-a', explodedSrc, destExploded]));
+    await ensureTomcatDevReloadableContext({ destExploded });
     await guardedAcl('deploy (touch exploded META-INF/context.xml)', async () => {
       const ctx = path.join(destExploded, 'META-INF', 'context.xml');
       if (existsSync(ctx)) await writeFile(ctx, await readFile(ctx));
+    }, async () => {
+      const ctx = path.join(destExploded, 'META-INF', 'context.xml');
+      await runSudo(['sh', '-c', 'if [ -f ' + shellQuote(ctx) + ' ]; then touch ' + shellQuote(ctx) + '; fi']);
     });
     console.log('Deployed to Tomcat (exploded): ' + destExploded);
     return;
@@ -318,13 +403,13 @@ async function deployTomcat({ cfg, cleanupOnly, appName }) {
   }
   await guardedAcl('deploy (refresh exploded dir)', async () => {
     await rm(destExploded, { recursive: true, force: true });
-  });
+  }, async () => runSudo(['rm', '-rf', destExploded]));
   await guardedAcl('deploy (remove old Tomcat WAR)', async () => {
     await rm(destWar, { force: true });
-  });
+  }, async () => runSudo(['rm', '-f', destWar]));
   await guardedAcl('copy WAR into Tomcat webapps', async () => {
     await cp(warFile, destWar, { force: true });
-  });
+  }, async () => runSudo(['cp', '-f', warFile, destWar]));
   console.log('Deployed to Tomcat: ' + destWar);
 }
 
@@ -344,7 +429,7 @@ async function deployWildfly({ cfg, cleanupOnly, appName }) {
 
   await guardedAcl('ensure WildFly deployments directory', async () => {
     await ensureDir(resolvedDeployments);
-  });
+  }, async () => runSudo(['mkdir', '-p', resolvedDeployments]));
 
   const markers = [
     destWar,
@@ -362,7 +447,7 @@ async function deployWildfly({ cfg, cleanupOnly, appName }) {
   if (cleanupOnly) {
     await guardedAcl('WildFly cleanup markers', async () => {
       await Promise.all(markers.map((p) => rm(p, { force: true })));
-    });
+    }, async () => runSudo(['rm', '-f', ...markers]));
     console.log('WildFly cleanup complete: ' + appName);
     return;
   }
@@ -382,10 +467,10 @@ async function deployWildfly({ cfg, cleanupOnly, appName }) {
   }
   await guardedAcl('copy WAR to WildFly deployments', async () => {
     await cp(warFile, destWar, { force: true });
-  });
+  }, async () => runSudo(['cp', '-f', warFile, destWar]));
   await guardedAcl('WildFly deploy marker (.dodeploy)', async () => {
     await writeFile(destWar + '.dodeploy', '');
-  });
+  }, async () => runSudo(['sh', '-c', ': > ' + shellQuote(destWar + '.dodeploy')]));
   console.log('Deployed to WildFly: ' + destWar);
 }
 
@@ -492,9 +577,31 @@ function resolveServerTarget({ cfg }) {
   return '';
 }
 
+async function readMavenAppName() {
+  const pomPath = path.join(rootDir, 'pom.xml');
+  if (!existsSync(pomPath)) return path.basename(rootDir);
+  try {
+    const { readFile } = await import('node:fs/promises');
+    const xml = await readFile(pomPath, 'utf8');
+    const noParent = xml.replace(/<parent>[\\s\\S]*?<\\/parent>/gi, '');
+    const noProfiles = noParent.replace(/<profiles>[\\s\\S]*?<\\/profiles>/gi, '');
+    const buildBlock = noProfiles.match(/<build>\\s*([\\s\\S]*?)<\\/build>/i);
+    if (buildBlock?.[1]) {
+      const fm = buildBlock[1].match(/<finalName>\\s*([^<]+?)\\s*<\\/finalName>/i);
+      if (fm?.[1]) return fm[1].trim();
+    }
+    const am = noProfiles.match(/<artifactId>\\s*([^<]+?)\\s*<\\/artifactId>/);
+    if (am?.[1]) return am[1].trim();
+  } catch {
+    /* ignore */
+  }
+  return path.basename(rootDir);
+}
+
 const cfg = await loadProjectConfig();
 let target = resolveServerTarget({ cfg });
 if (!target) { target = await chooseServerTargetInteractively(); await persistServerTarget(target); }
+const appName = await readMavenAppName();
 
 const workDir = rootDir;
 const stateFile = path.join(workDir, '.jwebgen', '.jwebgen-dev-state.json');
@@ -509,7 +616,7 @@ const DEV_DASHBOARD_SCRIPT_TEMPLATE = ${JSON.stringify(DEV_DASHBOARD_SCRIPT_TEMP
 await writeFile(workerScript, DEV_WORKER_SCRIPT_TEMPLATE, 'utf8');
 await writeFile(dashboardScript, DEV_DASHBOARD_SCRIPT_TEMPLATE, 'utf8');
 
-const env = { ...process.env, JWEBGEN_DEV: '1', JWEBGEN_SERVER_TARGET: target };
+const env = { ...process.env, JWEBGEN_DEV: '1', JWEBGEN_SERVER_TARGET: target, JWEBGEN_APP_NAME: appName };
 const worker = spawn(process.execPath, [workerScript, stateFile, eventsFile, pauseFile, String(process.pid)], { cwd: workDir, env, stdio: 'inherit' });
 const dash = spawn(process.execPath, [dashboardScript, stateFile, pauseFile, String(process.pid)], { cwd: workDir, env, stdio: ['ignore', 'inherit', 'inherit'] });
 

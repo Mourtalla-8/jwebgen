@@ -73,6 +73,9 @@ assertContains(nodeDeploy, 'readMavenAppName', 'deploy.mjs resolves deploy name 
 assertContains(nodeDeploy, 'selectWarFile', 'deploy.mjs selects preferred WAR by app name');
 assertContains(nodeDeploy, 'chooseServerTargetInteractively', 'deploy.mjs prompts target when unset');
 assertContains(nodeDeploy, 'persistServerTarget', 'deploy.mjs persists chosen server target');
+assertContains(nodeDeploy, 'canAutoSudo', 'deploy.mjs can auto-detect sudo on Linux');
+assertContains(nodeDeploy, "spawnSync('sudo'", 'deploy.mjs probes sudo availability');
+assertContains(nodeDeploy, "spawn('sudo'", 'deploy.mjs can invoke sudo when enabled');
 assertContains(nodeDeploy, "process.platform === 'linux' ? '/var/lib/tomcat10' : ''", 'deploy.mjs Linux-only Tomcat default path');
 assertContains(nodeDeploy, "process.platform === 'linux' ? '/opt/wildfly' : ''", 'deploy.mjs Linux-only WildFly default path');
 const nodeDev = makeNodeDevScript();
@@ -81,6 +84,8 @@ assertContains(nodeDev, '.jwebgen-worker.mjs', 'dev.mjs writes worker script');
 assertContains(nodeDev, '.jwebgen-dashboard.mjs', 'dev.mjs writes dashboard script');
 assertContains(nodeDev, 'Select server target for dev', 'dev.mjs prompts target when unset');
 assertContains(nodeDev, 'persistServerTarget', 'dev.mjs persists chosen server target');
+assertContains(nodeDev, 'readMavenAppName', 'dev.mjs resolves app name from pom');
+assertContains(nodeDev, 'JWEBGEN_APP_NAME: appName', 'dev.mjs passes app name to worker env');
 const nodeWatch = makeNodeWatchScript();
 assertContains(nodeWatch, 'dev.mjs', 'watch.mjs reuses dev.mjs runtime');
 
@@ -95,6 +100,8 @@ assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, 'function serverDownHint', 'dashbo
 assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, 'JWEBGEN_SERVER_TARGET', 'dashboard distinguishes Tomcat/WildFly from env');
 assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, "serverDownHint(", 'dashboard invokes serverDownHint from render wiring');
 assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, "s.server === 'down'", 'dashboard ties hint to server down state');
+assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, 'sudo systemctl start tomcat10', 'dashboard linux Tomcat hint suggests sudo');
+assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, 'prefer standalone.sh', 'dashboard linux WildFly hint prefers standalone');
 
 const client = makeLiveReloadClientScript();
 assertContains(client, "searchParams.set('_jwg'", 'devAssets live reload cache-bust refresh');
