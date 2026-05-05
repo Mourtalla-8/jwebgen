@@ -10,7 +10,7 @@ import { makeDeployServerScript, makeDeploySelectorScript } from './src/generate
 import { makeLiveReloadSnippet, makeAddServletScript, makeLiveReloadClientScript } from './src/generate/devAssets.js';
 import { makeNodeBuildScript, makeNodeDeployScript, makeNodeDevScript, makeNodeWatchScript } from './src/generate/scriptTemplates.js';
 import { helloServlet, indexJsp } from './src/templates.js';
-import { DEV_WORKER_SCRIPT_TEMPLATE } from './src/generate/watchEmbeddedTemplates.js';
+import { DEV_WORKER_SCRIPT_TEMPLATE, DEV_DASHBOARD_SCRIPT_TEMPLATE } from './src/generate/watchEmbeddedTemplates.js';
 
 function assertContains(haystack, needle, label) {
   if (!String(haystack).includes(needle)) {
@@ -90,6 +90,9 @@ assertContains(DEV_WORKER_SCRIPT_TEMPLATE, '/.jwebgen/live-reload.js', 'worker s
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'spawn(process.execPath, [mjsPath]', 'worker prefers Node .mjs build/deploy when present');
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, "process.platform !== 'linux'", 'worker skips systemctl when not Linux');
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, "spawn('systemctl', ['is-active', '--quiet', serverUnit]", 'worker uses systemctl on Linux without bash');
+
+assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, 'function serverDownHint', 'dashboard embeds OS-aware server hints');
+assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, 'JWEBGEN_SERVER_TARGET', 'dashboard distinguishes Tomcat/WildFly from env');
 
 const client = makeLiveReloadClientScript();
 assertContains(client, "searchParams.set('_jwg'", 'devAssets live reload cache-bust refresh');

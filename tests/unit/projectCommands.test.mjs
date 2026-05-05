@@ -4,13 +4,31 @@ import path from 'node:path';
 import os from 'node:os';
 import { existsSync } from 'node:fs';
 import { mkdtemp, mkdir, writeFile, readFile } from 'node:fs/promises';
-import { resolveStatusHttpPort, runMigrate, serverRunningFromPgrepResult } from '../../src/cli/projectCommands.js';
+import {
+  hintTomcatWhenStoppedForStatus,
+  hintWildflyWhenStoppedForStatus,
+  resolveStatusHttpPort,
+  runMigrate,
+  serverRunningFromPgrepResult
+} from '../../src/cli/projectCommands.js';
 
 test('serverRunningFromPgrepResult maps pgrep exit codes', () => {
   assert.equal(serverRunningFromPgrepResult({ exitCode: 0, stderr: '' }), true);
   assert.equal(serverRunningFromPgrepResult({ exitCode: 1, stderr: '' }), false);
   assert.equal(serverRunningFromPgrepResult({ exitCode: 2, stderr: '' }), null);
   assert.equal(serverRunningFromPgrepResult({ exitCode: 2, stderr: 'no pgrep' }), null);
+});
+
+test('hintTomcatWhenStoppedForStatus skips systemctl wording on Windows and macOS', () => {
+  assert.match(hintTomcatWhenStoppedForStatus('win32'), /startup/i);
+  assert.match(hintTomcatWhenStoppedForStatus('darwin'), /macOS/);
+  assert.ok(!hintTomcatWhenStoppedForStatus('win32').includes('systemctl'));
+  assert.match(hintTomcatWhenStoppedForStatus('linux'), /systemctl/);
+});
+
+test('hintWildflyWhenStoppedForStatus is OS-specific', () => {
+  assert.match(hintWildflyWhenStoppedForStatus('win32'), /standalone\.bat/i);
+  assert.match(hintWildflyWhenStoppedForStatus('darwin'), /standalone\.sh/);
 });
 
 test('resolveStatusHttpPort prefers env over config then 8080', () => {
@@ -42,6 +60,7 @@ function makeMigrateDeps(projectRoot, detectedTarget = 'tomcat') {
     findProjectRoot: () => projectRoot,
     detectServerTargetFromProject: () => detectedTarget,
     writeFileSafe: async (p, c) => {
+      await mkdir(path.dirname(p), { recursive: true }).catch(() => {});
       await writeFile(p, c, 'utf8');
     },
     makeBuildScript: () => '#!/usr/bin/env bash\n',
@@ -98,6 +117,27 @@ test('runMigrate does not delete generated deploy-tomcat.sh', async () => {
   const projectRoot = await setupProjectRoot('demoapp3');
   await runMigrate(makeMigrateDeps(projectRoot, 'tomcat'));
   assert.equal(existsSync(path.join(projectRoot, '.jwebgen', 'scripts', 'deploy-tomcat.sh')), true);
+});
+
+test('runMigrate removes legacy DevLiveReloadFilter and webapp/.jwebgen/live-reload.js', async () => {
+  const projectRoot = await setupProjectRoot('legacy-clean');
+  const filterDir = path.join(projectRoot, 'src', 'main', 'java', 'com', 'exo', 'dev');
+  await mkdir(filterDir, { recursive: true });
+  await writeFile(path.join(filterDir, 'DevLiveReloadFilter.java'), '// legacy filter\n', 'utf8');
+  const webLegacyDir = path.join(projectRoot, 'src', 'main', 'webapp', '.jwebgen');
+  await mkdir(webLegacyDir, { recursive: true });
+  await writeFile(path.join(webLegacyDir, 'live-reload.js'), '// lr\n', 'utf8');
+
+  await runMigrate({
+    ...makeMigrateDeps(projectRoot, 'tomcat'),
+    makeNodeBuildScript: () => '#!/usr/bin/env node\n',
+    makeNodeDeployScript: () => '#!/usr/bin/env node\n',
+    makeNodeDevScript: () => '#!/usr/bin/env node\n',
+    makeNodeWatchScript: () => '#!/usr/bin/env node\n'
+  });
+
+  assert.equal(existsSync(path.join(filterDir, 'DevLiveReloadFilter.java')), false);
+  assert.equal(existsSync(webLegacyDir), false);
 });
 
 test('runMigrate deletes only dedicated legacy deploy script', async () => {
