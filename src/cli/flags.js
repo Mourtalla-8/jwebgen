@@ -15,6 +15,7 @@ const ACTION_FLAGS = new Set([
   '--clean',
   '--migrate',
   '--servlet',
+  '--jsp',
   '--new',
   '--create'
 ]);
@@ -30,6 +31,7 @@ export function parseFlags(argv = []) {
     cleanDeploy: false,
     migrate: false,
     servlet: false,
+    jsp: false,
     create: false,
     watch: false,
     yes: false,
@@ -79,6 +81,10 @@ export function parseFlags(argv = []) {
       flags.servlet = true;
       continue;
     }
+    if (a === '--jsp') {
+      flags.jsp = true;
+      continue;
+    }
     if (a === '--new' || a === '-n' || a === '--create' || a === '-c') {
       flags.create = true;
       continue;
@@ -120,6 +126,7 @@ export function parseFlags(argv = []) {
     flags.clean ? 'clean' : null,
     flags.migrate ? 'migrate' : null,
     flags.servlet ? 'servlet' : null,
+    flags.jsp ? 'jsp' : null,
     flags.create ? 'create' : null
   ].filter(Boolean);
 
@@ -159,6 +166,7 @@ export function formatFlagsHelp({ appName = 'jwebgen' } = {}) {
     `  ${cmd('--clean --deploy')}${desc('Clean deployed app on selected server (current project only).')}`,
     `  ${cmd('--migrate, -m')}${desc('Upgrade a legacy jwebgen project.')}`,
     `  ${cmd('--servlet <Name>')}${desc('Create a servlet (class name auto-normalized).')}`,
+    `  ${cmd('--jsp <name>')}${desc('Create a JSP under WEB-INF/jsp (adds .jsp if missing).')}`,
     section('Project Creation'),
     `  ${cmd('--new, -n <projectName>')}${desc('Create a new project (interactive by default).')}`,
     `  ${cmd('--create, -c <projectName>')}${desc('Alias for --new.')}`,

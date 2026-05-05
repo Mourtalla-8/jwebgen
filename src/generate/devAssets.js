@@ -177,6 +177,7 @@ cat > "$TARGET_FILE" <<EOF
 package ${defaultWebPackage};
 
 import ${annotationImport}.WebServlet;
+import ${servletImport}.ServletException;
 import ${httpImport}.HttpServlet;
 import ${httpImport}.HttpServletRequest;
 import ${httpImport}.HttpServletResponse;
@@ -186,7 +187,7 @@ import java.io.PrintWriter;
 @WebServlet(name = "$CLASS_NAME", urlPatterns = "$URL_PATTERN")
 public class $CLASS_NAME extends HttpServlet {
   @Override
-  protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+  protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
     resp.setContentType("text/html; charset=UTF-8");
     try (PrintWriter out = resp.getWriter()) {
       out.println("<!DOCTYPE html>");
@@ -204,6 +205,64 @@ public class $CLASS_NAME extends HttpServlet {
 EOF
 
 echo "Servlet created: $TARGET_FILE"
+echo "Next steps:"
+echo "  jwebgen --build"
+echo "  jwebgen --deploy"
+echo "Or run continuous mode:"
+echo "  jwebgen --dev"
+`;
+}
+
+export function makeAddJspScript({ appName }) {
+  return `#!/usr/bin/env bash
+set -euo pipefail
+
+JSP_NAME="\${1:-index}"
+JSP_NAME="$(printf '%s' "$JSP_NAME" | xargs)"
+if [[ -z "$JSP_NAME" ]]; then
+  echo "Usage: jwebgen --jsp <name>"
+  exit 1
+fi
+if [[ "$JSP_NAME" != *.jsp ]]; then
+  JSP_NAME="\${JSP_NAME}.jsp"
+fi
+if [[ "$JSP_NAME" == */* || "$JSP_NAME" == *".."* ]]; then
+  echo "Invalid JSP name: path segments are not allowed."
+  exit 1
+fi
+if [[ ! "$JSP_NAME" =~ ^[A-Za-z0-9._-]+\\.jsp$ ]]; then
+  echo "Invalid JSP name. Allowed: letters, digits, dot, dash, underscore."
+  exit 1
+fi
+
+SCRIPT_DIR="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+JSP_DIR="$ROOT_DIR/src/main/webapp/WEB-INF/jsp"
+TARGET_FILE="$JSP_DIR/$JSP_NAME"
+BASE_NAME="\${JSP_NAME%.jsp}"
+
+mkdir -p "$JSP_DIR"
+if [[ -e "$TARGET_FILE" ]]; then
+  echo "JSP already exists: $TARGET_FILE"
+  exit 1
+fi
+
+cat > "$TARGET_FILE" <<EOF
+<%@ page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" %>
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>$BASE_NAME</title>
+</head>
+<body>
+  <h1>$BASE_NAME</h1>
+  <p>JSP generated with ${appName}.</p>
+</body>
+</html>
+EOF
+
+echo "JSP created: $TARGET_FILE"
 echo "Next steps:"
 echo "  jwebgen --build"
 echo "  jwebgen --deploy"

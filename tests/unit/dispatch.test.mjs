@@ -157,3 +157,24 @@ test('dispatches servlet command without double-suffix when servlet already at e
   });
   assert.deepEqual(captured, ['Servletbonjour']);
 });
+
+test('dispatches jsp command to add-jsp.sh with original args', async () => {
+  let scriptName = '';
+  let scriptArgs = [];
+  await dispatchCommand('jsp', ['home'], {
+    main: async () => {},
+    showHelp: () => {},
+    parseCliOptions,
+    runProjectScript: async (name, args) => {
+      scriptName = name;
+      scriptArgs = args;
+    },
+    runMigrate: async () => {},
+    runClean: async () => {},
+    showStatus: async () => {},
+    onUnknown: () => {}
+  });
+
+  assert.equal(scriptName, 'add-jsp.sh');
+  assert.deepEqual(scriptArgs, ['home']);
+});

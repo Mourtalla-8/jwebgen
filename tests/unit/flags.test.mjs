@@ -32,6 +32,13 @@ test('parseFlags keeps server target unset when omitted', () => {
   assert.equal(parsed.flags.server, null);
 });
 
+test('parseFlags maps --jsp to jsp action with args', () => {
+  const parsed = parseFlags(['--jsp', 'home']);
+  assert.equal(parsed.action, 'jsp');
+  assert.equal(parsed.flags.jsp, true);
+  assert.deepEqual(parsed.flags.args, ['home']);
+});
+
 test('parseFlags supports clean deploy combo as single action', () => {
   const parsed = parseFlags(['--clean', '--deploy']);
   assert.equal(parsed.flags.cleanDeploy, true);

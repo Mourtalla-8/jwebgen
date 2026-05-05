@@ -207,6 +207,7 @@ export async function runMigrate({
   makeNodeDevScript,
   makeNodeWatchScript,
   makeAddServletScript,
+  makeAddJspScript,
   makeLiveReloadClientScript,
   makeExecutable,
   legacyDeployScript
@@ -257,6 +258,9 @@ export async function runMigrate({
   }
   const basePackage = await inferBasePackage(projectRoot, appName);
   await writeFileSafe(path.join(scriptsDir, 'add-servlet.sh'), makeAddServletScript({ basePackage }));
+  if (typeof makeAddJspScript === 'function') {
+    await writeFileSafe(path.join(scriptsDir, 'add-jsp.sh'), makeAddJspScript({ appName }));
+  }
   await writeProjectConfigServerTarget(projectRoot, serverTarget);
   await writeFileSafe(path.join(projectRoot, '.jwebgen', 'live-reload.js'), makeLiveReloadClientScript());
 
@@ -277,6 +281,7 @@ export async function runMigrate({
   await makeExecutable(path.join(scriptsDir, 'dev.sh'));
   await makeExecutable(path.join(scriptsDir, 'watch.sh'));
   await makeExecutable(path.join(scriptsDir, 'add-servlet.sh'));
+  if (typeof makeAddJspScript === 'function') await makeExecutable(path.join(scriptsDir, 'add-jsp.sh'));
 
   if (typeof makeNodeBuildScript === 'function') await makeExecutable(path.join(scriptsDir, 'build.mjs'));
   if (typeof makeNodeDeployScript === 'function') await makeExecutable(path.join(scriptsDir, 'deploy.mjs'));
