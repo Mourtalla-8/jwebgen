@@ -288,7 +288,8 @@ Contexte du projet :
 Notes :
 
 - ${devNotes}
-- If the target server is unavailable, dev mode offers \`Retry / Help / Quit\` with diagnostics.
+- Under \`.jwebgen/\`, **ephemeral** files (e.g. \`.jwebgen-dev-state.json\`, events \`.jsonl\`, embedded \`.mjs\` stubs, \`.pid\`) are recreated by \`--dev\`/\`watch\`; you can ignore them in Git via the patterns in the project root \`.gitignore\`. Keep \`scripts/\` and README as needed.
+- If the target server is unavailable, dev mode shows OS-aware hints on the dashboard; use \`[f] refresh\` after starting Tomcat/WildFly.
 - LiveReload in dev mode uses a local WebSocket server (auto-fallback on port conflict, starts at \`35729\`, configurable via \`JWEBGEN_LIVE_PORT\`).
 - The \`target/\` directory can be removed/recreated at any time
 `;

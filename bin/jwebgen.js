@@ -10,16 +10,7 @@ import {
   note
 } from '@clack/prompts';
 import pc from 'picocolors';
-import {
-  gitignore,
-  devLiveReloadFilter,
-  helloServlet,
-  indexJsp,
-  pomXml,
-  readmeMd,
-  tomcatContextXmlDev,
-  webXml
-} from '../src/templates.js';
+import { gitignore, helloServlet, indexJsp, pomXml, readmeMd, tomcatContextXmlDev, webXml } from '../src/templates.js';
 import {
   slugifyArtifactId as slugifyArtifactIdImpl,
   normalizePackageCandidate as normalizePackageCandidateImpl,
@@ -132,7 +123,6 @@ async function main(cli = {}) {
     makeExecutable,
     ensureBuildTools,
     gitignore,
-    devLiveReloadFilter,
     helloServlet,
     indexJsp,
     pomXml,

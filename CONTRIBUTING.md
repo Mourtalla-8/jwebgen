@@ -24,6 +24,16 @@ Before opening a PR:
 npm run check
 ```
 
+## Cross-platform manual validation
+
+After behavioral changes around CLI scripts, deployments, or dev mode, sanity-check when you have access:
+
+- **Linux** — `jwebgen --new` (or migrate an older tree), `--build`, `--deploy` (Tomcat/WildFly with and without write access to server dirs), `--dev`, `--watch`, `--status`.
+- **Windows** — Same commands where applicable; confirm `--status` and dev dashboard hints mention Windows-oriented steps (no `systemctl`). Verify clear errors when Maven or Tomcat/WildFly paths are unset.
+- **macOS** — Same minimal subset as Linux where you use Tomcat/WildFly locally; systemd-specific messages should not appear as the primary hint.
+
+Automated checks cover templates and core logic; the above is intentionally short-lived manual coverage.
+
 ## Branch model (GitFlow)
 
 - Long-lived branches:

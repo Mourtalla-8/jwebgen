@@ -125,165 +125,6 @@ ${servletLink}
 `;
 }
 
-export function devLiveReloadFilter({ basePackage }) {
-  return `package ${basePackage};
-
-import jakarta.servlet.Filter;
-import jakarta.servlet.FilterChain;
-import jakarta.servlet.ServletException;
-import jakarta.servlet.ServletOutputStream;
-import jakarta.servlet.ServletRequest;
-import jakarta.servlet.ServletResponse;
-import jakarta.servlet.WriteListener;
-import jakarta.servlet.annotation.WebFilter;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
-import jakarta.servlet.http.HttpServletResponseWrapper;
-import java.io.ByteArrayOutputStream;
-import java.io.CharArrayWriter;
-import java.io.IOException;
-import java.io.OutputStreamWriter;
-import java.io.PrintWriter;
-
-// @WebFilter("/*") — disabled by default; register via web.xml or programmatically in dev mode only
-public class DevLiveReloadFilter implements Filter {
-    private static final String SCRIPT_TAG = "<script src=\\\"%s/.jwebgen/live-reload.js\\\"></script>";
-
-    @Override
-    public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
-            throws IOException, ServletException {
-        if (!(request instanceof HttpServletRequest) || !(response instanceof HttpServletResponse)) {
-            chain.doFilter(request, response);
-            return;
-        }
-
-        HttpServletRequest req = (HttpServletRequest) request;
-        HttpServletResponse res = (HttpServletResponse) response;
-
-        String uri = req.getRequestURI();
-        if (uri != null && uri.contains("/.jwebgen/live-reload.js")) {
-            chain.doFilter(request, response);
-            return;
-        }
-
-        BufferingResponseWrapper wrapped = new BufferingResponseWrapper(res);
-        chain.doFilter(request, wrapped);
-
-        // Short-circuit if response already committed (e.g., by sendRedirect/sendError/flushBuffer)
-        if (wrapped.isCommitted()) {
-            return;
-        }
-
-        String contentType = wrapped.getContentType();
-        if (contentType == null || !contentType.toLowerCase().contains("text/html")) {
-            wrapped.commitToOriginal();
-            return;
-        }
-
-        String body = wrapped.getCapturedBody();
-        String contextPath = req.getContextPath() == null ? "" : req.getContextPath();
-        String tag = String.format(SCRIPT_TAG, contextPath);
-        if (body.contains(tag)) {
-            wrapped.commitToOriginal();
-            return;
-        }
-
-        String updated = injectBeforeBodyClose(body, tag);
-        wrapped.commitInjected(updated);
-    }
-
-    private static String injectBeforeBodyClose(String html, String tag) {
-        String lower = html.toLowerCase();
-        int idx = lower.lastIndexOf("</body>");
-        if (idx < 0) return html + tag;
-        return html.substring(0, idx) + tag + html.substring(idx);
-    }
-
-    private static class BufferingResponseWrapper extends HttpServletResponseWrapper {
-        private final CharArrayWriter charCapture = new CharArrayWriter();
-        private final ByteArrayOutputStream byteCapture = new ByteArrayOutputStream();
-        private PrintWriter writer;
-        private ServletOutputStream outputStream;
-        private boolean writerUsed = false;
-        private boolean streamUsed = false;
-
-        BufferingResponseWrapper(HttpServletResponse response) {
-            super(response);
-        }
-
-        @Override
-        public PrintWriter getWriter() throws IOException {
-            if (streamUsed) {
-                throw new IllegalStateException("getOutputStream() has already been called on this response");
-            }
-            if (writer == null) {
-                writerUsed = true;
-                String encoding = getCharacterEncoding();
-                if (encoding == null) encoding = "UTF-8";
-                writer = new PrintWriter(new OutputStreamWriter(byteCapture, encoding));
-            }
-            return writer;
-        }
-
-        @Override
-        public ServletOutputStream getOutputStream() throws IOException {
-            if (writerUsed) {
-                throw new IllegalStateException("getWriter() has already been called on this response");
-            }
-            if (outputStream == null) {
-                streamUsed = true;
-                outputStream = new ServletOutputStream() {
-                    @Override
-                    public void write(int b) throws IOException {
-                        byteCapture.write(b);
-                    }
-
-                    @Override
-                    public boolean isReady() {
-                        return true;
-                    }
-
-                    @Override
-                    public void setWriteListener(WriteListener writeListener) {
-                        throw new UnsupportedOperationException("Async not supported");
-                    }
-                };
-            }
-            return outputStream;
-        }
-
-        String getCapturedBody() throws IOException {
-            if (writer != null) {
-                writer.flush();
-            }
-            String encoding = getCharacterEncoding();
-            if (encoding == null) encoding = "UTF-8";
-            return byteCapture.toString(encoding);
-        }
-
-        void commitToOriginal() throws IOException {
-            String body = getCapturedBody();
-            HttpServletResponse original = (HttpServletResponse) getResponse();
-            String encoding = original.getCharacterEncoding();
-            if (encoding == null) encoding = "UTF-8";
-            byte[] bytes = body.getBytes(encoding);
-            original.setContentLength(bytes.length);
-            original.getOutputStream().write(bytes);
-        }
-
-        void commitInjected(String injectedBody) throws IOException {
-            HttpServletResponse original = (HttpServletResponse) getResponse();
-            String encoding = original.getCharacterEncoding();
-            if (encoding == null) encoding = "UTF-8";
-            byte[] bytes = injectedBody.getBytes(encoding);
-            original.setContentLength(bytes.length);
-            original.getOutputStream().write(bytes);
-        }
-    }
-}
-`;
-}
-
 export function tomcatContextXmlDev() {
   // Tomcat-specific: allows context reload on class changes.
   // Useful in dev mode with exploded deployment.
@@ -331,6 +172,7 @@ export function readmeMd({
   return `# ${mdInline(projectName)}
 
 Project generated by jwebgen (tooling documentation is in \`.jwebgen/\`).
+Ephemeral dev files (\`*.json\` state, embedded worker/dashboard stubs, PID files under \`.jwebgen/\`) may appear at runtime — root \`.gitignore\` lists common patterns; see \`.jwebgen/DEV.md\`.
 This generator targets Jakarta stack only (Servlet API 6+).
 
 ## Information
@@ -355,9 +197,10 @@ mvn clean package
 ${deployHelp}
 
 ## Dev mode
-- \`./.jwebgen/scripts/dev.sh\` runs watch/build/deploy + LiveReload WebSocket.
-- If the target server is down, an interactive prompt offers \`Retry / Help / Quit\` with diagnostics.
-- Deployment/dev scripts prioritize Linux (systemd); on non-Linux systems, adapt server setup manually.
+- \`jwebgen --dev\` / \`./.jwebgen/scripts/dev.mjs\` run the dev proxy + LiveReload WebSocket (HTML injection via the proxy, not servlet code under \`src/\`).
+- If the target server is down, the dashboard shows hints; use \`[f] refresh\` after starting Tomcat/WildFly.
+- On Windows/macOS, install and start the app server yourself; adjust \`TOMCAT_HOME\` / \`WILDFLY_HOME\` in env or \`.jwebgen/.jwebgenrc\`.
+- To drop jwebgen from the project, remove the \`.jwebgen/\` directory at the repository root (tooling is kept there only).
 `;
 }
 
@@ -367,12 +210,11 @@ export function gitignore() {
 .idea/
 *.iml
 
-# jwebgen — dev session/generated files (excluding versioned scripts)
-.jwebgen/.jwebgen-dev-state.json
-.jwebgen/.jwebgen-dev-events.jsonl
+# jwebgen — dev session/generated files (versioned tooling: scripts/, README, .jwebgenrc as you prefer)
+.jwebgen/*.json
+.jwebgen/*.jsonl
 .jwebgen/.jwebgen-ui-pause
-.jwebgen/.jwebgen-worker.mjs
-.jwebgen/.jwebgen-dashboard.mjs
+.jwebgen/.jwebgen-*.mjs
 .jwebgen/.jwebgen-dev.pid
 `;
 }

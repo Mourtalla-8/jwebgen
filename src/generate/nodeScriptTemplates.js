@@ -25,18 +25,28 @@ function run(command, args = [], options = {}) {
   const executable = isWindows ? 'cmd.exe' : command;
   const commandArgs = isWindows ? ['/c', command, ...args] : args;
   return new Promise((resolve, reject) => {
+    let stderrCaptured = '';
     const child = spawn(executable, commandArgs, {
-      stdio: 'inherit',
+      stdio: ['ignore', 'inherit', 'pipe'],
       shell: false,
       cwd,
       env
     });
-    child.on('error', reject);
+    child.stderr?.on('data', (chunk) => {
+      stderrCaptured += String(chunk);
+    });
+    child.on('error', (err) => {
+      err.stderr = stderrCaptured;
+      reject(err);
+    });
     child.on('exit', (code, signal) => {
       if (code === 0) resolve();
       else {
         const hint = signal ? \`signal \${signal}\` : \`code \${code}\`;
-        reject(new Error(\`Command failed (\${hint}): \${command} \${args.join(' ')}\`.trim()));
+        const err = new Error(\`Command failed (\${hint}): \${command} \${args.join(' ')}\`.trim());
+        err.exitCode = code ?? undefined;
+        err.stderr = stderrCaptured;
+        reject(err);
       }
     });
   });
@@ -61,7 +71,25 @@ const isDev = String(process.env.JWEBGEN_DEV || '') === '1';
 const args = isDev ? [...mvnArgs, 'package'] : ['clean', ...mvnArgs, 'package'];
 const mavenExecutable = process.platform === 'win32' ? 'mvn.cmd' : 'mvn';
 
-await run(mavenExecutable, args, { cwd: rootDir });
+try {
+  await run(mavenExecutable, args, { cwd: rootDir });
+} catch (err) {
+  const stderr = String(err && err.stderr !== undefined ? err.stderr : '');
+  const msg = String(err && err.message !== undefined ? err.message : err);
+  const combined = msg + '\\n' + stderr;
+  const spawnCode = err && err.code;
+  const looksLikeMissingMaven =
+    spawnCode === 'ENOENT' ||
+    (/not recognized as an internal or external command/i.test(combined) && /\\bmvn(\\.cmd)?\\b/i.test(combined));
+  if (looksLikeMissingMaven) {
+    console.error(
+      process.platform === 'win32'
+        ? 'Maven not found (expected mvn.cmd on PATH). Install Apache Maven from https://maven.apache.org/ and reopen the terminal.'
+        : 'Maven not found (expected mvn on PATH). Install Apache Maven and ensure it is executable.'
+    );
+  }
+  throw err;
+}
 `;
 }
 
@@ -199,23 +227,55 @@ function selectWarFile({ targetDir, appName, wars }) {
   return '';
 }
 
+async function guardedAcl(opLabel, fn) {
+  try {
+    await fn();
+  } catch (err) {
+    if (err && (err.code === 'EACCES' || err.code === 'EPERM')) {
+      console.error('Permission denied (' + opLabel + '). The deployment destination must be writable by your user.');
+      console.error(
+        'Typical fixes: align TOMCAT_HOME with a writable instance for dev,' +
+          ' adjust webapps ownership/chmod,' +
+          ' or use a group ACL (often needed for Linux packaging under /var/lib/tomcat/).'
+      );
+      console.error(String(err.message || err));
+      process.exit(1);
+    }
+    throw err;
+  }
+}
+
 async function deployTomcat({ cfg, cleanupOnly, appName }) {
-  const tomcatHome = String(process.env.TOMCAT_HOME || process.env.TOMCAT10 || cfg.TOMCAT_HOME || cfg.TOMCAT10 || '').trim();
+  const tomcatHome = String(
+    process.env.TOMCAT_HOME ||
+      process.env.TOMCAT10 ||
+      process.env.CATALINA_HOME ||
+      cfg.TOMCAT_HOME ||
+      cfg.TOMCAT10 ||
+      cfg.CATALINA_HOME ||
+      ''
+  ).trim();
   const defaultHome = process.platform === 'linux' ? '/var/lib/tomcat10' : '';
   const home = tomcatHome || defaultHome;
   if (!home) {
-    console.error('Tomcat home is not configured. Set TOMCAT_HOME (or TOMCAT10) in your environment or .jwebgen/.jwebgenrc.');
+    console.error('Tomcat home is not configured. Set TOMCAT_HOME, TOMCAT10, or CATALINA_HOME in your environment or .jwebgen/.jwebgenrc.');
     process.exit(1);
   }
   const webapps = path.join(home, 'webapps');
   const destExploded = path.join(webapps, appName);
   const destWar = path.join(webapps, appName + '.war');
 
-  await ensureDir(webapps);
+  await guardedAcl('creating Tomcat webapps directory', async () => {
+    await ensureDir(webapps);
+  });
 
   if (cleanupOnly) {
-    await rm(destExploded, { recursive: true, force: true });
-    await rm(destWar, { force: true });
+    await guardedAcl('cleanup Tomcat exploded app', async () => {
+      await rm(destExploded, { recursive: true, force: true });
+    });
+    await guardedAcl('cleanup Tomcat WAR', async () => {
+      await rm(destWar, { force: true });
+    });
     console.log('Tomcat cleanup complete: ' + appName);
     return;
   }
@@ -226,11 +286,19 @@ async function deployTomcat({ cfg, cleanupOnly, appName }) {
       console.error('Build required: missing ' + explodedSrc);
       process.exit(1);
     }
-    await rm(destWar, { force: true });
-    await rm(destExploded, { recursive: true, force: true });
-    await cp(explodedSrc, destExploded, { recursive: true, force: true });
-    const ctx = path.join(destExploded, 'META-INF', 'context.xml');
-    if (existsSync(ctx)) await writeFile(ctx, await readFile(ctx));
+    await guardedAcl('deploy (remove old Tomcat WAR)', async () => {
+      await rm(destWar, { force: true });
+    });
+    await guardedAcl('deploy (remove old exploded tree)', async () => {
+      await rm(destExploded, { recursive: true, force: true });
+    });
+    await guardedAcl('deploy exploded copy into Tomcat webapps', async () => {
+      await cp(explodedSrc, destExploded, { recursive: true, force: true });
+    });
+    await guardedAcl('deploy (touch exploded META-INF/context.xml)', async () => {
+      const ctx = path.join(destExploded, 'META-INF', 'context.xml');
+      if (existsSync(ctx)) await writeFile(ctx, await readFile(ctx));
+    });
     console.log('Deployed to Tomcat (exploded): ' + destExploded);
     return;
   }
@@ -248,9 +316,15 @@ async function deployTomcat({ cfg, cleanupOnly, appName }) {
     console.error('WAR file not found in target/. Run build first.');
     process.exit(1);
   }
-  await rm(destExploded, { recursive: true, force: true });
-  await rm(destWar, { force: true });
-  await cp(warFile, destWar, { force: true });
+  await guardedAcl('deploy (refresh exploded dir)', async () => {
+    await rm(destExploded, { recursive: true, force: true });
+  });
+  await guardedAcl('deploy (remove old Tomcat WAR)', async () => {
+    await rm(destWar, { force: true });
+  });
+  await guardedAcl('copy WAR into Tomcat webapps', async () => {
+    await cp(warFile, destWar, { force: true });
+  });
   console.log('Deployed to Tomcat: ' + destWar);
 }
 
@@ -268,7 +342,9 @@ async function deployWildfly({ cfg, cleanupOnly, appName }) {
   }
   const destWar = path.join(resolvedDeployments, appName + '.war');
 
-  await ensureDir(resolvedDeployments);
+  await guardedAcl('ensure WildFly deployments directory', async () => {
+    await ensureDir(resolvedDeployments);
+  });
 
   const markers = [
     destWar,
@@ -284,7 +360,9 @@ async function deployWildfly({ cfg, cleanupOnly, appName }) {
   ];
 
   if (cleanupOnly) {
-    await Promise.all(markers.map((p) => rm(p, { force: true })));
+    await guardedAcl('WildFly cleanup markers', async () => {
+      await Promise.all(markers.map((p) => rm(p, { force: true })));
+    });
     console.log('WildFly cleanup complete: ' + appName);
     return;
   }
@@ -302,8 +380,12 @@ async function deployWildfly({ cfg, cleanupOnly, appName }) {
     console.error('WAR file not found in target/. Run build first.');
     process.exit(1);
   }
-  await cp(warFile, destWar, { force: true });
-  await writeFile(destWar + '.dodeploy', '');
+  await guardedAcl('copy WAR to WildFly deployments', async () => {
+    await cp(warFile, destWar, { force: true });
+  });
+  await guardedAcl('WildFly deploy marker (.dodeploy)', async () => {
+    await writeFile(destWar + '.dodeploy', '');
+  });
   console.log('Deployed to WildFly: ' + destWar);
 }
 

@@ -512,6 +512,22 @@ const isTTY = process.stderr.isTTY;
 if (!isTTY) process.exit(0);
 function color(code, text) { return '\\x1b[' + code + 'm' + text + '\\x1b[0m'; }
 function loadState() { try { return JSON.parse(readFileSync(stateFile, 'utf8')); } catch { return null; } }
+function serverDownHint() {
+  const target = process.env.JWEBGEN_SERVER_TARGET || 'tomcat';
+  if (process.platform === 'win32') {
+    return target === 'wildfly'
+      ? 'Server down: start WildFly (standalone.bat), set WILDFLY_HOME — then [f] refresh.'
+      : 'Server down: start Tomcat (startup.bat); set TOMCAT_HOME, TOMCAT10, or CATALINA_HOME — then [f] refresh.';
+  }
+  if (process.platform === 'darwin') {
+    return target === 'wildfly'
+      ? 'Server down: start WildFly (bin/standalone.sh) — then [f] refresh.'
+      : 'Server down: start Tomcat (catalina.sh or your install) — then [f] refresh.';
+  }
+  return target === 'wildfly'
+    ? 'Server down: start WildFly (systemctl or standalone.sh) — then [f] refresh.'
+    : 'Server down: start Tomcat (e.g. systemctl start tomcat10) — then [f] refresh.';
+}
 function render() {
   if (pauseFile && existsSync(pauseFile)) return;
   const s = loadState(); if (!s) return;
@@ -527,12 +543,14 @@ function render() {
   const kv = (k, v) => lbl(k) + color('2;37', ': ') + v;
   const kvPair = (k1, v1, k2, v2) => '  ' + kv(k1, v1) + '   ' + kv(k2, v2) + '\\n';
   const controls = color('2;37', '[f] refresh');
+  const serverHint = s.server === 'down' ? ('\\n  ' + color('2;37', serverDownHint())) : '';
   const out = color('1;36', 'jwebgen --dev') + '  ' + phase + '\\n'
     + kvPair('build', build, 'deploy', deploy)
     + kvPair('server', server, 'app', app)
     + '  ' + kv('browse (LiveReload)', reloadUrl) + '\\n'
     + '  ' + kv('browse (no reload)', directUrl) + '\\n'
-    + '  ' + kv('cmd', controls);
+    + '  ' + kv('cmd', controls)
+    + serverHint;
   process.stderr.write('\\x1b[?1l\\x1b[?1049h\\x1b[?25l\\x1b[H\\x1b[2J' + out + '\\n');
 }
 process.on('exit', () => { process.stderr.write('\\x1b[?1l\\x1b[?25h\\x1b[?1049l'); });
