@@ -6,11 +6,13 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 function run(command, args, options = {}) {
-  execFileSync(command, args, { stdio: 'inherit', ...options });
+  const useShell = process.platform === 'win32' && command.toLowerCase().endsWith('.cmd');
+  execFileSync(command, args, { stdio: 'inherit', shell: useShell, ...options });
 }
 
 function runCapture(command, args, options = {}) {
-  return execFileSync(command, args, { encoding: 'utf8', ...options });
+  const useShell = process.platform === 'win32' && command.toLowerCase().endsWith('.cmd');
+  return execFileSync(command, args, { encoding: 'utf8', shell: useShell, ...options });
 }
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
