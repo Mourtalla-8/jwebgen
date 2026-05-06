@@ -17,7 +17,6 @@ If `jwebgen` exists there, add this bin directory to your shell `PATH`:
   - add the same line manually in your shell startup file (`~/.zshrc`, `~/.bashrc`, etc.),
   - PowerShell profile option: add the same `$env:Path = ...` line to your PowerShell profile,
   - Windows persistent (PowerShell/.NET): `[Environment]::SetEnvironmentVariable("Path", "$(npm config get prefix);" + [Environment]::GetEnvironmentVariable("Path","User"), "User")`,
-  - Windows persistent (CMD): `setx PATH "%USERPROFILE%\\AppData\\Roaming\\npm;%PATH%"`,
   - then open a new terminal session.
 - `jwebgen --setup` can also print PATH guidance snippets (non-destructive, no shell file edits).
 - Rollback:
