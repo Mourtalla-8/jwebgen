@@ -10,7 +10,7 @@ test('computeSuggestedActions suggests install actions for missing dependencies'
       { key: 'maven', ok: false }
     ],
     optional: [],
-    npmPath: { hasBin: true, inPath: true, jwebgenReachable: true }
+    npmPath: { hasBin: true, inPath: true, jwebgenReachable: true, hasShimButNotOnPath: false }
   };
   const actions = computeSuggestedActions(state, 'linux');
   assert.equal(actions.some((a) => a.type === 'install' && a.key === 'java'), true);
