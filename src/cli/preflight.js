@@ -88,12 +88,18 @@ function detectNpmGlobalBin() {
     : '';
   const binCandidates = [prefixDerivedBin, windowsNodeModulesBin, fallbackNpmBin].filter(Boolean);
   const bin = binCandidates[0] || '';
+  const shimCandidates = process.platform === 'win32'
+    ? ['jwebgen', 'jwebgen.cmd', 'jwebgen.ps1', 'jwebgen.exe']
+    : ['jwebgen'];
+  const hasShimInBin = bin && shimCandidates.some((name) => existsSync(path.join(bin, name)));
+  const inPath = bin ? String(process.env.PATH || '').split(path.delimiter).includes(bin) : false;
   return {
     bin,
     prefix,
     hasBin: Boolean(bin),
-    inPath: bin ? String(process.env.PATH || '').split(path.delimiter).includes(bin) : false,
-    jwebgenReachable: commandExistsInPath('jwebgen')
+    inPath,
+    jwebgenReachable: commandExistsInPath('jwebgen'),
+    hasShimButNotOnPath: Boolean(hasShimInBin && !inPath)
   };
 }
 
@@ -121,13 +127,13 @@ function pathSnippets(npmGlobalBin, platform = process.platform) {
   if (platform === 'win32') {
     return [
       `PowerShell (session): $env:Path = "${npmGlobalBin};" + $env:Path`,
-      `PowerShell (user): [Environment]::SetEnvironmentVariable("Path", "${npmGlobalBin};" + [Environment]::GetEnvironmentVariable("Path","User"), "User")`
+      `To persist manually: add "${npmGlobalBin}" to your user PATH from Windows Environment Variables settings.`
     ];
   }
   return [
-    `bash/zsh: echo 'export PATH="${npmGlobalBin}:$PATH"' >> ~/.zshrc && source ~/.zshrc`,
-    `bash: echo 'export PATH="${npmGlobalBin}:$PATH"' >> ~/.bashrc && source ~/.bashrc`,
-    `fish: set -Ux fish_user_paths ${npmGlobalBin} $fish_user_paths`
+    `bash/zsh (session): export PATH="${npmGlobalBin}:$PATH"`,
+    `fish (session): set -gx PATH "${npmGlobalBin}" $PATH`,
+    `To persist manually: add this line to your shell config file: export PATH="${npmGlobalBin}:$PATH"`
   ];
 }
 
@@ -154,7 +160,7 @@ export function computeSuggestedActions(state, platform = process.platform) {
       commands
     });
   }
-  if (state.npmPath.hasBin && (!state.npmPath.inPath || !state.npmPath.jwebgenReachable)) {
+  if (state.npmPath.hasShimButNotOnPath) {
     actions.push({
       type: 'path',
       key: 'path',
@@ -187,8 +193,8 @@ export function runSetupCheck() {
     console.log(pc.red('Preflight failed: required tools are missing.'));
     return false;
   }
-  if (state.npmPath.hasBin && (!state.npmPath.inPath || !state.npmPath.jwebgenReachable)) {
-    console.log(pc.yellow('jwebgen may not be reachable from PATH in all terminals.'));
+  if (state.npmPath.hasShimButNotOnPath) {
+    console.log(pc.yellow('The global jwebgen shim exists but npm global bin is not currently in PATH.'));
   }
   console.log(pc.green('Preflight succeeded: required tools are available.'));
   return true;

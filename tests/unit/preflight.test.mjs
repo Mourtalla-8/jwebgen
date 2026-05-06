@@ -25,7 +25,13 @@ test('computeSuggestedActions suggests PATH guidance when npm global bin is miss
       { key: 'maven', ok: true }
     ],
     optional: [],
-    npmPath: { hasBin: true, inPath: false, jwebgenReachable: false, bin: '/tmp/npm-global/bin' }
+    npmPath: {
+      hasBin: true,
+      inPath: false,
+      jwebgenReachable: false,
+      hasShimButNotOnPath: true,
+      bin: '/tmp/npm-global/bin'
+    }
   };
   const actions = computeSuggestedActions(state, 'darwin');
   const pathAction = actions.find((a) => a.type === 'path');
