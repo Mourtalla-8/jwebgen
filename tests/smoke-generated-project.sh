@@ -24,7 +24,7 @@ echo "$SETUP_OUT"
 if [ "$SETUP_STATUS" -ne 0 ] && [ "$SETUP_STATUS" -ne 1 ]; then
   fail "--setup returned unexpected exit code: $SETUP_STATUS"
 fi
-echo "$SETUP_OUT" | rg -q "jwebgen setup diagnostics" || fail "--setup output missing diagnostics header"
+echo "$SETUP_OUT" | grep -q "jwebgen setup diagnostics" || fail "--setup output missing diagnostics header"
 
 SCRIPTS="$TMP_ROOT/smokeapp/.jwebgen/scripts"
 for f in build.mjs deploy.mjs dev.mjs watch.mjs add-servlet.mjs add-jsp.mjs; do
