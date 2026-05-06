@@ -33,6 +33,8 @@ import {
   makeLiveReloadSnippet as makeLiveReloadSnippetImpl,
   makeAddServletScript as makeAddServletScriptImpl,
   makeAddJspScript as makeAddJspScriptImpl,
+  makeAddServletNodeScript as makeAddServletNodeScriptImpl,
+  makeAddJspNodeScript as makeAddJspNodeScriptImpl,
   makeDevMd as makeDevMdImpl
 } from '../src/generate/devAssets.js';
 import {
@@ -61,13 +63,16 @@ import {
   showStatus as showStatusImpl
 } from '../src/cli/projectCommands.js';
 import { runProjectScript as runProjectScriptImpl } from '../src/cli/projectRunner.js';
+import { enforceActionPreflight, runSetupCheck } from '../src/cli/preflight.js';
 import { runCreateCommand } from '../src/cli/createCommand.js';
 import { writeFileSafe, makeExecutable } from '../src/cli/fileUtils.js';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { jwebgenConfigPath, jwebgenMetaDir } from '../src/project/jwebgenLayout.js';
+import pkg from '../package.json' with { type: 'json' };
 
 const APP_NAME = 'jwebgen';
+const APP_VERSION = pkg.version;
 const CANONICAL_DEPLOY_SCRIPT = 'deploy.sh';
 const LEGACY_DEPLOY_SCRIPT = 'deploy-tomcat.sh';
 
@@ -121,6 +126,8 @@ async function main(cli = {}) {
     makeNodeWatchScript: makeNodeWatchScriptImpl,
     makeAddServletScript: ({ basePackage }) => makeAddServletScriptImpl({ basePackage, appName: APP_NAME }),
     makeAddJspScript: () => makeAddJspScriptImpl({ appName: APP_NAME }),
+    makeAddServletNodeScript: ({ basePackage }) => makeAddServletNodeScriptImpl({ basePackage, appName: APP_NAME }),
+    makeAddJspNodeScript: () => makeAddJspNodeScriptImpl({ appName: APP_NAME }),
     makeLiveReloadClientScript: makeLiveReloadClientScriptImpl,
     makeExecutable,
     ensureBuildTools,
@@ -176,6 +183,8 @@ async function runMigrate() {
     makeNodeWatchScript: makeNodeWatchScriptImpl,
     makeAddServletScript: ({ basePackage }) => makeAddServletScriptImpl({ basePackage, appName: APP_NAME }),
     makeAddJspScript: () => makeAddJspScriptImpl({ appName: APP_NAME }),
+    makeAddServletNodeScript: ({ basePackage }) => makeAddServletNodeScriptImpl({ basePackage, appName: APP_NAME }),
+    makeAddJspNodeScript: () => makeAddJspNodeScriptImpl({ appName: APP_NAME }),
     makeLiveReloadClientScript: makeLiveReloadClientScriptImpl,
     makeExecutable,
     legacyDeployScript: LEGACY_DEPLOY_SCRIPT
@@ -229,6 +238,25 @@ function showHelp() {
   console.log(formatFlagsHelp({ appName: APP_NAME }));
 }
 
+function showVersion() {
+  console.log(`${APP_NAME} ${APP_VERSION}`);
+}
+
+function showUpdateGuidance() {
+  console.log(pc.cyan('Safe update flow (global install):'));
+  console.log('  npm i -g jwebgen@latest');
+  console.log(pc.cyan('If installed from source checkout:'));
+  console.log('  git pull');
+  console.log('  npm ci');
+  console.log('  npm i -g .');
+}
+
+function showUninstallGuidance() {
+  console.log(pc.cyan('Safe uninstall flow (global install):'));
+  console.log('  npm uninstall -g jwebgen');
+  console.log(pc.cyan('Optional cleanup: remove old clones or temp projects manually.'));
+}
+
 async function runCli() {
   const [, , ...argv] = process.argv;
   if (argv.length === 0) {
@@ -263,6 +291,16 @@ async function runCli() {
     showHelp();
     return;
   }
+  if (action === 'version') return showVersion();
+  if (action === 'setup') {
+    const ok = runSetupCheck();
+    if (!ok) process.exit(1);
+    return;
+  }
+  if (action === 'update') return showUpdateGuidance();
+  if (action === 'uninstall') return showUninstallGuidance();
+
+  enforceActionPreflight(action);
 
   if (action === 'status') return await showStatus();
   if (action === 'clean') {

@@ -44,6 +44,8 @@ export async function runCreateCommand(deps) {
     makeNodeWatchScript,
     makeAddServletScript,
     makeAddJspScript,
+    makeAddServletNodeScript,
+    makeAddJspNodeScript,
     makeLiveReloadClientScript,
     makeExecutable,
     ensureBuildTools,
@@ -269,6 +271,12 @@ export async function runCreateCommand(deps) {
     if (typeof makeNodeWatchScript === 'function') await writeFileSafe(path.join(scriptsDir, 'watch.mjs'), makeNodeWatchScript());
     if (addServlet) await writeFileSafe(path.join(scriptsDir, 'add-servlet.sh'), makeAddServletScript({ basePackage }));
     if (typeof makeAddJspScript === 'function') await writeFileSafe(path.join(scriptsDir, 'add-jsp.sh'), makeAddJspScript());
+    if (addServlet && typeof makeAddServletNodeScript === 'function') {
+      await writeFileSafe(path.join(scriptsDir, 'add-servlet.mjs'), makeAddServletNodeScript({ basePackage, appName }));
+    }
+    if (typeof makeAddJspNodeScript === 'function') {
+      await writeFileSafe(path.join(scriptsDir, 'add-jsp.mjs'), makeAddJspNodeScript({ appName }));
+    }
     if (serverTarget === 'tomcat' || serverTarget === 'wildfly') {
       await writeFileSafe(path.join(workDir, '.jwebgen', '.jwebgenrc'), `export JWEBGEN_SERVER_TARGET="${serverTarget}"\n`);
     }
@@ -285,7 +293,9 @@ export async function runCreateCommand(deps) {
       typeof makeNodeDevScript === 'function' ? '.jwebgen/scripts/dev.mjs' : null,
       typeof makeNodeWatchScript === 'function' ? '.jwebgen/scripts/watch.mjs' : null,
       addServlet ? '.jwebgen/scripts/add-servlet.sh' : null,
-      typeof makeAddJspScript === 'function' ? '.jwebgen/scripts/add-jsp.sh' : null
+      typeof makeAddJspScript === 'function' ? '.jwebgen/scripts/add-jsp.sh' : null,
+      addServlet && typeof makeAddServletNodeScript === 'function' ? '.jwebgen/scripts/add-servlet.mjs' : null,
+      typeof makeAddJspNodeScript === 'function' ? '.jwebgen/scripts/add-jsp.mjs' : null
     ].filter(Boolean);
     for (const relativePath of scriptFiles) await makeExecutable(path.join(workDir, relativePath));
     await mkdir(path.dirname(targetDir), { recursive: true });

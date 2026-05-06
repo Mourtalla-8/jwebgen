@@ -271,6 +271,139 @@ echo "  jwebgen --dev"
 `;
 }
 
+export function makeAddServletNodeScript({ basePackage, appName }) {
+  const defaultWebPackage = `${basePackage}.web`;
+  return `#!/usr/bin/env node
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { mkdir, writeFile } from 'node:fs/promises';
+
+const CLASS_NAME = String(process.argv[2] || 'HelloServlet').trim();
+if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(CLASS_NAME)) {
+  console.error('Invalid class name. Example: HelloServlet');
+  process.exit(1);
+}
+
+const BASE_NAME = CLASS_NAME.replace(/Servlet$/, '');
+const URL_SLUG = BASE_NAME
+  .replace(/([A-Z])/g, '-$1')
+  .toLowerCase()
+  .replace(/^-+/, '')
+  .replace(/-+/g, '-');
+const URL_PATTERN = '/' + (URL_SLUG || 'hello');
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const ROOT_DIR = path.resolve(__dirname, '../..');
+const PACKAGE_DIR = path.join(ROOT_DIR, 'src', 'main', 'java', ${JSON.stringify(packageToPath(defaultWebPackage))});
+const TARGET_FILE = path.join(PACKAGE_DIR, CLASS_NAME + '.java');
+
+const javaSource = [
+  'package ${defaultWebPackage};',
+  '',
+  'import jakarta.servlet.annotation.WebServlet;',
+  'import jakarta.servlet.ServletException;',
+  'import jakarta.servlet.http.HttpServlet;',
+  'import jakarta.servlet.http.HttpServletRequest;',
+  'import jakarta.servlet.http.HttpServletResponse;',
+  'import java.io.IOException;',
+  'import java.io.PrintWriter;',
+  '',
+  '@WebServlet(name = "' + CLASS_NAME + '", urlPatterns = "' + URL_PATTERN + '")',
+  'public class ' + CLASS_NAME + ' extends HttpServlet {',
+  '  @Override',
+  '  protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {',
+  '    resp.setContentType("text/html; charset=UTF-8");',
+  '    try (PrintWriter out = resp.getWriter()) {',
+  '      out.println("<!DOCTYPE html>");',
+  '      out.println("<html lang=\\"fr\\">");',
+  '      out.println("<head><meta charset=\\"UTF-8\\"><title>' + CLASS_NAME + '</title></head>");',
+  '      out.println("<body>");',
+  '      out.println("<h1>' + CLASS_NAME + '</h1>");',
+  '      out.println("<p>Servlet generated with ${appName}.</p>");',
+  '      out.println("<p>URL: ' + URL_PATTERN + '</p>");',
+  '      out.println("</body>");',
+  '      out.println("</html>");',
+  '    }',
+  '  }',
+  '}',
+  ''
+].join('\\n');
+
+await mkdir(PACKAGE_DIR, { recursive: true });
+await writeFile(TARGET_FILE, javaSource, 'utf8');
+console.log('Servlet created: ' + TARGET_FILE);
+console.log('Next steps:');
+console.log('  jwebgen --build');
+console.log('  jwebgen --deploy');
+console.log('Or run continuous mode:');
+console.log('  jwebgen --dev');
+`;
+}
+
+export function makeAddJspNodeScript({ appName }) {
+  return `#!/usr/bin/env node
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { mkdir, writeFile, access } from 'node:fs/promises';
+
+let jspName = String(process.argv[2] || 'index').trim();
+if (!jspName) {
+  console.error('Usage: jwebgen --jsp <name>');
+  process.exit(1);
+}
+if (!jspName.endsWith('.jsp')) jspName += '.jsp';
+if (jspName.includes('/') || jspName.includes('\\\\') || jspName.includes('..')) {
+  console.error('Invalid JSP name: path segments are not allowed.');
+  process.exit(1);
+}
+if (!/^[A-Za-z0-9._-]+\\.jsp$/.test(jspName)) {
+  console.error('Invalid JSP name. Allowed: letters, digits, dot, dash, underscore.');
+  process.exit(1);
+}
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const ROOT_DIR = path.resolve(__dirname, '../..');
+const JSP_DIR = path.join(ROOT_DIR, 'src', 'main', 'webapp', 'WEB-INF', 'jsp');
+const TARGET_FILE = path.join(JSP_DIR, jspName);
+const BASE_NAME = jspName.slice(0, -4);
+
+await mkdir(JSP_DIR, { recursive: true });
+try {
+  await access(TARGET_FILE);
+  console.error('JSP already exists: ' + TARGET_FILE);
+  process.exit(1);
+} catch {
+  // target does not exist, continue
+}
+
+const content = [
+  '<%@ page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" %>',
+  '<!DOCTYPE html>',
+  '<html lang="fr">',
+  '<head>',
+  '  <meta charset="UTF-8">',
+  '  <title>' + BASE_NAME + '</title>',
+  '</head>',
+  '<body>',
+  '  <h1>' + BASE_NAME + '</h1>',
+  '  <p>JSP generated with ${appName}.</p>',
+  '</body>',
+  '</html>',
+  ''
+].join('\\n');
+
+await writeFile(TARGET_FILE, content, 'utf8');
+console.log('JSP created: ' + TARGET_FILE);
+console.log('Next steps:');
+console.log('  jwebgen --build');
+console.log('  jwebgen --deploy');
+console.log('Or run continuous mode:');
+console.log('  jwebgen --dev');
+`;
+}
+
 export function makeDevMd({ appName, serverTarget }) {
   const prereqServer =
     serverTarget === 'tomcat'

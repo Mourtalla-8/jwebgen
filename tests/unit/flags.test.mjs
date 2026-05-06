@@ -8,6 +8,17 @@ test('parseFlags maps --watch to dev action', () => {
   assert.equal(parsed.actionCount, 1);
 });
 
+test('parseFlags maps --version and -V', () => {
+  assert.equal(parseFlags(['--version']).action, 'version');
+  assert.equal(parseFlags(['-V']).action, 'version');
+});
+
+test('parseFlags maps setup/update/uninstall lifecycle actions', () => {
+  assert.equal(parseFlags(['--setup']).action, 'setup');
+  assert.equal(parseFlags(['--update']).action, 'update');
+  assert.equal(parseFlags(['--uninstall']).action, 'uninstall');
+});
+
 test('parseFlags rejects multiple actions via actionCount', () => {
   const parsed = parseFlags(['--dev', '--build']);
   assert.equal(parsed.actionCount, 2);

@@ -16,10 +16,16 @@ echo "[smoke] create project in $TMP_ROOT"
 [[ -d "$TMP_ROOT/smokeapp/.jwebgen/scripts" ]] || fail "missing generated scripts dir"
 
 SCRIPTS="$TMP_ROOT/smokeapp/.jwebgen/scripts"
-for f in build.mjs deploy.mjs dev.mjs watch.mjs; do
+for f in build.mjs deploy.mjs dev.mjs watch.mjs add-servlet.mjs add-jsp.mjs; do
   [[ -f "$SCRIPTS/$f" ]] || fail "missing $f"
   node --check "$SCRIPTS/$f"
 done
+
+echo "[smoke] execute helper scripts (servlet/jsp)"
+(cd "$TMP_ROOT/smokeapp" && node "$SCRIPTS/add-servlet.mjs" SmokeServlet)
+[[ -f "$TMP_ROOT/smokeapp/src/main/java/com/exo/smokeapp/web/SmokeServlet.java" ]] || fail "add-servlet.mjs did not generate servlet"
+(cd "$TMP_ROOT/smokeapp" && node "$SCRIPTS/add-jsp.mjs" smoke-page)
+[[ -f "$TMP_ROOT/smokeapp/src/main/webapp/WEB-INF/jsp/smoke-page.jsp" ]] || fail "add-jsp.mjs did not generate jsp"
 
 CFG="$TMP_ROOT/smokeapp/.jwebgen/.jwebgenrc"
 printf '%s\n' 'export JWEBGEN_SERVER_TARGET="tomcat"' 'export JWEBGEN_HTTP_PORT="8099"' >"$CFG"
