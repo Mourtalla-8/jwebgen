@@ -7,7 +7,14 @@ cd "$ROOT_DIR"
 node --input-type=module <<'EOF'
 import { makeWatchScript } from './src/generate/watchTemplate.js';
 import { makeDeployServerScript, makeDeploySelectorScript } from './src/generate/deployTemplates.js';
-import { makeLiveReloadSnippet, makeAddServletScript, makeAddJspScript, makeLiveReloadClientScript } from './src/generate/devAssets.js';
+import {
+  makeLiveReloadSnippet,
+  makeAddServletScript,
+  makeAddJspScript,
+  makeAddServletNodeScript,
+  makeAddJspNodeScript,
+  makeLiveReloadClientScript
+} from './src/generate/devAssets.js';
 import { makeNodeBuildScript, makeNodeDeployScript, makeNodeDevScript, makeNodeWatchScript } from './src/generate/scriptTemplates.js';
 import { helloServlet, indexJsp } from './src/templates.js';
 import { DEV_WORKER_SCRIPT_TEMPLATE, DEV_DASHBOARD_SCRIPT_TEMPLATE } from './src/generate/watchEmbeddedTemplates.js';
@@ -139,6 +146,16 @@ assertContains(addJsp, 'src/main/webapp/WEB-INF/jsp', 'add-jsp writes under WEB-
 assertContains(addJsp, 'if [[ "$JSP_NAME" != *.jsp ]]; then', 'add-jsp auto-appends .jsp');
 assertContains(addJsp, 'JSP already exists:', 'add-jsp fails when file exists');
 assertContains(addJsp, 'Usage: jwebgen --jsp <name>', 'add-jsp usage message');
+
+const addServletNode = makeAddServletNodeScript({ basePackage: 'com.ex', appName: 'jwebgen' });
+assertContains(addServletNode, '#!/usr/bin/env node', 'add-servlet.mjs shebang');
+assertContains(addServletNode, 'Servlet created:', 'add-servlet.mjs output message');
+assertContains(addServletNode, 'Invalid class name', 'add-servlet.mjs validation');
+
+const addJspNode = makeAddJspNodeScript({ appName: 'jwebgen' });
+assertContains(addJspNode, '#!/usr/bin/env node', 'add-jsp.mjs shebang');
+assertContains(addJspNode, 'JSP created:', 'add-jsp.mjs output message');
+assertContains(addJspNode, 'Invalid JSP name', 'add-jsp.mjs validation');
 
 const servlet = helloServlet({ basePackage: 'com.ex' });
 const lrServlet = String(servlet);

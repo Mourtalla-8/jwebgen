@@ -16,7 +16,7 @@ echo "[smoke] create project in $TMP_ROOT"
 [[ -d "$TMP_ROOT/smokeapp/.jwebgen/scripts" ]] || fail "missing generated scripts dir"
 
 SCRIPTS="$TMP_ROOT/smokeapp/.jwebgen/scripts"
-for f in build.mjs deploy.mjs dev.mjs watch.mjs; do
+for f in build.mjs deploy.mjs dev.mjs watch.mjs add-servlet.mjs add-jsp.mjs; do
   [[ -f "$SCRIPTS/$f" ]] || fail "missing $f"
   node --check "$SCRIPTS/$f"
 done

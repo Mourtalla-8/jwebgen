@@ -49,6 +49,8 @@ test('runCreateCommand keeps typed project name casing for default directory', a
     makeWatchScript: () => '#!/usr/bin/env bash\necho watch\n',
     makeAddServletScript: () => '#!/usr/bin/env bash\necho add\n',
     makeAddJspScript: () => '#!/usr/bin/env bash\necho add-jsp\n',
+    makeAddServletNodeScript: () => '#!/usr/bin/env node\nconsole.log("add-servlet")\n',
+    makeAddJspNodeScript: () => '#!/usr/bin/env node\nconsole.log("add-jsp")\n',
     makeLiveReloadClientScript: () => 'console.log("lr")',
     makeExecutable: async () => {},
     ensureBuildTools: async () => ({ javaOk: true, mavenOk: true }),
@@ -70,6 +72,8 @@ test('runCreateCommand keeps typed project name casing for default directory', a
     assert.match(pom, /<artifactId>exo1<\/artifactId>/);
     assert.ok(writes.some((f) => f.endsWith(path.join('.jwebgen', 'live-reload.js'))));
     assert.ok(writes.some((f) => f.endsWith(path.join('.jwebgen', 'scripts', 'add-jsp.sh'))));
+    assert.ok(writes.some((f) => f.endsWith(path.join('.jwebgen', 'scripts', 'add-servlet.mjs'))));
+    assert.ok(writes.some((f) => f.endsWith(path.join('.jwebgen', 'scripts', 'add-jsp.mjs'))));
     assert.ok(!writes.some((f) => f.includes(`${path.sep}DevLiveReloadFilter.java`)));
     assert.ok(!writes.some((f) => f.includes(path.join('webapp', '.jwebgen'))));
   } finally {
