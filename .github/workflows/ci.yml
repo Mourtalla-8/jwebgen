@@ -30,6 +30,9 @@ jobs:
       - name: Smoke generated project (all platforms)
         run: bash ./tests/smoke-generated-project.sh
 
+      - name: Global install smoke (all platforms)
+        run: npm run smoke:global-install
+
       - name: Run checks (Linux)
         if: runner.os == 'Linux'
         run: npm run check

@@ -108,6 +108,22 @@ jwebgen --clean --deploy
   - it does not edit your shell config files automatically.
   - rollback guidance is printed for session-scoped PATH changes.
 
+## Cross-platform install validation protocol
+
+Use this protocol to validate the documented global install flow on Linux/macOS/Windows:
+
+```bash
+npm ci
+npm run smoke:global-install
+```
+
+This validates:
+
+- global install (`npm i -g .`) in an isolated npm prefix,
+- global shim execution (`jwebgen --help`),
+- setup diagnostics preview (`jwebgen --setup --dry-run`),
+- CLI generation/status smoke (`--new`, `--servlet`, `--jsp`, `--status`).
+
 ## Port conflicts on the same machine
 
 If Tomcat, WildFly, or another HTTP service is active on port `8080` at the same time, dev/deploy can fail.

@@ -10,14 +10,14 @@
 
 If `jwebgen` exists there, add this bin directory to your shell `PATH`:
 
-- zsh:
-  - `echo 'export PATH="$(npm config get prefix)/bin:$PATH"' >> ~/.zshrc`
-  - `source ~/.zshrc`
-- bash:
-  - `echo 'export PATH="$(npm config get prefix)/bin:$PATH"' >> ~/.bashrc`
-  - `source ~/.bashrc`
-- fish:
-  - `set -Ux fish_user_paths (npm config get prefix)/bin $fish_user_paths`
+- Session-only (safe preview):
+  - `export PATH="$(npm config get prefix)/bin:$PATH"`
+  - PowerShell: `$env:Path = "$(npm config get prefix);$env:Path"`
+- Persistent:
+  - add the same line manually in your shell startup file (`~/.zshrc`, `~/.bashrc`, etc.),
+  - PowerShell profile option: add the same `$env:Path = ...` line to your PowerShell profile,
+  - Windows persistent (PowerShell/.NET): `[Environment]::SetEnvironmentVariable("Path", "$(npm config get prefix);" + [Environment]::GetEnvironmentVariable("Path","User"), "User")`,
+  - then open a new terminal session.
 - `jwebgen --setup` can also print PATH guidance snippets (non-destructive, no shell file edits).
 - Rollback:
   - session changes: close/reopen terminal (or restore previous PATH value),
@@ -47,6 +47,8 @@ No global setup alternative:
   - `jwebgen --setup --dry-run` previews actions without running install commands.
 - Non-interactive mode (CI/scripts):
   - `jwebgen --setup` remains diagnostics-only.
+- Full disposable global-install validation:
+  - `npm run smoke:global-install`
 
 ## Deploy/dev scripts fail on non-Linux
 

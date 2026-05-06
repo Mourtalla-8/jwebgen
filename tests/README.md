@@ -22,6 +22,7 @@ Run this baseline before merging CLI/script changes:
 6. `bash ./tests/smoke-generated-project.sh`
 7. `node bin/jwebgen.js --setup`
 8. `node bin/jwebgen.js --setup --dry-run`
+9. `npm run smoke:global-install`
 
 Setup/PATH safety expectations in baseline:
 
@@ -34,6 +35,13 @@ For Windows-specific regressions, also verify on Windows native shell:
 - `jwebgen --new smokeapp --yes`
 - `jwebgen --servlet HelloServlet`
 - `jwebgen --jsp home`
+- `jwebgen --setup --dry-run`
+- `jwebgen --status` with fake `TOMCAT_HOME`
+
+Mapping with automated checks:
+
+- `npm run smoke:global-install` covers global install + shim + `--setup --dry-run` + `--new` + `--servlet` + `--jsp` + `--status` subset.
+- `bash ./tests/smoke-generated-project.sh` keeps direct repository-entry smoke coverage.
 
 ## Expected fixtures
 
