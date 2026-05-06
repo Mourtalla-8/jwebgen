@@ -18,7 +18,10 @@ function getActionRequirements(action) {
 function checkRequirement(req) {
   if (req === 'node') {
     const version = process.version;
-    const ok = Number.parseInt(version.replace(/^v/, '').split('.')[0], 10) >= 20;
+    const [majorRaw, minorRaw] = version.replace(/^v/, '').split('.');
+    const major = Number.parseInt(majorRaw, 10);
+    const minor = Number.parseInt(minorRaw, 10);
+    const ok = Number.isInteger(major) && Number.isInteger(minor) && (major > 20 || (major === 20 && minor >= 12));
     return {
       key: 'node',
       ok,
@@ -40,8 +43,10 @@ function checkRequirement(req) {
     };
   }
   if (req === 'maven') {
-    const bin = process.platform === 'win32' ? 'mvn.cmd' : 'mvn';
-    const ok = hasCommand(bin);
+    const hasMvnCmd = hasCommand('mvn.cmd');
+    const hasMvn = hasCommand('mvn');
+    const ok = hasMvnCmd || hasMvn;
+    const bin = hasMvnCmd ? 'mvn.cmd' : hasMvn ? 'mvn' : process.platform === 'win32' ? 'mvn.cmd' : 'mvn';
     return {
       key: 'maven',
       ok,

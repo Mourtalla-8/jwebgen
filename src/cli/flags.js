@@ -9,6 +9,8 @@ const ACTION_FLAGS = new Set([
   '--restart',
   '--reload',
   '--setup',
+  '--update',
+  '--uninstall',
   '--dev',
   '--watch',
   '--build',
