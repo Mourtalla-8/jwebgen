@@ -21,6 +21,13 @@ Run this baseline before merging CLI/script changes:
 5. `bash ./tests/integration/template-asserts.sh`
 6. `bash ./tests/smoke-generated-project.sh`
 7. `node bin/jwebgen.js --setup`
+8. `node bin/jwebgen.js --setup --dry-run`
+
+Setup/PATH safety expectations in baseline:
+
+- non-interactive `--setup` remains diagnostics-only (no interactive prompt),
+- `--setup --dry-run` previews actions without command execution,
+- PATH guidance snippets are non-destructive and include rollback hints.
 
 For Windows-specific regressions, also verify on Windows native shell:
 

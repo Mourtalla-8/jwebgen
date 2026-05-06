@@ -43,6 +43,7 @@ export function parseFlags(argv = []) {
     watch: false,
     yes: false,
     verbose: false,
+    dryRun: false,
     server: null, // tomcat|wildfly|null
     args: []
   };
@@ -120,6 +121,10 @@ export function parseFlags(argv = []) {
       flags.verbose = true;
       continue;
     }
+    if (a === '--dry-run') {
+      flags.dryRun = true;
+      continue;
+    }
     if (a === '--tomcat' || a === '-t') {
       flags.server = 'tomcat';
       continue;
@@ -185,7 +190,7 @@ export function formatFlagsHelp({ appName = 'jwebgen' } = {}) {
     section('Main Commands'),
     `  ${cmd('--help, -h')}${desc('Show this help message.')}`,
     `  ${cmd('--version, -V')}${desc('Show jwebgen version.')}`,
-    `  ${cmd('--setup')}${desc('Run setup diagnostics and guided safe actions (TTY), or diagnostics only (CI).')}`,
+    `  ${cmd('--setup [--dry-run]')}${desc('Run setup diagnostics + guided safe actions; preview only with --dry-run.')}`,
     `  ${cmd('--update')}${desc('Show safe update guidance for global installs.')}`,
     `  ${cmd('--uninstall')}${desc('Show safe uninstall guidance for global installs.')}`,
     `  ${cmd('--status')}${desc('Show project status.')}`,

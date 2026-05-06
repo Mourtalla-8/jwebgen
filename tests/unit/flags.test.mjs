@@ -19,6 +19,12 @@ test('parseFlags maps setup/update/uninstall lifecycle actions', () => {
   assert.equal(parseFlags(['--uninstall']).action, 'uninstall');
 });
 
+test('parseFlags supports setup dry-run toggle', () => {
+  const parsed = parseFlags(['--setup', '--dry-run']);
+  assert.equal(parsed.action, 'setup');
+  assert.equal(parsed.flags.dryRun, true);
+});
+
 test('parseFlags rejects multiple actions via actionCount', () => {
   const parsed = parseFlags(['--dev', '--build']);
   assert.equal(parsed.actionCount, 2);

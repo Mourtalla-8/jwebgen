@@ -38,6 +38,7 @@ test('computeSuggestedActions suggests PATH guidance when npm global bin is miss
   assert.ok(pathAction);
   const joinedSnippets = pathAction.snippets.join('\n');
   assert.match(joinedSnippets, /export PATH=|PATH=/);
+  assert.match(joinedSnippets, /Rollback/);
   assert.doesNotMatch(joinedSnippets, />>\s*~\/\.zshrc/);
   assert.doesNotMatch(joinedSnippets, /SetEnvironmentVariable/);
   assert.doesNotMatch(joinedSnippets, /set -Ux/);
@@ -51,7 +52,13 @@ test('computeSuggestedActions returns empty list when everything is ready', () =
       { key: 'maven', ok: true }
     ],
     optional: [],
-    npmPath: { hasBin: true, inPath: true, jwebgenReachable: true, bin: '/tmp/npm-global/bin' }
+    npmPath: {
+      hasBin: true,
+      inPath: true,
+      jwebgenReachable: true,
+      hasShimButNotOnPath: false,
+      bin: '/tmp/npm-global/bin'
+    }
   };
   const actions = computeSuggestedActions(state, 'win32');
   assert.deepEqual(actions, []);
