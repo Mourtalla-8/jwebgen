@@ -185,7 +185,7 @@ export function formatFlagsHelp({ appName = 'jwebgen' } = {}) {
     section('Main Commands'),
     `  ${cmd('--help, -h')}${desc('Show this help message.')}`,
     `  ${cmd('--version, -V')}${desc('Show jwebgen version.')}`,
-    `  ${cmd('--setup')}${desc('Check required tools (Node, Java, Maven) and key commands.')}`,
+    `  ${cmd('--setup')}${desc('Run setup diagnostics and guided safe actions (TTY), or diagnostics only (CI).')}`,
     `  ${cmd('--update')}${desc('Show safe update guidance for global installs.')}`,
     `  ${cmd('--uninstall')}${desc('Show safe uninstall guidance for global installs.')}`,
     `  ${cmd('--status')}${desc('Show project status.')}`,

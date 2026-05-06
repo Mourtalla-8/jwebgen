@@ -63,7 +63,7 @@ import {
   showStatus as showStatusImpl
 } from '../src/cli/projectCommands.js';
 import { runProjectScript as runProjectScriptImpl } from '../src/cli/projectRunner.js';
-import { enforceActionPreflight, runSetupCheck } from '../src/cli/preflight.js';
+import { enforceActionPreflight, runSetupAssistant, runSetupCheck } from '../src/cli/preflight.js';
 import { runCreateCommand } from '../src/cli/createCommand.js';
 import { writeFileSafe, makeExecutable } from '../src/cli/fileUtils.js';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -293,7 +293,15 @@ async function runCli() {
   }
   if (action === 'version') return showVersion();
   if (action === 'setup') {
-    const ok = runSetupCheck();
+    const ok = (process.stdin.isTTY && process.stdout.isTTY)
+      ? await runSetupAssistant({
+          confirmPrompt: async ({ message, initialValue }) => {
+            const answer = await confirm({ message, initialValue });
+            if (isCancel(answer)) return false;
+            return Boolean(answer);
+          }
+        })
+      : runSetupCheck();
     if (!ok) process.exit(1);
     return;
   }

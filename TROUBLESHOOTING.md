@@ -18,6 +18,7 @@ If `jwebgen` exists there, add this bin directory to your shell `PATH`:
   - `source ~/.bashrc`
 - fish:
   - `set -Ux fish_user_paths (npm config get prefix)/bin $fish_user_paths`
+- `jwebgen --setup` can also print PATH guidance snippets (non-destructive, no shell file edits).
 
 No global setup alternative:
 - `npx jwebgen --help`
@@ -37,6 +38,10 @@ No global setup alternative:
 - Install missing tool and rerun.
 - Quick diagnostics:
   - `jwebgen --setup`
+- Interactive setup assistant:
+  - In TTY mode, `jwebgen --setup` can propose and run safe install commands only after explicit confirmation.
+- Non-interactive mode (CI/scripts):
+  - `jwebgen --setup` remains diagnostics-only.
 
 ## Deploy/dev scripts fail on non-Linux
 
