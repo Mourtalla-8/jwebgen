@@ -105,13 +105,17 @@ function detectNpmGlobalBin() {
     : ['jwebgen'];
   const hasShimInBin = bin && shimCandidates.some((name) => existsSync(path.join(bin, name)));
   const inPath = Boolean(normalizedBin) && normalizedPathEntries.includes(normalizedBin);
+  const hasShimButNotOnPath = Boolean(hasShimInBin && !inPath);
+  const resolvedOutsideBin = Boolean(!hasShimInBin && commandExistsInPath('jwebgen'));
   return {
     bin,
     prefix,
     hasBin: Boolean(bin),
     inPath,
     jwebgenReachable: commandExistsInPath('jwebgen'),
-    hasShimButNotOnPath: Boolean(hasShimInBin && !inPath)
+    hasShimInBin: Boolean(hasShimInBin),
+    hasShimButNotOnPath,
+    resolvedOutsideBin
   };
 }
 
@@ -143,12 +147,14 @@ function pathSnippets(npmGlobalBin, platform = process.platform) {
   if (platform === 'win32') {
     return [
       `PowerShell (session): $env:Path = "${npmGlobalBin};" + $env:Path`,
+      'Rollback (session): restart terminal, or set $env:Path back to previous value in this session.',
       `To persist manually: add "${npmGlobalBin}" to your user PATH from Windows Environment Variables settings.`
     ];
   }
   return [
     `bash/zsh (session): export PATH="${npmGlobalBin}:$PATH"`,
     `fish (session): set -gx PATH "${npmGlobalBin}" $PATH`,
+    'Rollback (session): close terminal, or restore PATH to previous session value.',
     `To persist manually: add this line to your shell config file: export PATH="${npmGlobalBin}:$PATH"`
   ];
 }
@@ -199,9 +205,16 @@ function printSetupState(state) {
     const marker = item.ok ? pc.green('OK') : pc.yellow('OPTIONAL');
     console.log(`${marker} ${item.key}`);
   }
+  if (state.npmPath.hasShimButNotOnPath) {
+    console.log(pc.yellow('PATH status: jwebgen shim exists in npm global bin but this bin is not on current PATH.'));
+  } else if (state.npmPath.hasShimInBin && state.npmPath.inPath) {
+    console.log(pc.green('PATH status: npm global bin with jwebgen shim is already in PATH.'));
+  } else if (state.npmPath.resolvedOutsideBin) {
+    console.log(pc.yellow('PATH status: jwebgen is reachable, but not from the detected npm global bin path.'));
+  }
 }
 
-export function runSetupCheck() {
+export function runSetupCheck({ dryRun = false } = {}) {
   const state = collectSetupState();
   printSetupState(state);
   const failed = state.checks.filter((c) => !c.ok);
@@ -211,6 +224,9 @@ export function runSetupCheck() {
   }
   if (state.npmPath.hasShimButNotOnPath) {
     console.log(pc.yellow('The global jwebgen shim exists but npm global bin is not currently in PATH.'));
+  }
+  if (dryRun) {
+    console.log(pc.cyan('Setup dry-run: preview only, no command execution.'));
   }
   console.log(pc.green('Preflight succeeded: required tools are available.'));
   return true;
@@ -223,7 +239,7 @@ function runCommand(command) {
   return spawnSync('sh', ['-lc', command], { stdio: 'inherit' });
 }
 
-export async function runSetupAssistant({ confirmPrompt, selectPrompt } = {}) {
+export async function runSetupAssistant({ confirmPrompt, selectPrompt, dryRun = false } = {}) {
   const state = collectSetupState();
   printSetupState(state);
   const actions = computeSuggestedActions(state);
@@ -247,11 +263,18 @@ export async function runSetupAssistant({ confirmPrompt, selectPrompt } = {}) {
       for (const snippet of action.snippets) console.log(`  ${snippet}`);
     }
   }
+  if (dryRun) {
+    console.log(pc.cyan('Setup dry-run enabled: actions are previewed and will not be executed.'));
+  }
 
   for (const action of actions) {
     if (action.type === 'path') {
       console.log(pc.yellow('\nPATH guidance (manual step, no file edits performed):'));
       for (const snippet of action.snippets) console.log(`  ${snippet}`);
+      continue;
+    }
+    if (dryRun) {
+      console.log(pc.cyan(`Dry-run preview: ${action.commands[0]}`));
       continue;
     }
     if (!confirmPrompt) continue;

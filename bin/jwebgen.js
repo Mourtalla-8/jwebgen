@@ -295,6 +295,7 @@ async function runCli() {
   if (action === 'setup') {
     const ok = (process.stdin.isTTY && process.stdout.isTTY)
       ? await runSetupAssistant({
+          dryRun: flags.dryRun,
           confirmPrompt: async ({ message, initialValue }) => {
             const answer = await confirm({ message, initialValue });
             if (isCancel(answer)) return false;
@@ -309,7 +310,7 @@ async function runCli() {
             return answer;
           }
         })
-      : runSetupCheck();
+      : runSetupCheck({ dryRun: flags.dryRun });
     if (!ok) process.exit(1);
     return;
   }

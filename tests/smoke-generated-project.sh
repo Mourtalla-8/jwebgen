@@ -17,7 +17,7 @@ echo "[smoke] create project in $TMP_ROOT"
 
 echo "[smoke] setup diagnostics in non-interactive mode"
 set +e
-SETUP_OUT="$(node "$ROOT_DIR/bin/jwebgen.js" --setup 2>&1)"
+SETUP_OUT="$(node "$ROOT_DIR/bin/jwebgen.js" --setup --dry-run 2>&1)"
 SETUP_STATUS=$?
 set -e
 echo "$SETUP_OUT"
@@ -25,6 +25,10 @@ if [ "$SETUP_STATUS" -ne 0 ] && [ "$SETUP_STATUS" -ne 1 ]; then
   fail "--setup returned unexpected exit code: $SETUP_STATUS"
 fi
 echo "$SETUP_OUT" | grep -q "jwebgen setup diagnostics" || fail "--setup output missing diagnostics header"
+echo "$SETUP_OUT" | grep -q "Setup dry-run" || fail "--setup --dry-run output missing preview marker"
+if echo "$SETUP_OUT" | grep -q "Run now for"; then
+  fail "non-interactive setup should not prompt for confirmation"
+fi
 
 SCRIPTS="$TMP_ROOT/smokeapp/.jwebgen/scripts"
 for f in build.mjs deploy.mjs dev.mjs watch.mjs add-servlet.mjs add-jsp.mjs; do

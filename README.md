@@ -98,11 +98,15 @@ jwebgen --clean --deploy
   - runs diagnostics,
   - proposes safe actions per OS,
   - asks for explicit confirmation before running any suggested install command.
+- `jwebgen --setup --dry-run`:
+  - previews setup actions without executing commands,
+  - keeps PATH handling as guidance-only.
 - `jwebgen --setup` in non-interactive mode (CI/script):
   - diagnostics only (no prompt, no command execution).
 - PATH management stays non-destructive:
   - jwebgen only proposes shell/PowerShell snippets,
   - it does not edit your shell config files automatically.
+  - rollback guidance is printed for session-scoped PATH changes.
 
 ## Port conflicts on the same machine
 
