@@ -75,10 +75,19 @@ function commandExistsInPath(commandName) {
 }
 
 function detectNpmGlobalBin() {
-  const npmBin = spawnSync('npm', ['bin', '-g'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
   const npmPrefix = spawnSync('npm', ['config', 'get', 'prefix'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
-  const bin = String(npmBin.stdout || '').trim();
   const prefix = String(npmPrefix.stdout || '').trim();
+  const fallbackNpmBin = String(
+    spawnSync('npm', ['bin', '-g'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).stdout || ''
+  ).trim();
+  const prefixDerivedBin = prefix
+    ? (process.platform === 'win32' ? prefix : path.join(prefix, 'bin'))
+    : '';
+  const windowsNodeModulesBin = (process.platform === 'win32' && prefix)
+    ? path.join(prefix, 'node_modules', '.bin')
+    : '';
+  const binCandidates = [prefixDerivedBin, windowsNodeModulesBin, fallbackNpmBin].filter(Boolean);
+  const bin = binCandidates[0] || '';
   return {
     bin,
     prefix,
@@ -192,7 +201,7 @@ function runCommand(command) {
   return spawnSync('sh', ['-lc', command], { stdio: 'inherit' });
 }
 
-export async function runSetupAssistant({ confirmPrompt } = {}) {
+export async function runSetupAssistant({ confirmPrompt, selectPrompt } = {}) {
   const state = collectSetupState();
   printSetupState(state);
   const actions = computeSuggestedActions(state);
@@ -224,7 +233,14 @@ export async function runSetupAssistant({ confirmPrompt } = {}) {
       continue;
     }
     if (!confirmPrompt) continue;
-    const command = action.commands[0];
+    let command = action.commands[0];
+    if (action.commands.length > 1 && selectPrompt) {
+      const selected = await selectPrompt({
+        message: `Choose install command for ${action.key}`,
+        options: action.commands
+      });
+      if (selected) command = selected;
+    }
     const approved = await confirmPrompt({
       message: `Run now for ${action.key}?`,
       initialValue: false

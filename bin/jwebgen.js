@@ -299,6 +299,14 @@ async function runCli() {
             const answer = await confirm({ message, initialValue });
             if (isCancel(answer)) return false;
             return Boolean(answer);
+          },
+          selectPrompt: async ({ message, options }) => {
+            const answer = await select({
+              message,
+              options: options.map((opt) => ({ value: opt, label: opt }))
+            });
+            if (isCancel(answer)) return null;
+            return answer;
           }
         })
       : runSetupCheck();
