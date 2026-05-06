@@ -92,6 +92,18 @@ jwebgen --clean --deploy
 
 `--servlet` and `--jsp` are Node-first on all tier-1 OS when generated `.mjs` scripts are present.
 
+## Setup assistant behavior
+
+- `jwebgen --setup` in interactive terminals (TTY):
+  - runs diagnostics,
+  - proposes safe actions per OS,
+  - asks for explicit confirmation before running any suggested install command.
+- `jwebgen --setup` in non-interactive mode (CI/script):
+  - diagnostics only (no prompt, no command execution).
+- PATH management stays non-destructive:
+  - jwebgen only proposes shell/PowerShell snippets,
+  - it does not edit your shell config files automatically.
+
 ## Port conflicts on the same machine
 
 If Tomcat, WildFly, or another HTTP service is active on port `8080` at the same time, dev/deploy can fail.

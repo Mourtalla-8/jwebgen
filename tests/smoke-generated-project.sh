@@ -15,6 +15,17 @@ echo "[smoke] create project in $TMP_ROOT"
 (cd "$TMP_ROOT" && node "$ROOT_DIR/bin/jwebgen.js" --new smokeapp --yes)
 [[ -d "$TMP_ROOT/smokeapp/.jwebgen/scripts" ]] || fail "missing generated scripts dir"
 
+echo "[smoke] setup diagnostics in non-interactive mode"
+set +e
+SETUP_OUT="$(node "$ROOT_DIR/bin/jwebgen.js" --setup 2>&1)"
+SETUP_STATUS=$?
+set -e
+echo "$SETUP_OUT"
+if [ "$SETUP_STATUS" -ne 0 ] && [ "$SETUP_STATUS" -ne 1 ]; then
+  fail "--setup returned unexpected exit code: $SETUP_STATUS"
+fi
+echo "$SETUP_OUT" | grep -q "jwebgen setup diagnostics" || fail "--setup output missing diagnostics header"
+
 SCRIPTS="$TMP_ROOT/smokeapp/.jwebgen/scripts"
 for f in build.mjs deploy.mjs dev.mjs watch.mjs add-servlet.mjs add-jsp.mjs; do
   [[ -f "$SCRIPTS/$f" ]] || fail "missing $f"
