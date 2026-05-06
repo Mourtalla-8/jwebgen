@@ -74,6 +74,13 @@ function commandExistsInPath(commandName) {
   return false;
 }
 
+function normalizePathForCompare(inputPath) {
+  const normalized = path.normalize(String(inputPath || ''));
+  const trimmed = normalized.replace(/[\\/]+$/, '');
+  if (process.platform === 'win32') return trimmed.toLowerCase();
+  return trimmed;
+}
+
 function detectNpmGlobalBin() {
   const npmPrefix = spawnSync('npm', ['config', 'get', 'prefix'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
   const prefix = String(npmPrefix.stdout || '').trim();
@@ -88,11 +95,16 @@ function detectNpmGlobalBin() {
     : '';
   const binCandidates = [prefixDerivedBin, windowsNodeModulesBin, fallbackNpmBin].filter(Boolean);
   const bin = binCandidates[0] || '';
+  const normalizedBin = normalizePathForCompare(bin);
+  const normalizedPathEntries = String(process.env.PATH || '')
+    .split(path.delimiter)
+    .filter(Boolean)
+    .map((entry) => normalizePathForCompare(entry));
   const shimCandidates = process.platform === 'win32'
     ? ['jwebgen', 'jwebgen.cmd', 'jwebgen.ps1', 'jwebgen.exe']
     : ['jwebgen'];
   const hasShimInBin = bin && shimCandidates.some((name) => existsSync(path.join(bin, name)));
-  const inPath = bin ? String(process.env.PATH || '').split(path.delimiter).includes(bin) : false;
+  const inPath = Boolean(normalizedBin) && normalizedPathEntries.includes(normalizedBin);
   return {
     bin,
     prefix,
@@ -117,7 +129,11 @@ function suggestedInstallCommands(requirementKey, platform = process.platform) {
   if (requirementKey === 'node') {
     if (platform === 'win32') return ['winget install OpenJS.NodeJS.LTS'];
     if (platform === 'darwin') return ['brew install node@22'];
-    return ['sudo apt install -y nodejs npm', 'sudo dnf install -y nodejs npm', 'sudo pacman -S --noconfirm nodejs npm'];
+    return [
+      'curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && sudo apt-get install -y nodejs',
+      'sudo dnf install -y nodejs npm',
+      'sudo pacman -S --noconfirm nodejs npm'
+    ];
   }
   return [];
 }

@@ -36,7 +36,11 @@ test('computeSuggestedActions suggests PATH guidance when npm global bin is miss
   const actions = computeSuggestedActions(state, 'darwin');
   const pathAction = actions.find((a) => a.type === 'path');
   assert.ok(pathAction);
-  assert.match(pathAction.snippets.join('\n'), /PATH/);
+  const joinedSnippets = pathAction.snippets.join('\n');
+  assert.match(joinedSnippets, /export PATH=|PATH=/);
+  assert.doesNotMatch(joinedSnippets, />>\s*~\/\.zshrc/);
+  assert.doesNotMatch(joinedSnippets, /SetEnvironmentVariable/);
+  assert.doesNotMatch(joinedSnippets, /set -Ux/);
 });
 
 test('computeSuggestedActions returns empty list when everything is ready', () => {
