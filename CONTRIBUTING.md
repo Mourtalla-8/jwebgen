@@ -16,6 +16,12 @@ npm i -g .
 jwebgen --help
 ```
 
+Recommended reproducible global-install validation (all OS):
+
+```bash
+npm run smoke:global-install
+```
+
 ## Quality gate
 
 Before opening a PR:
@@ -30,6 +36,7 @@ After behavioral changes around CLI scripts, deployments, or dev mode, sanity-ch
 
 - **Linux** — `jwebgen --new` (or migrate an older tree), `--build`, `--deploy` (Tomcat/WildFly with and without write access to server dirs), `--dev`, `--watch`, `--status`.
 - **Windows** — Same commands where applicable; confirm `--status` and dev dashboard hints mention Windows-oriented steps (no `systemctl`). Verify clear errors when Maven or Tomcat/WildFly paths are unset.
+- **Windows checklist subset (non-flaky, PR-ready)** — `jwebgen --setup --dry-run`, `jwebgen --new --yes`, `jwebgen --servlet`, `jwebgen --jsp`, `jwebgen --status` with fake `TOMCAT_HOME`.
 - **macOS** — Same minimal subset as Linux where you use Tomcat/WildFly locally; systemd-specific messages should not appear as the primary hint.
 
 Automated checks cover templates and core logic; the above is intentionally short-lived manual coverage.
