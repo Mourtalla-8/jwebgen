@@ -24,6 +24,8 @@ Then verify:
 
 ```bash
 jwebgen --help
+jwebgen --version
+jwebgen --setup
 # or just:
 jwebgen
 ```
@@ -69,6 +71,27 @@ jwebgen --clean --deploy
 - Generated `.jwebgen/scripts/build.sh`: requires Java + Maven.
 - Generated `.jwebgen/scripts/dev.sh` and `watch.sh`: require Node and target app server tooling.
 
+## Supported commands (current baseline)
+
+- Lifecycle:
+  - `jwebgen --help`
+  - `jwebgen --version`
+  - `jwebgen --setup`
+  - `jwebgen --update` (prints safe update guidance)
+  - `jwebgen --uninstall` (prints safe uninstall guidance)
+- Project:
+  - `jwebgen --new <name> [--yes] [--tomcat|--wildfly]`
+  - `jwebgen --status`
+  - `jwebgen --build`
+  - `jwebgen --deploy`
+  - `jwebgen --dev` / `jwebgen --watch`
+  - `jwebgen --clean` and `jwebgen --clean --deploy`
+  - `jwebgen --servlet <Name>`
+  - `jwebgen --jsp <name>`
+  - `jwebgen --migrate`
+
+`--servlet` and `--jsp` are Node-first on all tier-1 OS when generated `.mjs` scripts are present.
+
 ## Port conflicts on the same machine
 
 If Tomcat, WildFly, or another HTTP service is active on port `8080` at the same time, dev/deploy can fail.
@@ -102,6 +125,7 @@ javac -version
 mvn -version
 npm ci
 npm i -g .
+jwebgen --setup
 jwebgen --help
 ```
 

@@ -35,11 +35,16 @@ No global setup alternative:
   - `javac -version`
   - `mvn -version`
 - Install missing tool and rerun.
+- Quick diagnostics:
+  - `jwebgen --setup`
 
 ## Deploy/dev scripts fail on non-Linux
 
-- Generated scripts target Linux/systemd primarily.
-- On macOS/Windows, run app server manually and adapt server paths/env vars.
+- jwebgen uses generated Node entrypoints first (`*.mjs`) when present.
+- On macOS/Windows, configure server paths explicitly:
+  - Tomcat: `TOMCAT_HOME` / `TOMCAT10` / `CATALINA_HOME`
+  - WildFly: `WILDFLY_HOME` or `WILDFLY_DEPLOYMENTS`
+- Use `jwebgen --status` to confirm target resolution and app URL.
 
 ## Permission denied during deploy
 
@@ -53,6 +58,13 @@ No global setup alternative:
 - Manual cleanup from project root:
   - `jwebgen --clean --deploy`
 - Auto cleanup also runs when leaving `jwebgen --dev` (best effort).
+
+## Update or uninstall jwebgen safely
+
+- Update guidance:
+  - `jwebgen --update`
+- Uninstall guidance:
+  - `jwebgen --uninstall`
 
 ## Port already in use (`8080`, `9990`, live reload ports)
 

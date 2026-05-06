@@ -2,6 +2,7 @@ import pc from 'picocolors';
 
 const ACTION_FLAGS = new Set([
   '--help',
+  '--version',
   '--status',
   '--start',
   '--stop',
@@ -23,6 +24,10 @@ const ACTION_FLAGS = new Set([
 export function parseFlags(argv = []) {
   const flags = {
     help: false,
+    version: false,
+    setup: false,
+    update: false,
+    uninstall: false,
     status: false,
     dev: false,
     build: false,
@@ -47,6 +52,22 @@ export function parseFlags(argv = []) {
 
     if (a === '--help' || a === '-h') {
       flags.help = true;
+      continue;
+    }
+    if (a === '--version' || a === '-V') {
+      flags.version = true;
+      continue;
+    }
+    if (a === '--setup') {
+      flags.setup = true;
+      continue;
+    }
+    if (a === '--update') {
+      flags.update = true;
+      continue;
+    }
+    if (a === '--uninstall') {
+      flags.uninstall = true;
       continue;
     }
     if (a === '--status') {
@@ -119,6 +140,10 @@ export function parseFlags(argv = []) {
 
   const actions = [
     flags.help ? 'help' : null,
+    flags.version ? 'version' : null,
+    flags.setup ? 'setup' : null,
+    flags.update ? 'update' : null,
+    flags.uninstall ? 'uninstall' : null,
     flags.status ? 'status' : null,
     (flags.dev || flags.watch) ? 'dev' : null,
     flags.build ? 'build' : null,
@@ -157,6 +182,10 @@ export function formatFlagsHelp({ appName = 'jwebgen' } = {}) {
     usage,
     section('Main Commands'),
     `  ${cmd('--help, -h')}${desc('Show this help message.')}`,
+    `  ${cmd('--version, -V')}${desc('Show jwebgen version.')}`,
+    `  ${cmd('--setup')}${desc('Check required tools (Node, Java, Maven) and key commands.')}`,
+    `  ${cmd('--update')}${desc('Show safe update guidance for global installs.')}`,
+    `  ${cmd('--uninstall')}${desc('Show safe uninstall guidance for global installs.')}`,
     `  ${cmd('--status')}${desc('Show project status.')}`,
     `  ${cmd('--dev')}${desc('Start dev loop in current project.')}`,
     `  ${cmd('--watch')}${desc('Alias for --dev.')}`,
