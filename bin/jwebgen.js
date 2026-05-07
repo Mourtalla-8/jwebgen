@@ -400,7 +400,7 @@ async function runCli() {
 
 runCli().catch((error) => {
   if (error?.exitCode === 130 || error?.signal === 'SIGINT') {
-    console.log(pc.yellow('Setup cancelled.'));
+    console.log(pc.yellow('Operation cancelled.'));
     process.exit(130);
   }
   if (error?.jwebgenHandled) {
