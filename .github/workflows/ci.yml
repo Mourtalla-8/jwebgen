@@ -78,3 +78,8 @@ jobs:
         if: runner.os != 'Linux'
         run: |
           node -e "const fs=require('node:fs'); const os=require('node:os'); const path=require('node:path'); const cp=require('node:child_process'); const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'jwebgen-servletjsp-')); cp.execFileSync(process.execPath,[path.join(process.cwd(),'bin','jwebgen.js'),'--new','webapp','--yes'],{cwd:tmp,stdio:'inherit'}); const cwd=path.join(tmp,'webapp'); cp.execFileSync(process.execPath,[path.join(process.cwd(),'bin','jwebgen.js'),'--servlet','HelloServlet'],{cwd,stdio:'inherit'}); cp.execFileSync(process.execPath,[path.join(process.cwd(),'bin','jwebgen.js'),'--jsp','home'],{cwd,stdio:'inherit'});"
+
+      - name: Windows status hint parity
+        if: runner.os == 'Windows'
+        run: |
+          node -e "const fs=require('node:fs'); const os=require('node:os'); const path=require('node:path'); const cp=require('node:child_process'); const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'jwebgen-status-')); cp.execFileSync(process.execPath,[path.join(process.cwd(),'bin','jwebgen.js'),'--new','statusapp','--yes'],{cwd:tmp,stdio:'inherit'}); const app=path.join(tmp,'statusapp'); const fake=path.join(tmp,'fake-tomcat'); fs.mkdirSync(path.join(fake,'webapps','statusapp'),{recursive:true}); const out=cp.execFileSync(process.execPath,[path.join(process.cwd(),'bin','jwebgen.js'),'--status'],{cwd:app,encoding:'utf8',env:{...process.env,TOMCAT_HOME:fake,JWEBGEN_SERVER_TARGET:'tomcat'}}); if (out.includes('systemctl')) { throw new Error('Windows status output should not include systemctl hints'); }"

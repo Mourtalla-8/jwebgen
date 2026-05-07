@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { computeSuggestedActions } from '../../src/cli/preflight.js';
+import { buildInstallFailureHint, computeSuggestedActions } from '../../src/cli/preflight.js';
 
 test('computeSuggestedActions suggests install actions for missing dependencies', () => {
   const state = {
@@ -62,4 +62,16 @@ test('computeSuggestedActions returns empty list when everything is ready', () =
   };
   const actions = computeSuggestedActions(state, 'win32');
   assert.deepEqual(actions, []);
+});
+
+test('buildInstallFailureHint gives Windows-specific remediation', () => {
+  const hint = buildInstallFailureHint('maven', 'win32');
+  assert.match(hint, /winget/i);
+  assert.match(hint, /mvn -version/);
+});
+
+test('buildInstallFailureHint gives generic Linux remediation', () => {
+  const hint = buildInstallFailureHint('node', 'linux');
+  assert.match(hint, /package manager/i);
+  assert.match(hint, /--setup --dry-run/);
 });

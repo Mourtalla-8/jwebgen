@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseFlags, isLikelyLegacySubcommand } from '../../src/cli/flags.js';
+import { formatFlagsHelp, parseFlags, isLikelyLegacySubcommand } from '../../src/cli/flags.js';
 
 test('parseFlags maps --watch to dev action', () => {
   const parsed = parseFlags(['--watch']);
@@ -66,5 +66,12 @@ test('parseFlags supports clean deploy combo as single action', () => {
 test('isLikelyLegacySubcommand detects old subcommand tokens', () => {
   assert.equal(isLikelyLegacySubcommand('dev'), true);
   assert.equal(isLikelyLegacySubcommand('--dev'), false);
+});
+
+test('formatFlagsHelp includes lifecycle commands for setup/update/uninstall', () => {
+  const help = formatFlagsHelp({ appName: 'jwebgen' });
+  assert.match(help, /--setup \[--dry-run\]/);
+  assert.match(help, /--update/);
+  assert.match(help, /--uninstall/);
 });
 

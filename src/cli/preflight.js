@@ -142,6 +142,18 @@ function suggestedInstallCommands(requirementKey, platform = process.platform) {
   return [];
 }
 
+export function buildInstallFailureHint(requirementKey, platform = process.platform) {
+  if (platform === 'win32') {
+    if (requirementKey === 'node') return 'Retry with winget as Administrator, then restart terminal and run jwebgen --setup --dry-run.';
+    if (requirementKey === 'java') return 'Retry with winget as Administrator, then verify with javac -version.';
+    if (requirementKey === 'maven') return 'Retry with winget as Administrator, then verify with mvn -version.';
+  }
+  if (platform === 'darwin') {
+    return 'Retry with Homebrew, then open a new terminal and re-run jwebgen --setup --dry-run.';
+  }
+  return 'Retry with your package manager command, then re-run jwebgen --setup --dry-run.';
+}
+
 function pathSnippets(npmGlobalBin, platform = process.platform) {
   if (!npmGlobalBin) return [];
   if (platform === 'win32') {
@@ -233,10 +245,27 @@ export function runSetupCheck({ dryRun = false } = {}) {
 }
 
 function runCommand(command) {
-  if (process.platform === 'win32') {
-    return spawnSync('cmd.exe', ['/c', command], { stdio: 'inherit' });
+  const shell = process.platform === 'win32' ? 'cmd.exe' : 'sh';
+  const shellArgs = process.platform === 'win32' ? ['/c', command] : ['-lc', command];
+  try {
+    const result = spawnSync(shell, shellArgs, {
+      stdio: 'inherit',
+      timeout: 10 * 60 * 1000
+    });
+    return {
+      status: result.status ?? 1,
+      signal: result.signal || null,
+      timedOut: result.error?.code === 'ETIMEDOUT',
+      error: result.error || null
+    };
+  } catch (error) {
+    return {
+      status: 1,
+      signal: null,
+      timedOut: false,
+      error
+    };
   }
-  return spawnSync('sh', ['-lc', command], { stdio: 'inherit' });
 }
 
 export async function runSetupAssistant({ confirmPrompt, selectPrompt, dryRun = false } = {}) {
@@ -297,7 +326,21 @@ export async function runSetupAssistant({ confirmPrompt, selectPrompt, dryRun = 
     console.log(pc.cyan(`Executing: ${command}`));
     const result = runCommand(command);
     if (result.status !== 0) {
-      console.log(pc.red(`Command failed for ${action.key}. Please run manually or try another package manager command.`));
+      if (result.timedOut) {
+        console.log(pc.red(`Command timed out for ${action.key}.`));
+      } else if (result.error) {
+        console.log(pc.red(`Command execution error for ${action.key}: ${result.error.message || result.error}`));
+      } else {
+        console.log(pc.red(`Command failed for ${action.key} (exit ${result.status}).`));
+      }
+      console.log(pc.yellow(`Remediation: ${buildInstallFailureHint(action.key)}`));
+    }
+    const recheckState = collectSetupState();
+    const check = recheckState.checks.find((item) => item.key === action.key);
+    if (check?.ok) {
+      console.log(pc.green(`Verification after ${action.key}: ${check.display}`));
+    } else if (check) {
+      console.log(pc.yellow(`Verification after ${action.key}: still missing/incompatible (${check.display}).`));
     }
   }
 
