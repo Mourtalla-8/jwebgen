@@ -249,8 +249,6 @@ function showUpdateGuidance() {
   console.log('  git pull');
   console.log('  npm ci');
   console.log('  npm i -g .');
-  console.log(pc.cyan('If global shim is not available, run this from local checkout to print/update guidance:'));
-  console.log('  node bin/jwebgen.js --update');
 }
 
 function showUninstallGuidance() {

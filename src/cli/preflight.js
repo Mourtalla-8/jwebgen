@@ -358,7 +358,7 @@ export async function runSetupAssistant({
     try {
       result = runCommandImpl(command);
     } catch (error) {
-      result = { status: 1, timedOut: false, error, signal: null };
+      result = { status: 1, timedOut: error?.code === 'ETIMEDOUT', error, signal: null };
     }
     if (result.status !== 0) {
       if (result.timedOut) {
