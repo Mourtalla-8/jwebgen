@@ -5,6 +5,7 @@ import { rm, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { execa } from 'execa';
 import { jwebgenConfigPath, jwebgenMetaDir, jwebgenScriptsDir } from '../project/jwebgenLayout.js';
 import { readJwebgenExports } from '../project/jwebgenRc.js';
+import { resolveTomcatHome, resolveWildflyPaths } from '../project/serverPaths.js';
 
 /** Effective HTTP app port for status URLs (matches deploy/dev tooling). */
 export function resolveStatusHttpPort(cfg = {}) {
@@ -149,17 +150,7 @@ export async function showStatus({ findProjectRoot }) {
   const appName = await readAppNameFromPom(projectRoot, path.basename(projectRoot));
   const statusPort = resolveStatusHttpPort(cfg);
   if (serverTarget === 'tomcat') {
-    const tomcatHome = String(
-      process.env.TOMCAT_HOME ||
-        process.env.TOMCAT10 ||
-        process.env.CATALINA_HOME ||
-        cfg.TOMCAT_HOME ||
-        cfg.TOMCAT10 ||
-        cfg.CATALINA_HOME ||
-        ''
-    ).trim();
-    const defaultHome = process.platform === 'linux' ? '/var/lib/tomcat10' : '';
-    const home = tomcatHome || defaultHome;
+    const home = resolveTomcatHome({ cfg });
     if (!home) {
       console.log(pc.yellow('Deployment: unknown (configure TOMCAT_HOME, TOMCAT10, or CATALINA_HOME in env or .jwebgen/.jwebgenrc)'));
       return;
@@ -175,11 +166,7 @@ export async function showStatus({ findProjectRoot }) {
     return;
   }
 
-  const defaultWildflyHome = process.platform === 'linux' ? '/opt/wildfly' : '';
-  const wildflyHome = String(process.env.WILDFLY_HOME || cfg.WILDFLY_HOME || defaultWildflyHome).trim();
-  const deployments = String(
-    process.env.WILDFLY_DEPLOYMENTS || cfg.WILDFLY_DEPLOYMENTS || (wildflyHome ? path.join(wildflyHome, 'standalone', 'deployments') : '')
-  ).trim();
+  const { deployments } = resolveWildflyPaths({ cfg });
   if (!deployments) {
     console.log(pc.yellow('Deployment: unknown (configure WILDFLY_DEPLOYMENTS or WILDFLY_HOME in env/.jwebgenrc)'));
     return;

@@ -30,6 +30,14 @@ test('makeNodeDevScript spawns dashboard with inherited TTY streams', () => {
   assert.match(s, /maybeRunServerInstallAssistant/);
 });
 
+test('makeNodeDevScript embeds dashboard renderer with ANSI-aware padding', () => {
+  const s = makeNodeDevScript();
+  assert.match(s, /stripAnsi/);
+  assert.match(s, /visibleWidth/);
+  assert.match(s, /padAnsi/);
+  assert.match(s, /statusWidth/);
+});
+
 test('makeNodeBuildScript warns when Maven executable is missing', () => {
   const build = makeNodeBuildScript();
   assert.match(build, /looksLikeMissingMaven/);
@@ -50,6 +58,8 @@ test('makeNodeDeployScript wraps deploy IO with guardedAcl for permission errors
   assert.match(deploy, /spawn\('sudo'/);
   assert.match(deploy, /WILDFLY_DEPLOYMENTS/);
   assert.match(deploy, /TOMCAT_HOME\/TOMCAT10\/CATALINA_HOME/);
+  assert.match(deploy, /validateTomcatHome/);
+  assert.match(deploy, /validateWildflyDeployments/);
 });
 
 test('makeNodeDeployScript enforces Tomcat reloadable context in dev mode', () => {

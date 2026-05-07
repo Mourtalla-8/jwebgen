@@ -21,13 +21,25 @@ NC='\\\\033[0m' # No Color
 APP_NAME=${shellQuote(appName)}
 SCRIPT_DIR="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
-TOMCAT_DIR="\${TOMCAT10:-}"
+TOMCAT_DIR="\${TOMCAT_HOME:-\${TOMCAT10:-\${CATALINA_HOME:-}}}"
 if [[ -z "$TOMCAT_DIR" ]]; then
   for d in /var/lib/tomcat10 /var/lib/tomcat; do
     if [[ -d "$d" ]]; then TOMCAT_DIR="$d"; break; fi
   done
 fi
 TOMCAT_DIR="\${TOMCAT_DIR:-/var/lib/tomcat10}"
+if [[ -z "$TOMCAT_DIR" || "$TOMCAT_DIR" = "/" ]]; then
+  log_error "Tomcat home is not configured. Set TOMCAT_HOME, TOMCAT10, or CATALINA_HOME."
+  exit 1
+fi
+if [[ ! -d "$TOMCAT_DIR" ]]; then
+  log_error "Tomcat home path was not found: $TOMCAT_DIR"
+  exit 1
+fi
+if [[ ! -d "$TOMCAT_DIR/webapps" ]]; then
+  log_error "Tomcat webapps directory was not found under: $TOMCAT_DIR"
+  exit 1
+fi
 CLEANUP_DEV_MODE=0
 if [[ "\${1:-}" = "--cleanup-dev" ]]; then
   CLEANUP_DEV_MODE=1
@@ -288,6 +300,18 @@ fi
 
 WILDFLY_HOME="\${WILDFLY_HOME:-/opt/wildfly}"
 DEPLOY_DIR="\${WILDFLY_DEPLOYMENTS:-$WILDFLY_HOME/standalone/deployments}"
+if [[ -z "$DEPLOY_DIR" || "$DEPLOY_DIR" = "/" ]]; then
+  echo "WildFly deployments path is not configured. Set WILDFLY_DEPLOYMENTS (or WILDFLY_HOME)."
+  exit 1
+fi
+if [[ -n "$WILDFLY_HOME" && ! -d "$WILDFLY_HOME" ]]; then
+  echo "WildFly home path was not found: $WILDFLY_HOME"
+  exit 1
+fi
+if [[ ! -d "$DEPLOY_DIR" ]]; then
+  echo "WildFly deployments directory was not found: $DEPLOY_DIR"
+  exit 1
+fi
 CLEANUP_DEV_MODE=0
 if [[ "\${1:-}" = "--cleanup-dev" ]]; then
   CLEANUP_DEV_MODE=1
