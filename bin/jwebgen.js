@@ -249,8 +249,7 @@ function showUpdateGuidance() {
   console.log('  git pull');
   console.log('  npm ci');
   console.log('  npm i -g .');
-  console.log(pc.cyan('If global shim is not available, run from local checkout:'));
-  console.log('  npx jwebgen --update');
+  console.log(pc.cyan('If global shim is not available, run this from local checkout to print/update guidance:'));
   console.log('  node bin/jwebgen.js --update');
 }
 
@@ -258,8 +257,8 @@ function showUninstallGuidance() {
   console.log(pc.cyan('Safe uninstall flow (global install):'));
   console.log('  npm uninstall -g jwebgen');
   console.log(pc.cyan('If running from a local checkout only:'));
-  console.log('  npx jwebgen --help');
-  console.log('  node ./bin/jwebgen.js --help');
+  console.log('  npx jwebgen --uninstall');
+  console.log('  node ./bin/jwebgen.js --uninstall');
   console.log('  remove the clone folder when you no longer need local one-off runs.');
   console.log(pc.cyan('Optional cleanup: remove old clones or temp projects manually.'));
 }

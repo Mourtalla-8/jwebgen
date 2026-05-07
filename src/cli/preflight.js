@@ -286,7 +286,7 @@ function runCommand(command) {
     return {
       status: 1,
       signal: null,
-      timedOut: false,
+      timedOut: error?.code === 'ETIMEDOUT',
       error
     };
   }
