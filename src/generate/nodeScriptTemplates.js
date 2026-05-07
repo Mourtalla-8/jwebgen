@@ -809,9 +809,12 @@ function resolveWildflyPaths(cfg) {
 }
 
 function validateWildflyDeployments(deployments) {
-  const resolved = deployments ? path.resolve(deployments) : '';
+  if (!deployments || !String(deployments).trim()) {
+    return { ok: false, reason: 'WildFly deployments path is required.' };
+  }
+  const resolved = path.resolve(deployments);
   const rootPath = resolved ? path.parse(resolved).root : '';
-  if (!resolved || resolved === rootPath) {
+  if (resolved === rootPath) {
     return { ok: false, reason: 'WildFly deployments path must not be root ("/").' };
   }
   return { ok: true, resolved };
@@ -827,7 +830,7 @@ function detectServerInstalled(target, cfg) {
   }
   const { wildflyHome, deployments } = resolveWildflyPaths(cfg);
   const validatedDeployments = validateWildflyDeployments(deployments);
-  if (!validatedDeployments.ok) return { ok: false, reason: 'WildFly deployments path must not be root ("/").' };
+  if (!validatedDeployments.ok) return { ok: false, reason: validatedDeployments.reason };
   if (!wildflyHome && !deployments) return { ok: false, reason: 'WildFly path is not configured.' };
   if ((wildflyHome && !existsSync(wildflyHome)) || (deployments && !existsSync(deployments))) {
     return { ok: false, reason: 'WildFly paths were not found.' };
