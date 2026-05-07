@@ -327,45 +327,66 @@ async function maybeRunServerInstallAssistant(target, cfg) {
 }
 
 function isServerRunningQuick(target) {
+  const hasCommand = (bin) => {
+    const probe = spawnSync(process.platform === 'win32' ? 'where' : 'which', [bin], { stdio: 'ignore' });
+    return probe.status === 0;
+  };
+  let explicitDown = false;
   if (process.platform === 'win32') {
     const pattern =
       target === 'tomcat'
         ? /tomcat|catalina\\.startup|bootstrap\\.jar/i
         : /wildfly|jboss\\.modules|standalone|jboss\\.home/i;
-    const probe = spawnSync(
-      'powershell.exe',
-      [
-        '-NoProfile',
-        '-NoLogo',
-        '-NonInteractive',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-Command',
-        'Get-CimInstance Win32_Process | Where-Object { $_.Name -eq "java.exe" } | ForEach-Object { $_.CommandLine }'
-      ],
-      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }
-    );
-    const text = String(probe.stdout || '');
-    if (text.trim()) return pattern.test(text);
+    if (hasCommand('powershell.exe')) {
+      const probe = spawnSync(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-NoLogo',
+          '-NonInteractive',
+          '-ExecutionPolicy',
+          'Bypass',
+          '-Command',
+          'Get-CimInstance Win32_Process | Where-Object { $_.Name -eq "java.exe" } | ForEach-Object { $_.CommandLine }'
+        ],
+        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }
+      );
+      const text = String(probe.stdout || '');
+      if (text.trim()) {
+        if (pattern.test(text)) return true;
+        explicitDown = true;
+      } else if (probe.status === 0) {
+        explicitDown = true;
+      }
+    }
   }
-  if (process.platform !== 'win32') {
+  if (process.platform !== 'win32' && hasCommand('pgrep')) {
     const pgPattern = target === 'tomcat' ? 'tomcat|catalina' : 'standalone.sh|org.jboss.as.standalone|wildfly';
     const pgrep = spawnSync('pgrep', ['-f', pgPattern], { stdio: 'ignore' });
     if (pgrep.status === 0) return true;
+    if (pgrep.status === 1) explicitDown = true;
   }
-  if (target === 'wildfly') {
+  if (target === 'wildfly' && hasCommand('curl')) {
     const probe = spawnSync('curl', ['-fsS', '--max-time', '2', 'http://127.0.0.1:9990/'], { stdio: 'ignore' });
     if (probe.status === 0) return true;
-  } else {
+    if (probe.status !== 0 && probe.status !== 127 && probe.status !== 28 && probe.status != null) {
+      explicitDown = true;
+    }
+  } else if (target !== 'wildfly' && hasCommand('curl')) {
     const probe = spawnSync('curl', ['-fsS', '--max-time', '2', 'http://127.0.0.1:8080/'], { stdio: 'ignore' });
     if (probe.status === 0) return true;
+    if (probe.status !== 0 && probe.status !== 127 && probe.status !== 28 && probe.status != null) {
+      explicitDown = true;
+    }
   }
-  if (process.platform === 'linux') {
+  if (process.platform === 'linux' && hasCommand('systemctl')) {
     const unit = target === 'wildfly' ? 'wildfly' : 'tomcat10';
     const svc = spawnSync('systemctl', ['is-active', '--quiet', unit], { stdio: 'ignore' });
     if (svc.status === 0) return true;
+    if (svc.status === 3) explicitDown = true;
   }
-  return false;
+  if (explicitDown) return false;
+  return null;
 }
 
 function isDevMode() {
@@ -652,7 +673,8 @@ const cleanupOnly = process.argv.includes('--cleanup-dev');
 if (!cleanupOnly) {
   const installed = await maybeRunServerInstallAssistant(target, cfg);
   if (!installed) process.exit(1);
-  if (!isServerRunningQuick(target)) {
+  const runningQuick = isServerRunningQuick(target);
+  if (runningQuick === false) {
     console.error('Selected server is installed but currently down.');
     console.error('__JWEBGEN_EVENT__ server_down');
     process.exit(1);
@@ -761,6 +783,11 @@ function detectPackageManagers() {
   if (process.platform === 'win32') return { winget: has('winget') };
   if (process.platform === 'darwin') return { brew: has('brew') };
   return { apt: has('apt-get') || has('apt'), dnf: has('dnf'), pacman: has('pacman') };
+}
+
+function hasCommand(bin) {
+  const p = spawnSync(process.platform === 'win32' ? 'where' : 'which', [bin], { stdio: 'ignore' });
+  return p.status === 0;
 }
 
 function serverInstallCommands(target) {

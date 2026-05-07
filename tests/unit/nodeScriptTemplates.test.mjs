@@ -62,6 +62,15 @@ test('makeNodeDeployScript wraps deploy IO with guardedAcl for permission errors
   assert.match(deploy, /validateWildflyDeployments/);
 });
 
+test('makeNodeDeployScript guards runtime probes by command availability', () => {
+  const deploy = makeNodeDeployScript();
+  assert.match(deploy, /const hasCommand = \(bin\)/);
+  assert.match(deploy, /hasCommand\('powershell\.exe'\)/);
+  assert.match(deploy, /hasCommand\('pgrep'\)/);
+  assert.match(deploy, /hasCommand\('curl'\)/);
+  assert.match(deploy, /hasCommand\('systemctl'\)/);
+});
+
 test('makeNodeDeployScript enforces Tomcat reloadable context in dev mode', () => {
   const deploy = makeNodeDeployScript();
   assert.match(deploy, /ensureTomcatDevReloadableContext/);

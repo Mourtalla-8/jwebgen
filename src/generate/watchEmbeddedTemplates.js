@@ -55,26 +55,42 @@ function parseListenOwner(text, port) {
   }
   return '';
 }
+function hasCommand(bin) {
+  return new Promise((resolve) => {
+    const probe = spawn(process.platform === 'win32' ? 'where' : 'which', [bin], { stdio: 'ignore' });
+    probe.on('error', () => resolve(false));
+    probe.on('exit', (code) => resolve(code === 0));
+  });
+}
 function portOwner(port) {
   return new Promise((resolve) => {
-    const ss = spawn('ss', ['-lntp'], { stdio: ['ignore', 'pipe', 'ignore'] });
-    let out = '';
-    ss.stdout.on('data', (c) => { out += String(c); });
-    ss.on('error', () => resolve(null));
-    ss.on('exit', (code) => {
-      if (code === 0) {
-        const owner = parseListenOwner(out, port);
-        if (owner) return resolve(owner);
-      }
-      const lsof = spawn('lsof', ['-nP', '-iTCP:' + port, '-sTCP:LISTEN'], { stdio: ['ignore', 'pipe', 'ignore'] });
-      let lsofOut = '';
-      lsof.stdout.on('data', (c) => { lsofOut += String(c); });
-      lsof.on('error', () => resolve(null));
-      lsof.on('exit', () => {
-        const line = String(lsofOut || '').split('\\n')[1];
-        resolve(line ? line.trim() : null);
+    hasCommand('ss').then((ssAvailable) => {
+      const runLsofFallback = () => {
+        hasCommand('lsof').then((lsofAvailable) => {
+          if (!lsofAvailable) return resolve(null);
+          const lsof = spawn('lsof', ['-nP', '-iTCP:' + port, '-sTCP:LISTEN'], { stdio: ['ignore', 'pipe', 'ignore'] });
+          let lsofOut = '';
+          lsof.stdout.on('data', (c) => { lsofOut += String(c); });
+          lsof.on('error', () => resolve(null));
+          lsof.on('exit', () => {
+            const line = String(lsofOut || '').split('\\n')[1];
+            resolve(line ? line.trim() : null);
+          });
+        }).catch(() => resolve(null));
+      };
+      if (!ssAvailable) return runLsofFallback();
+      const ss = spawn('ss', ['-lntp'], { stdio: ['ignore', 'pipe', 'ignore'] });
+      let out = '';
+      ss.stdout.on('data', (c) => { out += String(c); });
+      ss.on('error', () => runLsofFallback());
+      ss.on('exit', (code) => {
+        if (code === 0) {
+          const owner = parseListenOwner(out, port);
+          if (owner) return resolve(owner);
+        }
+        runLsofFallback();
       });
-    });
+    }).catch(() => resolve(null));
   });
 }
 function resolveTomcatHome() {
@@ -105,7 +121,7 @@ async function startSelectedServer() {
   emit('server_start_requested', { target: serverTarget });
   try {
     let started = false;
-    if (process.platform === 'linux') {
+    if (process.platform === 'linux' && await hasCommand('systemctl')) {
       const unit = serverTarget === 'wildfly' ? 'wildfly' : 'tomcat10';
       started = await runAndWait('systemctl', ['start', unit]);
       if (!started && serverTarget === 'tomcat') started = await runAndWait('systemctl', ['start', 'tomcat']);
@@ -539,12 +555,15 @@ function serverUp() {
         checkPortOwner();
         return;
       }
-      const p = spawn('systemctl', ['is-active', '--quiet', serverUnit], { stdio: 'ignore' });
-      p.on('error', () => checkPortOwner());
-      p.on('exit', (code) => {
-        if (code === 0) return resolve({ ok: true, status: 'app_down' });
-        checkPortOwner();
-      });
+      hasCommand('systemctl').then((available) => {
+        if (!available) return checkPortOwner();
+        const p = spawn('systemctl', ['is-active', '--quiet', serverUnit], { stdio: 'ignore' });
+        p.on('error', () => checkPortOwner());
+        p.on('exit', (code) => {
+          if (code === 0) return resolve({ ok: true, status: 'app_down' });
+          checkPortOwner();
+        });
+      }).catch(() => checkPortOwner());
     }
     async function checkPortOwner() {
       const owner = await portOwner(httpPort);

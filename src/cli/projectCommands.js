@@ -47,6 +47,16 @@ export function serverRunningFromPgrepResult(result) {
   return null;
 }
 
+async function commandExists(bin, platform = process.platform) {
+  const cmd = platform === 'win32' ? 'where' : 'which';
+  try {
+    const probe = await execa(cmd, [bin], { timeout: 1500, reject: false });
+    return probe.exitCode === 0;
+  } catch {
+    return false;
+  }
+}
+
 async function probeServerRuntime(serverTarget) {
   if (process.platform === 'win32') {
     const pattern =
@@ -76,9 +86,19 @@ async function probeServerRuntime(serverTarget) {
     }
   }
   try {
-    const pattern = serverTarget === 'tomcat' ? 'tomcat' : 'standalone.sh|org.jboss.as.standalone';
-    const result = await execa('pgrep', ['-f', pattern], { timeout: 2000, reject: false });
-    return serverRunningFromPgrepResult(result);
+    if (await commandExists('pgrep')) {
+      const pattern = serverTarget === 'tomcat' ? 'tomcat' : 'standalone.sh|org.jboss.as.standalone';
+      const result = await execa('pgrep', ['-f', pattern], { timeout: 2000, reject: false });
+      const mapped = serverRunningFromPgrepResult(result);
+      if (mapped === true) return true;
+    }
+    if (await commandExists('curl')) {
+      const url = serverTarget === 'wildfly' ? 'http://127.0.0.1:9990/' : 'http://127.0.0.1:8080/';
+      const probe = await execa('curl', ['-fsS', '--max-time', '2', url], { timeout: 3000, reject: false });
+      if (probe.exitCode === 0) return true;
+      if (probe.exitCode !== 127) return false;
+    }
+    return null;
   } catch {
     return null;
   }

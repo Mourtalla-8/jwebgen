@@ -108,6 +108,10 @@ assertContains(DEV_WORKER_SCRIPT_TEMPLATE, '/.jwebgen/live-reload.js', 'worker s
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'spawn(process.execPath, [mjsPath]', 'worker prefers Node .mjs build/deploy when present');
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, "process.platform !== 'linux'", 'worker skips systemctl when not Linux');
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, "spawn('systemctl', ['is-active', '--quiet', serverUnit]", 'worker uses systemctl on Linux without bash');
+assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'function hasCommand', 'worker probes command availability');
+assertContains(DEV_WORKER_SCRIPT_TEMPLATE, "hasCommand('systemctl')", 'worker gates systemctl usage by availability');
+assertContains(DEV_WORKER_SCRIPT_TEMPLATE, "hasCommand('ss')", 'worker gates ss usage by availability');
+assertContains(DEV_WORKER_SCRIPT_TEMPLATE, "hasCommand('lsof')", 'worker falls back to lsof when ss unavailable');
 
 assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, 'function serverDownHint', 'dashboard embeds OS-aware server hints');
 assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, 'JWEBGEN_SERVER_TARGET', 'dashboard distinguishes Tomcat/WildFly from env');
