@@ -90,7 +90,7 @@ async function probeServerRuntime(serverTarget) {
       const pattern = serverTarget === 'tomcat' ? 'tomcat' : 'standalone.sh|org.jboss.as.standalone';
       const result = await execa('pgrep', ['-f', pattern], { timeout: 2000, reject: false });
       const mapped = serverRunningFromPgrepResult(result);
-      if (mapped !== null) return mapped;
+      if (mapped === true) return true;
     }
     if (await commandExists('curl')) {
       const url = serverTarget === 'wildfly' ? 'http://127.0.0.1:9990/' : 'http://127.0.0.1:8080/';
