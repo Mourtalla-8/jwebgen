@@ -18,36 +18,6 @@ YELLOW='\\\\033[1;33m'
 BLUE='\\\\033[0;34m'
 NC='\\\\033[0m' # No Color
 
-APP_NAME=${shellQuote(appName)}
-SCRIPT_DIR="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
-TOMCAT_DIR="\${TOMCAT10:-}"
-if [[ -z "$TOMCAT_DIR" ]]; then
-  for d in /var/lib/tomcat10 /var/lib/tomcat; do
-    if [[ -d "$d" ]]; then TOMCAT_DIR="$d"; break; fi
-  done
-fi
-TOMCAT_DIR="\${TOMCAT_DIR:-/var/lib/tomcat10}"
-CLEANUP_DEV_MODE=0
-if [[ "\${1:-}" = "--cleanup-dev" ]]; then
-  CLEANUP_DEV_MODE=1
-fi
-
-tomcat_unit_name() {
-  local c
-  if ! command -v systemctl >/dev/null 2>&1; then
-    echo "tomcat10"
-    return 0
-  fi
-  for c in tomcat10 tomcat; do
-    systemctl status "$c" >/dev/null 2>&1
-    case "$?" in
-      0|3) echo "$c"; return 0 ;;
-    esac
-  done
-  echo "tomcat10"
-}
-
 log_info() {
   echo -e "\${BLUE}ℹ\${NC} $1"
 }
@@ -76,6 +46,48 @@ run_privileged() {
     return 1
   fi
   sudo -n "$@"
+}
+
+APP_NAME=${shellQuote(appName)}
+SCRIPT_DIR="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+TOMCAT_DIR="\${TOMCAT_HOME:-\${TOMCAT10:-\${CATALINA_HOME:-}}}"
+if [[ -z "$TOMCAT_DIR" ]]; then
+  for d in /var/lib/tomcat10 /var/lib/tomcat; do
+    if [[ -d "$d" ]]; then TOMCAT_DIR="$d"; break; fi
+  done
+fi
+TOMCAT_DIR="\${TOMCAT_DIR:-/var/lib/tomcat10}"
+if [[ -z "$TOMCAT_DIR" || "$TOMCAT_DIR" = "/" ]]; then
+  log_error "Tomcat home is not configured. Set TOMCAT_HOME, TOMCAT10, or CATALINA_HOME."
+  exit 1
+fi
+if [[ ! -d "$TOMCAT_DIR" ]]; then
+  log_error "Tomcat home path was not found: $TOMCAT_DIR"
+  exit 1
+fi
+if [[ ! -d "$TOMCAT_DIR/webapps" ]]; then
+  log_error "Tomcat webapps directory was not found under: $TOMCAT_DIR"
+  exit 1
+fi
+CLEANUP_DEV_MODE=0
+if [[ "\${1:-}" = "--cleanup-dev" ]]; then
+  CLEANUP_DEV_MODE=1
+fi
+
+tomcat_unit_name() {
+  local c
+  if ! command -v systemctl >/dev/null 2>&1; then
+    echo "tomcat10"
+    return 0
+  fi
+  for c in tomcat10 tomcat; do
+    systemctl status "$c" >/dev/null 2>&1
+    case "$?" in
+      0|3) echo "$c"; return 0 ;;
+    esac
+  done
+  echo "tomcat10"
 }
 
 # Servlet / @WebServlet class changes need a reloadable Context; JSP can update without it.
@@ -286,8 +298,28 @@ if [[ -d "$ROOT_DIR/target" ]]; then
   WAR_FILE="$(find "$ROOT_DIR/target" -maxdepth 1 -name '*.war' 2>/dev/null | sort | tail -n 1)" || true
 fi
 
-WILDFLY_HOME="\${WILDFLY_HOME:-/opt/wildfly}"
-DEPLOY_DIR="\${WILDFLY_DEPLOYMENTS:-$WILDFLY_HOME/standalone/deployments}"
+WILDFLY_HOME_INPUT="\${WILDFLY_HOME:-}"
+DEPLOY_DIR_INPUT="\${WILDFLY_DEPLOYMENTS:-}"
+WILDFLY_HOME="$WILDFLY_HOME_INPUT"
+if [[ -z "$WILDFLY_HOME" && -z "$DEPLOY_DIR_INPUT" ]]; then
+  WILDFLY_HOME="/opt/wildfly"
+fi
+DEPLOY_DIR="$DEPLOY_DIR_INPUT"
+if [[ -z "$DEPLOY_DIR" ]]; then
+  DEPLOY_DIR="$WILDFLY_HOME/standalone/deployments"
+fi
+if [[ -z "$DEPLOY_DIR" || "$DEPLOY_DIR" = "/" ]]; then
+  echo "WildFly deployments path is not configured. Set WILDFLY_DEPLOYMENTS (or WILDFLY_HOME)."
+  exit 1
+fi
+if [[ -z "$DEPLOY_DIR_INPUT" && -n "$WILDFLY_HOME" && ! -d "$WILDFLY_HOME" ]]; then
+  echo "WildFly home path was not found: $WILDFLY_HOME"
+  exit 1
+fi
+if [[ ! -d "$DEPLOY_DIR" ]]; then
+  echo "WildFly deployments directory was not found: $DEPLOY_DIR"
+  exit 1
+fi
 CLEANUP_DEV_MODE=0
 if [[ "\${1:-}" = "--cleanup-dev" ]]; then
   CLEANUP_DEV_MODE=1

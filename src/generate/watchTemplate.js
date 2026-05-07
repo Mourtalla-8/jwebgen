@@ -79,7 +79,7 @@ ui_warn() { echo "⚠ $1" >&2; }
 ui_err() { echo "✗ $1" >&2; }
 restore_tty_ui() {
   if [[ -t "$TTY_OUT_FD" ]]; then
-    # Ensure we leave alt-screen and restore cursor before prompts/logs.
+    # Ensure we leave alt-screen and restore terminal state before prompts/logs.
     printf '\\033[?1l\\033[?25h\\033[?1049l\\033[0m' >&$TTY_OUT_FD || true
   fi
 }

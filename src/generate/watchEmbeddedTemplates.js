@@ -621,6 +621,14 @@ function render() {
   if (pauseFile && existsSync(pauseFile)) return;
   const s = loadState(); if (!s) return;
   const LW = 22;
+  const SW = 10;
+  const stripAnsi = (text) => String(text || '').replace(/\x1b\[[0-9;]*m/g, '');
+  const visibleWidth = (text) => stripAnsi(text).length;
+  const padAnsi = (text, width) => {
+    const raw = String(text || '');
+    const pad = Math.max(0, width - visibleWidth(raw));
+    return raw + ' '.repeat(pad);
+  };
   const phase = s.phase === 'running' ? color('1;34', '● cycle') : color('1;32', '✓ idle');
   const build = s.build?.startsWith('ok') ? color('0;32', s.build) : s.build?.startsWith('error') ? color('0;31', s.build) : color('1;33', s.build);
   const deploy = s.deploy?.startsWith('ok') ? color('0;32', s.deploy) : s.deploy?.startsWith('error') ? color('0;31', s.deploy) : color('1;33', s.deploy);
@@ -628,8 +636,15 @@ function render() {
   const app = s.app === 'up' ? color('0;32', 'up') : s.app === 'down' ? color('0;31', 'down') : color('1;33', s.app ?? 'checking');
   const reloadUrl = color('0;32', s.proxyUrl || s.url || '');
   const directUrl = color('2;37', s.appUrl || '');
+  const leftStatus = [build, server];
+  const rightStatus = [deploy, app];
+  const statusWidth = Math.max(
+    SW,
+    ...leftStatus.map((v) => visibleWidth(v)),
+    ...rightStatus.map((v) => visibleWidth(v))
+  );
   const lbl = (k) => color('2;37', String(k).padEnd(LW));
-  const kv = (k, v) => lbl(k) + color('2;37', ': ') + v;
+  const kv = (k, v) => lbl(k) + color('2;37', ': ') + padAnsi(v, statusWidth);
   const kvPair = (k1, v1, k2, v2) => '  ' + kv(k1, v1) + '   ' + kv(k2, v2) + '\\n';
   const controls = color('2;37', '[f] refresh  [s] start server');
   const serverHint = s.server === 'down' ? ('\\n  ' + color('2;37', serverDownHint())) : '';

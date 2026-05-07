@@ -1,4 +1,5 @@
 import { DEV_DASHBOARD_SCRIPT_TEMPLATE, DEV_WORKER_SCRIPT_TEMPLATE } from './watchEmbeddedTemplates.js';
+import { LINUX_DEFAULT_TOMCAT_HOME, LINUX_DEFAULT_WILDFLY_HOME } from '../project/serverPaths.js';
 
 function nodeShebang() {
   return '#!/usr/bin/env node';
@@ -247,28 +248,49 @@ function resolveTomcatHome(cfg) {
       cfg.CATALINA_HOME ||
       ''
   ).trim();
-  const defaultHome = process.platform === 'linux' ? '/var/lib/tomcat10' : '';
+  const defaultHome = process.platform === 'linux' ? '${LINUX_DEFAULT_TOMCAT_HOME}' : '';
   return tomcatHome || defaultHome;
 }
 
 function resolveWildflyPaths(cfg) {
-  const defaultWildflyHome = process.platform === 'linux' ? '/opt/wildfly' : '';
+  const explicitDeployments = String(process.env.WILDFLY_DEPLOYMENTS || cfg.WILDFLY_DEPLOYMENTS || '').trim();
+  if (explicitDeployments) {
+    return { wildflyHome: String(process.env.WILDFLY_HOME || cfg.WILDFLY_HOME || '').trim(), deployments: explicitDeployments };
+  }
+  const defaultWildflyHome = process.platform === 'linux' ? '${LINUX_DEFAULT_WILDFLY_HOME}' : '';
   const wildflyHome = String(process.env.WILDFLY_HOME || cfg.WILDFLY_HOME || defaultWildflyHome).trim();
-  const deployments = String(
-    process.env.WILDFLY_DEPLOYMENTS || cfg.WILDFLY_DEPLOYMENTS || (wildflyHome ? path.join(wildflyHome, 'standalone', 'deployments') : '')
-  ).trim();
+  const deployments = String(wildflyHome ? path.join(wildflyHome, 'standalone', 'deployments') : '').trim();
   return { wildflyHome, deployments };
+}
+
+function validateTomcatHome(home) {
+  const resolved = home ? path.resolve(home) : '';
+  const rootPath = resolved ? path.parse(resolved).root : '';
+  if (!resolved || resolved === rootPath) return { ok: false, reason: 'Tomcat home is not configured.' };
+  return { ok: true, resolved };
+}
+
+function validateWildflyDeployments(deployments) {
+  const resolved = deployments ? path.resolve(deployments) : '';
+  const rootPath = resolved ? path.parse(resolved).root : '';
+  if (!resolved || resolved === rootPath) {
+    return { ok: false, reason: 'WildFly deployments path is not configured.' };
+  }
+  return { ok: true, resolved };
 }
 
 function detectServerInstalled(target, cfg) {
   if (target === 'tomcat') {
     const home = resolveTomcatHome(cfg);
-    if (!home) return { ok: false, reason: 'Tomcat home is not configured.' };
+    const validated = validateTomcatHome(home);
+    if (!validated.ok) return { ok: false, reason: validated.reason };
     if (!existsSync(home)) return { ok: false, reason: 'Tomcat home path was not found: ' + home };
     if (!existsSync(path.join(home, 'webapps'))) return { ok: false, reason: 'Tomcat webapps directory was not found under: ' + home };
     return { ok: true };
   }
   const { wildflyHome, deployments } = resolveWildflyPaths(cfg);
+  const validatedDeployments = validateWildflyDeployments(deployments);
+  if (!validatedDeployments.ok) return { ok: false, reason: validatedDeployments.reason };
   if (!wildflyHome && !deployments) return { ok: false, reason: 'WildFly path is not configured.' };
   if ((wildflyHome && !existsSync(wildflyHome)) || (deployments && !existsSync(deployments))) {
     return { ok: false, reason: 'WildFly paths were not found.' };
@@ -475,10 +497,15 @@ async function deployTomcat({ cfg, cleanupOnly, appName }) {
       cfg.CATALINA_HOME ||
       ''
   ).trim();
-  const defaultHome = process.platform === 'linux' ? '/var/lib/tomcat10' : '';
+  const defaultHome = process.platform === 'linux' ? '${LINUX_DEFAULT_TOMCAT_HOME}' : '';
   const home = tomcatHome || defaultHome;
-  if (!home) {
+  const validatedHome = validateTomcatHome(home);
+  if (!validatedHome.ok) {
     console.error('Tomcat home is not configured. Set TOMCAT_HOME, TOMCAT10, or CATALINA_HOME in your environment or .jwebgen/.jwebgenrc.');
+    process.exit(1);
+  }
+  if (!existsSync(path.join(home, 'webapps'))) {
+    console.error('Tomcat webapps directory was not found under: ' + home);
     process.exit(1);
   }
   const webapps = path.join(home, 'webapps');
@@ -553,14 +580,15 @@ async function deployTomcat({ cfg, cleanupOnly, appName }) {
 }
 
 async function deployWildfly({ cfg, cleanupOnly, appName }) {
-  const defaultWildflyHome = process.platform === 'linux' ? '/opt/wildfly' : '';
-  const wildflyHome = String(process.env.WILDFLY_HOME || cfg.WILDFLY_HOME || defaultWildflyHome).trim();
-  const deployments = String(
-    process.env.WILDFLY_DEPLOYMENTS || cfg.WILDFLY_DEPLOYMENTS || (wildflyHome ? path.join(wildflyHome, 'standalone', 'deployments') : '')
-  ).trim();
+  const explicitDeployments = String(process.env.WILDFLY_DEPLOYMENTS || cfg.WILDFLY_DEPLOYMENTS || '').trim();
+  const defaultWildflyHome = process.platform === 'linux' ? '${LINUX_DEFAULT_WILDFLY_HOME}' : '';
+  const wildflyHome = explicitDeployments
+    ? String(process.env.WILDFLY_HOME || cfg.WILDFLY_HOME || '').trim()
+    : String(process.env.WILDFLY_HOME || cfg.WILDFLY_HOME || defaultWildflyHome).trim();
+  const deployments = explicitDeployments || String(wildflyHome ? path.join(wildflyHome, 'standalone', 'deployments') : '').trim();
   const resolvedDeployments = deployments ? path.resolve(deployments) : '';
-  const rootPath = resolvedDeployments ? path.parse(resolvedDeployments).root : '';
-  if (!resolvedDeployments || resolvedDeployments === rootPath) {
+  const validatedDeployments = validateWildflyDeployments(resolvedDeployments);
+  if (!validatedDeployments.ok) {
     console.error('WildFly deployments path is not configured. Set WILDFLY_DEPLOYMENTS (or WILDFLY_HOME) in env/.jwebgenrc.');
     process.exit(1);
   }
@@ -765,17 +793,31 @@ function resolveTomcatHome(cfg) {
       cfg.CATALINA_HOME ||
       ''
   ).trim();
-  const defaultHome = process.platform === 'linux' ? '/var/lib/tomcat10' : '';
+  const defaultHome = process.platform === 'linux' ? '${LINUX_DEFAULT_TOMCAT_HOME}' : '';
   return tomcatHome || defaultHome;
 }
 
 function resolveWildflyPaths(cfg) {
-  const defaultWildflyHome = process.platform === 'linux' ? '/opt/wildfly' : '';
+  const explicitDeployments = String(process.env.WILDFLY_DEPLOYMENTS || cfg.WILDFLY_DEPLOYMENTS || '').trim();
+  if (explicitDeployments) {
+    return { wildflyHome: String(process.env.WILDFLY_HOME || cfg.WILDFLY_HOME || '').trim(), deployments: explicitDeployments };
+  }
+  const defaultWildflyHome = process.platform === 'linux' ? '${LINUX_DEFAULT_WILDFLY_HOME}' : '';
   const wildflyHome = String(process.env.WILDFLY_HOME || cfg.WILDFLY_HOME || defaultWildflyHome).trim();
-  const deployments = String(
-    process.env.WILDFLY_DEPLOYMENTS || cfg.WILDFLY_DEPLOYMENTS || (wildflyHome ? path.join(wildflyHome, 'standalone', 'deployments') : '')
-  ).trim();
+  const deployments = String(wildflyHome ? path.join(wildflyHome, 'standalone', 'deployments') : '').trim();
   return { wildflyHome, deployments };
+}
+
+function validateWildflyDeployments(deployments) {
+  if (!deployments || !String(deployments).trim()) {
+    return { ok: false, reason: 'WildFly deployments path is required.' };
+  }
+  const resolved = path.resolve(deployments);
+  const rootPath = resolved ? path.parse(resolved).root : '';
+  if (resolved === rootPath) {
+    return { ok: false, reason: 'WildFly deployments path must not be root ("/").' };
+  }
+  return { ok: true, resolved };
 }
 
 function detectServerInstalled(target, cfg) {
@@ -787,6 +829,8 @@ function detectServerInstalled(target, cfg) {
     return { ok: true };
   }
   const { wildflyHome, deployments } = resolveWildflyPaths(cfg);
+  const validatedDeployments = validateWildflyDeployments(deployments);
+  if (!validatedDeployments.ok) return { ok: false, reason: validatedDeployments.reason };
   if (!wildflyHome && !deployments) return { ok: false, reason: 'WildFly path is not configured.' };
   if ((wildflyHome && !existsSync(wildflyHome)) || (deployments && !existsSync(deployments))) {
     return { ok: false, reason: 'WildFly paths were not found.' };
