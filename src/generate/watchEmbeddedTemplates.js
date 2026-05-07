@@ -2,7 +2,7 @@ export const DEV_WORKER_SCRIPT_TEMPLATE = `import http from 'node:http';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import net from 'node:net';
-import { readdirSync, statSync, watch as fsWatch, writeFileSync, appendFileSync, readFileSync, existsSync } from 'node:fs';
+import { readdirSync, statSync, watch as fsWatch, writeFileSync, appendFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
 import path from 'node:path';
 
 const root = process.cwd();
@@ -10,6 +10,7 @@ const stateFile = process.argv[2];
 const eventsFile = process.argv[3];
 const pauseFile = process.argv[4];
 const parentPid = Number(process.argv[5] || 0);
+const commandFile = process.argv[6] || '';
 const verbose = process.env.JWEBGEN_VERBOSE === '1';
 const serverTarget = process.env.JWEBGEN_SERVER_TARGET || 'tomcat';
 const appName = process.env.JWEBGEN_APP_NAME || 'app';
@@ -38,6 +39,7 @@ const state = {
   livePort,
   proxyPort
 };
+let startInProgress = false;
 function syncPublicUrls() {
   state.proxyUrl = 'http://localhost:' + proxyPort + '/' + appName + '/';
   state.appUrl = 'http://localhost:' + httpPort + '/' + appName + '/';
@@ -74,6 +76,87 @@ function portOwner(port) {
       });
     });
   });
+}
+function resolveTomcatHome() {
+  return String(process.env.TOMCAT_HOME || process.env.TOMCAT10 || process.env.CATALINA_HOME || '').trim();
+}
+function resolveWildflyHome() {
+  return String(process.env.WILDFLY_HOME || '').trim();
+}
+function runAndWait(command, args = []) {
+  return new Promise((resolve) => {
+    const p = spawn(command, args, { stdio: 'ignore' });
+    p.on('error', () => resolve(false));
+    p.on('exit', (code) => resolve(code === 0));
+  });
+}
+function runDetached(command, args = []) {
+  try {
+    const p = spawn(command, args, { detached: true, stdio: 'ignore', shell: false });
+    p.unref();
+    return true;
+  } catch {
+    return false;
+  }
+}
+async function startSelectedServer() {
+  if (startInProgress) return;
+  startInProgress = true;
+  emit('server_start_requested', { target: serverTarget });
+  try {
+    let started = false;
+    if (process.platform === 'linux') {
+      const unit = serverTarget === 'wildfly' ? 'wildfly' : 'tomcat10';
+      started = await runAndWait('systemctl', ['start', unit]);
+      if (!started && serverTarget === 'tomcat') started = await runAndWait('systemctl', ['start', 'tomcat']);
+    }
+    if (!started && serverTarget === 'tomcat') {
+      const home = resolveTomcatHome();
+      if (home) {
+        if (process.platform === 'win32') {
+          started = runDetached('cmd.exe', ['/c', path.join(home, 'bin', 'startup.bat')]);
+        } else {
+          started = runDetached(path.join(home, 'bin', 'startup.sh'), []);
+          if (!started) started = runDetached(path.join(home, 'bin', 'catalina.sh'), ['start']);
+        }
+      }
+    }
+    if (!started && serverTarget === 'wildfly') {
+      const home = resolveWildflyHome();
+      if (home) {
+        if (process.platform === 'win32') {
+          started = runDetached('cmd.exe', ['/c', path.join(home, 'bin', 'standalone.bat')]);
+        } else {
+          started = runDetached(path.join(home, 'bin', 'standalone.sh'), []);
+        }
+      }
+    }
+    if (!started) {
+      emit('server_start_failed', { target: serverTarget, reason: 'no_supported_start_method' });
+      return;
+    }
+    emit('server_start_triggered', { target: serverTarget });
+    await new Promise((r) => setTimeout(r, 1000));
+    const check = await serverUp();
+    if (check.ok) emit('server_start_ok', { target: serverTarget });
+    else emit('server_start_pending', { target: serverTarget, status: check.status || 'down' });
+  } finally {
+    startInProgress = false;
+  }
+}
+function processUiCommand() {
+  if (!commandFile || !existsSync(commandFile)) return;
+  let raw = '';
+  try {
+    raw = readFileSync(commandFile, 'utf8');
+  } catch {
+    return;
+  }
+  try { rmSync(commandFile, { force: true }); } catch {}
+  let payload = null;
+  try { payload = JSON.parse(String(raw || '{}')); } catch { payload = null; }
+  if (!payload || payload.cmd !== 'start_server') return;
+  void startSelectedServer();
 }
 function findFreePort(startAt) {
   return new Promise((resolve) => {
@@ -439,7 +522,7 @@ function serverUp() {
 
     function checkEngine() {
       if (running || Date.now() - lastDeployFinishedAt < 2200) {
-        return resolve({ ok: true, status: 'app_down' });
+        return resolve({ ok: false, status: 'starting' });
       }
       if (serverTarget === 'wildfly') {
         const mgmtReq = http.request('http://127.0.0.1:9990/', { method: 'GET', timeout: 1500, headers: { 'accept-encoding': 'identity' } }, (mgmtRes) => {
@@ -474,12 +557,13 @@ function nextAppState(status) {
   if (status === 'up') return 'up';
   if (status === 'app_down') return 'down';
   if (status === 'app_down_000') return 'down';
+  if (status === 'starting') return 'checking';
   return 'unknown';
 }
 let lastStatus = '';
 setInterval(async () => {
   const check = await serverUp();
-  const nextServer = check.ok ? 'up' : 'down';
+  const nextServer = check.status === 'starting' ? 'checking' : (check.ok ? 'up' : 'down');
   const nextApp = nextAppState(check.status);
   let changed = false;
   if (state.server !== nextServer) { state.server = nextServer; changed = true; }
@@ -494,6 +578,9 @@ setInterval(async () => {
     }
   }
 }, 1200).unref();
+setInterval(() => {
+  processUiCommand();
+}, 350).unref();
 walkAndWatch(root);
 // Keep watcher coverage up to date when new directories appear.
 setInterval(() => {
@@ -504,10 +591,12 @@ rebuild();
 `;
 
 export const DEV_DASHBOARD_SCRIPT_TEMPLATE = `import { existsSync, readFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 
 const stateFile = process.argv[2];
 const pauseFile = process.argv[3];
-const parentPid = Number(process.argv[4] || 0);
+const commandFile = process.argv[4] || '';
+const parentPid = Number(process.argv[5] || 0);
 const isTTY = process.stderr.isTTY;
 if (!isTTY) process.exit(0);
 function color(code, text) { return '\\x1b[' + code + 'm' + text + '\\x1b[0m'; }
@@ -542,7 +631,7 @@ function render() {
   const lbl = (k) => color('2;37', String(k).padEnd(LW));
   const kv = (k, v) => lbl(k) + color('2;37', ': ') + v;
   const kvPair = (k1, v1, k2, v2) => '  ' + kv(k1, v1) + '   ' + kv(k2, v2) + '\\n';
-  const controls = color('2;37', '[f] refresh');
+  const controls = color('2;37', '[f] refresh  [s] start server');
   const serverHint = s.server === 'down' ? ('\\n  ' + color('2;37', serverDownHint())) : '';
   const out = color('1;36', 'jwebgen --dev') + '  ' + phase + '\\n'
     + kvPair('build', build, 'deploy', deploy)
@@ -552,6 +641,23 @@ function render() {
     + '  ' + kv('cmd', controls)
     + serverHint;
   process.stderr.write('\\x1b[?1l\\x1b[?1049h\\x1b[?25l\\x1b[H\\x1b[2J' + out + '\\n');
+}
+if (process.stdin.isTTY) {
+  process.stdin.setRawMode(true);
+  process.stdin.resume();
+  process.stdin.on('data', (buf) => {
+    const key = String(buf || '').toLowerCase();
+    if (key === 'f') {
+      render();
+      return;
+    }
+    if (key === 's' && commandFile) {
+      try {
+        writeFileSync(commandFile, JSON.stringify({ cmd: 'start_server', ts: Date.now() }), 'utf8');
+      } catch {}
+      render();
+    }
+  });
 }
 process.on('exit', () => { process.stderr.write('\\x1b[?1l\\x1b[?25h\\x1b[?1049l'); });
 if (parentPid > 1) {

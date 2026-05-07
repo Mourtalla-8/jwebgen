@@ -16,6 +16,9 @@ test('makeNodeDeployScript uses Linux-only Tomcat/WildFly path defaults', () => 
 test('makeNodeDeployScript resolves WildFly paths from resolved deployments dir', () => {
   const s = makeNodeDeployScript();
   assert.match(s, /path\.join\(resolvedDeployments, appName \+ '\.war'\)/);
+  assert.match(s, /detectServerInstalled/);
+  assert.match(s, /maybeRunServerInstallAssistant/);
+  assert.match(s, /__JWEBGEN_EVENT__ server_down/);
 });
 
 test('makeNodeDevScript spawns dashboard with inherited TTY streams', () => {
@@ -23,6 +26,8 @@ test('makeNodeDevScript spawns dashboard with inherited TTY streams', () => {
   assert.match(s, /\['ignore', 'inherit', 'inherit'\]/);
   assert.match(s, /readMavenAppName/);
   assert.match(s, /JWEBGEN_APP_NAME: appName/);
+  assert.match(s, /\.jwebgen-dev-command\.json/);
+  assert.match(s, /maybeRunServerInstallAssistant/);
 });
 
 test('makeNodeBuildScript warns when Maven executable is missing', () => {

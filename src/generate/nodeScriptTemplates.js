@@ -207,6 +207,145 @@ function resolveServerTarget({ cfg }) {
   return '';
 }
 
+function detectPackageManagers() {
+  const has = (bin) => {
+    const p = spawnSync(process.platform === 'win32' ? 'where' : 'which', [bin], { stdio: 'ignore' });
+    return p.status === 0;
+  };
+  if (process.platform === 'win32') return { winget: has('winget') };
+  if (process.platform === 'darwin') return { brew: has('brew') };
+  return { apt: has('apt-get') || has('apt'), dnf: has('dnf'), pacman: has('pacman') };
+}
+
+function serverInstallCommands(target) {
+  const pm = detectPackageManagers();
+  if (target === 'tomcat') {
+    if (process.platform === 'win32') return pm.winget ? ['winget install Apache.Tomcat'] : [];
+    if (process.platform === 'darwin') return pm.brew ? ['brew install tomcat'] : [];
+    const commands = [];
+    if (pm.apt) commands.push('sudo apt install -y tomcat10');
+    if (pm.dnf) commands.push('sudo dnf install -y tomcat');
+    if (pm.pacman) commands.push('sudo pacman -S --noconfirm tomcat10');
+    return commands;
+  }
+  if (process.platform === 'win32') return pm.winget ? ['winget install WildFly.WildFly'] : [];
+  if (process.platform === 'darwin') return pm.brew ? ['brew install wildfly-as'] : [];
+  const commands = [];
+  if (pm.apt) commands.push('sudo apt install -y wildfly');
+  if (pm.dnf) commands.push('sudo dnf install -y wildfly');
+  if (pm.pacman) commands.push('sudo pacman -S --noconfirm wildfly');
+  return commands;
+}
+
+function resolveTomcatHome(cfg) {
+  const tomcatHome = String(
+    process.env.TOMCAT_HOME ||
+      process.env.TOMCAT10 ||
+      process.env.CATALINA_HOME ||
+      cfg.TOMCAT_HOME ||
+      cfg.TOMCAT10 ||
+      cfg.CATALINA_HOME ||
+      ''
+  ).trim();
+  const defaultHome = process.platform === 'linux' ? '/var/lib/tomcat10' : '';
+  return tomcatHome || defaultHome;
+}
+
+function resolveWildflyPaths(cfg) {
+  const defaultWildflyHome = process.platform === 'linux' ? '/opt/wildfly' : '';
+  const wildflyHome = String(process.env.WILDFLY_HOME || cfg.WILDFLY_HOME || defaultWildflyHome).trim();
+  const deployments = String(
+    process.env.WILDFLY_DEPLOYMENTS || cfg.WILDFLY_DEPLOYMENTS || (wildflyHome ? path.join(wildflyHome, 'standalone', 'deployments') : '')
+  ).trim();
+  return { wildflyHome, deployments };
+}
+
+function detectServerInstalled(target, cfg) {
+  if (target === 'tomcat') {
+    const home = resolveTomcatHome(cfg);
+    if (!home) return { ok: false, reason: 'Tomcat home is not configured.' };
+    if (!existsSync(home)) return { ok: false, reason: 'Tomcat home path was not found: ' + home };
+    if (!existsSync(path.join(home, 'webapps'))) return { ok: false, reason: 'Tomcat webapps directory was not found under: ' + home };
+    return { ok: true };
+  }
+  const { wildflyHome, deployments } = resolveWildflyPaths(cfg);
+  if (!wildflyHome && !deployments) return { ok: false, reason: 'WildFly path is not configured.' };
+  if ((wildflyHome && !existsSync(wildflyHome)) || (deployments && !existsSync(deployments))) {
+    return { ok: false, reason: 'WildFly paths were not found.' };
+  }
+  return { ok: true };
+}
+
+async function maybeRunServerInstallAssistant(target, cfg) {
+  const status = detectServerInstalled(target, cfg);
+  if (status.ok) return true;
+  console.error('Selected server (' + target + ') is not installed or not usable.');
+  if (status.reason) console.error(status.reason);
+  const commands = serverInstallCommands(target);
+  if (commands.length === 0) {
+    console.error('No guided install method is available for this OS/tooling. Install manually and re-run.');
+    return false;
+  }
+  console.error('Guided install commands for ' + target + ':');
+  for (const c of commands) console.error('  ' + c);
+  if (!process.stdin.isTTY || !process.stdout.isTTY) return false;
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    const runNow = String(await rl.question('Run first command now? [y/N]: ')).trim().toLowerCase();
+    if (runNow !== 'y' && runNow !== 'yes') return false;
+  } finally {
+    rl.close();
+  }
+  const first = commands[0];
+  const shell = process.platform === 'win32' ? 'cmd.exe' : 'sh';
+  const shellArgs = process.platform === 'win32' ? ['/c', first] : ['-lc', first];
+  const r = spawnSync(shell, shellArgs, { stdio: 'inherit' });
+  if (r.status !== 0) return false;
+  return detectServerInstalled(target, cfg).ok;
+}
+
+function isServerRunningQuick(target) {
+  if (process.platform === 'win32') {
+    const pattern =
+      target === 'tomcat'
+        ? /tomcat|catalina\\.startup|bootstrap\\.jar/i
+        : /wildfly|jboss\\.modules|standalone|jboss\\.home/i;
+    const probe = spawnSync(
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-NoLogo',
+        '-NonInteractive',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-Command',
+        'Get-CimInstance Win32_Process | Where-Object { $_.Name -eq "java.exe" } | ForEach-Object { $_.CommandLine }'
+      ],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }
+    );
+    const text = String(probe.stdout || '');
+    if (text.trim()) return pattern.test(text);
+  }
+  if (process.platform !== 'win32') {
+    const pgPattern = target === 'tomcat' ? 'tomcat|catalina' : 'standalone.sh|org.jboss.as.standalone|wildfly';
+    const pgrep = spawnSync('pgrep', ['-f', pgPattern], { stdio: 'ignore' });
+    if (pgrep.status === 0) return true;
+  }
+  if (target === 'wildfly') {
+    const probe = spawnSync('curl', ['-fsS', '--max-time', '2', 'http://127.0.0.1:9990/'], { stdio: 'ignore' });
+    if (probe.status === 0) return true;
+  } else {
+    const probe = spawnSync('curl', ['-fsS', '--max-time', '2', 'http://127.0.0.1:8080/'], { stdio: 'ignore' });
+    if (probe.status === 0) return true;
+  }
+  if (process.platform === 'linux') {
+    const unit = target === 'wildfly' ? 'wildfly' : 'tomcat10';
+    const svc = spawnSync('systemctl', ['is-active', '--quiet', unit], { stdio: 'ignore' });
+    if (svc.status === 0) return true;
+  }
+  return false;
+}
+
 function isDevMode() {
   return String(process.env.JWEBGEN_DEV || '') === '1';
 }
@@ -482,6 +621,15 @@ if (!target) {
   await persistServerTarget(target);
 }
 const cleanupOnly = process.argv.includes('--cleanup-dev');
+if (!cleanupOnly) {
+  const installed = await maybeRunServerInstallAssistant(target, cfg);
+  if (!installed) process.exit(1);
+  if (!isServerRunningQuick(target)) {
+    console.error('Selected server is installed but currently down.');
+    console.error('__JWEBGEN_EVENT__ server_down');
+    process.exit(1);
+  }
+}
 
 if (target === 'tomcat') {
   await deployTomcat({ cfg, cleanupOnly, appName });
@@ -498,7 +646,7 @@ export function makeNodeDevScript() {
 import path from 'node:path';
 import { existsSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createInterface } from 'node:readline/promises';
 
@@ -577,6 +725,103 @@ function resolveServerTarget({ cfg }) {
   return '';
 }
 
+function detectPackageManagers() {
+  const has = (bin) => {
+    const p = spawnSync(process.platform === 'win32' ? 'where' : 'which', [bin], { stdio: 'ignore' });
+    return p.status === 0;
+  };
+  if (process.platform === 'win32') return { winget: has('winget') };
+  if (process.platform === 'darwin') return { brew: has('brew') };
+  return { apt: has('apt-get') || has('apt'), dnf: has('dnf'), pacman: has('pacman') };
+}
+
+function serverInstallCommands(target) {
+  const pm = detectPackageManagers();
+  if (target === 'tomcat') {
+    if (process.platform === 'win32') return pm.winget ? ['winget install Apache.Tomcat'] : [];
+    if (process.platform === 'darwin') return pm.brew ? ['brew install tomcat'] : [];
+    const commands = [];
+    if (pm.apt) commands.push('sudo apt install -y tomcat10');
+    if (pm.dnf) commands.push('sudo dnf install -y tomcat');
+    if (pm.pacman) commands.push('sudo pacman -S --noconfirm tomcat10');
+    return commands;
+  }
+  if (process.platform === 'win32') return pm.winget ? ['winget install WildFly.WildFly'] : [];
+  if (process.platform === 'darwin') return pm.brew ? ['brew install wildfly-as'] : [];
+  const commands = [];
+  if (pm.apt) commands.push('sudo apt install -y wildfly');
+  if (pm.dnf) commands.push('sudo dnf install -y wildfly');
+  if (pm.pacman) commands.push('sudo pacman -S --noconfirm wildfly');
+  return commands;
+}
+
+function resolveTomcatHome(cfg) {
+  const tomcatHome = String(
+    process.env.TOMCAT_HOME ||
+      process.env.TOMCAT10 ||
+      process.env.CATALINA_HOME ||
+      cfg.TOMCAT_HOME ||
+      cfg.TOMCAT10 ||
+      cfg.CATALINA_HOME ||
+      ''
+  ).trim();
+  const defaultHome = process.platform === 'linux' ? '/var/lib/tomcat10' : '';
+  return tomcatHome || defaultHome;
+}
+
+function resolveWildflyPaths(cfg) {
+  const defaultWildflyHome = process.platform === 'linux' ? '/opt/wildfly' : '';
+  const wildflyHome = String(process.env.WILDFLY_HOME || cfg.WILDFLY_HOME || defaultWildflyHome).trim();
+  const deployments = String(
+    process.env.WILDFLY_DEPLOYMENTS || cfg.WILDFLY_DEPLOYMENTS || (wildflyHome ? path.join(wildflyHome, 'standalone', 'deployments') : '')
+  ).trim();
+  return { wildflyHome, deployments };
+}
+
+function detectServerInstalled(target, cfg) {
+  if (target === 'tomcat') {
+    const home = resolveTomcatHome(cfg);
+    if (!home) return { ok: false, reason: 'Tomcat home is not configured.' };
+    if (!existsSync(home)) return { ok: false, reason: 'Tomcat home path was not found: ' + home };
+    if (!existsSync(path.join(home, 'webapps'))) return { ok: false, reason: 'Tomcat webapps directory was not found under: ' + home };
+    return { ok: true };
+  }
+  const { wildflyHome, deployments } = resolveWildflyPaths(cfg);
+  if (!wildflyHome && !deployments) return { ok: false, reason: 'WildFly path is not configured.' };
+  if ((wildflyHome && !existsSync(wildflyHome)) || (deployments && !existsSync(deployments))) {
+    return { ok: false, reason: 'WildFly paths were not found.' };
+  }
+  return { ok: true };
+}
+
+async function maybeRunServerInstallAssistant(target, cfg) {
+  const status = detectServerInstalled(target, cfg);
+  if (status.ok) return true;
+  console.error('Selected server (' + target + ') is not installed or not usable.');
+  if (status.reason) console.error(status.reason);
+  const commands = serverInstallCommands(target);
+  if (commands.length === 0) {
+    console.error('No guided install method is available for this OS/tooling. Install manually and re-run.');
+    return false;
+  }
+  console.error('Guided install commands for ' + target + ':');
+  for (const c of commands) console.error('  ' + c);
+  if (!process.stdin.isTTY || !process.stdout.isTTY) return false;
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    const runNow = String(await rl.question('Run first command now? [y/N]: ')).trim().toLowerCase();
+    if (runNow !== 'y' && runNow !== 'yes') return false;
+  } finally {
+    rl.close();
+  }
+  const first = commands[0];
+  const shell = process.platform === 'win32' ? 'cmd.exe' : 'sh';
+  const shellArgs = process.platform === 'win32' ? ['/c', first] : ['-lc', first];
+  const r = spawnSync(shell, shellArgs, { stdio: 'inherit' });
+  if (r.status !== 0) return false;
+  return detectServerInstalled(target, cfg).ok;
+}
+
 async function readMavenAppName() {
   const pomPath = path.join(rootDir, 'pom.xml');
   if (!existsSync(pomPath)) return path.basename(rootDir);
@@ -601,12 +846,15 @@ async function readMavenAppName() {
 const cfg = await loadProjectConfig();
 let target = resolveServerTarget({ cfg });
 if (!target) { target = await chooseServerTargetInteractively(); await persistServerTarget(target); }
+const installed = await maybeRunServerInstallAssistant(target, cfg);
+if (!installed) process.exit(1);
 const appName = await readMavenAppName();
 
 const workDir = rootDir;
 const stateFile = path.join(workDir, '.jwebgen', '.jwebgen-dev-state.json');
 const eventsFile = path.join(workDir, '.jwebgen', '.jwebgen-dev-events.jsonl');
 const pauseFile = path.join(workDir, '.jwebgen', '.jwebgen-ui-pause');
+const commandFile = path.join(workDir, '.jwebgen', '.jwebgen-dev-command.json');
 const workerScript = path.join(workDir, '.jwebgen', '.jwebgen-worker.mjs');
 const dashboardScript = path.join(workDir, '.jwebgen', '.jwebgen-dashboard.mjs');
 
@@ -617,8 +865,8 @@ await writeFile(workerScript, DEV_WORKER_SCRIPT_TEMPLATE, 'utf8');
 await writeFile(dashboardScript, DEV_DASHBOARD_SCRIPT_TEMPLATE, 'utf8');
 
 const env = { ...process.env, JWEBGEN_DEV: '1', JWEBGEN_SERVER_TARGET: target, JWEBGEN_APP_NAME: appName };
-const worker = spawn(process.execPath, [workerScript, stateFile, eventsFile, pauseFile, String(process.pid)], { cwd: workDir, env, stdio: 'inherit' });
-const dash = spawn(process.execPath, [dashboardScript, stateFile, pauseFile, String(process.pid)], { cwd: workDir, env, stdio: ['ignore', 'inherit', 'inherit'] });
+const worker = spawn(process.execPath, [workerScript, stateFile, eventsFile, pauseFile, String(process.pid), commandFile], { cwd: workDir, env, stdio: 'inherit' });
+const dash = spawn(process.execPath, [dashboardScript, stateFile, pauseFile, commandFile, String(process.pid)], { cwd: workDir, env, stdio: ['ignore', 'inherit', 'inherit'] });
 
 const shutdown = () => {
   try { worker.kill('SIGTERM'); } catch {}

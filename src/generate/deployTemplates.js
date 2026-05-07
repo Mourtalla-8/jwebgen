@@ -146,6 +146,7 @@ if [[ "$CLEANUP_DEV_MODE" = "0" ]]; then
   else
     log_error "Tomcat is not running"
     log_info "Start it: sudo systemctl start $TOMCAT_UNIT"
+    echo "__JWEBGEN_EVENT__ server_down" >&2
     exit 1
   fi
 fi

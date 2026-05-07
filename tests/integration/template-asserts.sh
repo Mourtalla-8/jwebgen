@@ -53,6 +53,7 @@ assertContains(deployTomcat, 'ensure_tomcat_dev_reloadable_context', 'deploy tom
 assertContains(deployTomcat, 'WEB-INF/web.xml', 'deploy tomcat web.xml reload hint');
 assertContains(deployTomcat, 'Unable to refresh Tomcat deployment descriptor (WEB-INF/web.xml).', 'deploy tomcat strict web.xml refresh');
 assertContains(deployTomcat, 'Unable to refresh Tomcat context metadata.', 'deploy tomcat strict context refresh');
+assertContains(deployTomcat, '__JWEBGEN_EVENT__ server_down', 'deploy tomcat emits server_down marker when engine is down');
 
 const deployWildfly = makeDeployServerScript({ appName: 'appx', serverTarget: 'wildfly' });
 assertContains(deployWildfly, '--cleanup-dev', 'deploy wildfly');
@@ -80,6 +81,9 @@ assertContains(nodeDeploy, 'readMavenAppName', 'deploy.mjs resolves deploy name 
 assertContains(nodeDeploy, 'selectWarFile', 'deploy.mjs selects preferred WAR by app name');
 assertContains(nodeDeploy, 'chooseServerTargetInteractively', 'deploy.mjs prompts target when unset');
 assertContains(nodeDeploy, 'persistServerTarget', 'deploy.mjs persists chosen server target');
+assertContains(nodeDeploy, 'detectServerInstalled', 'deploy.mjs validates selected server installation');
+assertContains(nodeDeploy, 'maybeRunServerInstallAssistant', 'deploy.mjs offers server-focused install guidance');
+assertContains(nodeDeploy, '__JWEBGEN_EVENT__ server_down', 'deploy.mjs emits server_down marker when engine is down');
 assertContains(nodeDeploy, 'canAutoSudo', 'deploy.mjs can auto-detect sudo on Linux');
 assertContains(nodeDeploy, "spawnSync('sudo'", 'deploy.mjs probes sudo availability');
 assertContains(nodeDeploy, "spawn('sudo'", 'deploy.mjs can invoke sudo when enabled');
@@ -93,6 +97,8 @@ assertContains(nodeDev, 'Select server target for dev', 'dev.mjs prompts target 
 assertContains(nodeDev, 'persistServerTarget', 'dev.mjs persists chosen server target');
 assertContains(nodeDev, 'readMavenAppName', 'dev.mjs resolves app name from pom');
 assertContains(nodeDev, 'JWEBGEN_APP_NAME: appName', 'dev.mjs passes app name to worker env');
+assertContains(nodeDev, '.jwebgen-dev-command.json', 'dev.mjs wires UI command file for runtime control');
+assertContains(nodeDev, 'maybeRunServerInstallAssistant', 'dev.mjs offers server-focused install guidance when missing');
 const nodeWatch = makeNodeWatchScript();
 assertContains(nodeWatch, 'dev.mjs', 'watch.mjs reuses dev.mjs runtime');
 
@@ -107,6 +113,7 @@ assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, 'function serverDownHint', 'dashbo
 assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, 'JWEBGEN_SERVER_TARGET', 'dashboard distinguishes Tomcat/WildFly from env');
 assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, "serverDownHint(", 'dashboard invokes serverDownHint from render wiring');
 assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, "s.server === 'down'", 'dashboard ties hint to server down state');
+assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, '[s] start server', 'dashboard exposes start server control');
 assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, 'sudo systemctl start tomcat10', 'dashboard linux Tomcat hint suggests sudo');
 assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, 'prefer standalone.sh', 'dashboard linux WildFly hint prefers standalone');
 
