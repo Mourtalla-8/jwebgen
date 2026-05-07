@@ -253,11 +253,13 @@ function resolveTomcatHome(cfg) {
 }
 
 function resolveWildflyPaths(cfg) {
+  const explicitDeployments = String(process.env.WILDFLY_DEPLOYMENTS || cfg.WILDFLY_DEPLOYMENTS || '').trim();
+  if (explicitDeployments) {
+    return { wildflyHome: String(process.env.WILDFLY_HOME || cfg.WILDFLY_HOME || '').trim(), deployments: explicitDeployments };
+  }
   const defaultWildflyHome = process.platform === 'linux' ? '${LINUX_DEFAULT_WILDFLY_HOME}' : '';
   const wildflyHome = String(process.env.WILDFLY_HOME || cfg.WILDFLY_HOME || defaultWildflyHome).trim();
-  const deployments = String(
-    process.env.WILDFLY_DEPLOYMENTS || cfg.WILDFLY_DEPLOYMENTS || (wildflyHome ? path.join(wildflyHome, 'standalone', 'deployments') : '')
-  ).trim();
+  const deployments = String(wildflyHome ? path.join(wildflyHome, 'standalone', 'deployments') : '').trim();
   return { wildflyHome, deployments };
 }
 
@@ -578,11 +580,12 @@ async function deployTomcat({ cfg, cleanupOnly, appName }) {
 }
 
 async function deployWildfly({ cfg, cleanupOnly, appName }) {
+  const explicitDeployments = String(process.env.WILDFLY_DEPLOYMENTS || cfg.WILDFLY_DEPLOYMENTS || '').trim();
   const defaultWildflyHome = process.platform === 'linux' ? '${LINUX_DEFAULT_WILDFLY_HOME}' : '';
-  const wildflyHome = String(process.env.WILDFLY_HOME || cfg.WILDFLY_HOME || defaultWildflyHome).trim();
-  const deployments = String(
-    process.env.WILDFLY_DEPLOYMENTS || cfg.WILDFLY_DEPLOYMENTS || (wildflyHome ? path.join(wildflyHome, 'standalone', 'deployments') : '')
-  ).trim();
+  const wildflyHome = explicitDeployments
+    ? String(process.env.WILDFLY_HOME || cfg.WILDFLY_HOME || '').trim()
+    : String(process.env.WILDFLY_HOME || cfg.WILDFLY_HOME || defaultWildflyHome).trim();
+  const deployments = explicitDeployments || String(wildflyHome ? path.join(wildflyHome, 'standalone', 'deployments') : '').trim();
   const resolvedDeployments = deployments ? path.resolve(deployments) : '';
   const validatedDeployments = validateWildflyDeployments(resolvedDeployments);
   if (!validatedDeployments.ok) {
@@ -795,11 +798,13 @@ function resolveTomcatHome(cfg) {
 }
 
 function resolveWildflyPaths(cfg) {
+  const explicitDeployments = String(process.env.WILDFLY_DEPLOYMENTS || cfg.WILDFLY_DEPLOYMENTS || '').trim();
+  if (explicitDeployments) {
+    return { wildflyHome: String(process.env.WILDFLY_HOME || cfg.WILDFLY_HOME || '').trim(), deployments: explicitDeployments };
+  }
   const defaultWildflyHome = process.platform === 'linux' ? '${LINUX_DEFAULT_WILDFLY_HOME}' : '';
   const wildflyHome = String(process.env.WILDFLY_HOME || cfg.WILDFLY_HOME || defaultWildflyHome).trim();
-  const deployments = String(
-    process.env.WILDFLY_DEPLOYMENTS || cfg.WILDFLY_DEPLOYMENTS || (wildflyHome ? path.join(wildflyHome, 'standalone', 'deployments') : '')
-  ).trim();
+  const deployments = String(wildflyHome ? path.join(wildflyHome, 'standalone', 'deployments') : '').trim();
   return { wildflyHome, deployments };
 }
 

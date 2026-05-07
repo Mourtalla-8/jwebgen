@@ -298,13 +298,21 @@ if [[ -d "$ROOT_DIR/target" ]]; then
   WAR_FILE="$(find "$ROOT_DIR/target" -maxdepth 1 -name '*.war' 2>/dev/null | sort | tail -n 1)" || true
 fi
 
-WILDFLY_HOME="\${WILDFLY_HOME:-/opt/wildfly}"
-DEPLOY_DIR="\${WILDFLY_DEPLOYMENTS:-$WILDFLY_HOME/standalone/deployments}"
+WILDFLY_HOME_INPUT="\${WILDFLY_HOME:-}"
+DEPLOY_DIR_INPUT="\${WILDFLY_DEPLOYMENTS:-}"
+WILDFLY_HOME="$WILDFLY_HOME_INPUT"
+if [[ -z "$WILDFLY_HOME" && -z "$DEPLOY_DIR_INPUT" ]]; then
+  WILDFLY_HOME="/opt/wildfly"
+fi
+DEPLOY_DIR="$DEPLOY_DIR_INPUT"
+if [[ -z "$DEPLOY_DIR" ]]; then
+  DEPLOY_DIR="$WILDFLY_HOME/standalone/deployments"
+fi
 if [[ -z "$DEPLOY_DIR" || "$DEPLOY_DIR" = "/" ]]; then
   echo "WildFly deployments path is not configured. Set WILDFLY_DEPLOYMENTS (or WILDFLY_HOME)."
   exit 1
 fi
-if [[ -n "$WILDFLY_HOME" && ! -d "$WILDFLY_HOME" ]]; then
+if [[ -z "$DEPLOY_DIR_INPUT" && -n "$WILDFLY_HOME" && ! -d "$WILDFLY_HOME" ]]; then
   echo "WildFly home path was not found: $WILDFLY_HOME"
   exit 1
 fi
