@@ -57,7 +57,7 @@ export function parseFlags(argv = []) {
       flags.help = true;
       continue;
     }
-    if (a === '--version' || a === '-V') {
+    if (a === '--version' || a === '-V' || a === '-v') {
       flags.version = true;
       continue;
     }
@@ -117,7 +117,7 @@ export function parseFlags(argv = []) {
       flags.yes = true;
       continue;
     }
-    if (a === '--verbose' || a === '-v') {
+    if (a === '--verbose') {
       flags.verbose = true;
       continue;
     }
@@ -189,12 +189,13 @@ export function formatFlagsHelp({ appName = 'jwebgen' } = {}) {
     usage,
     section('Main Commands'),
     `  ${cmd('--help, -h')}${desc('Show this help message.')}`,
-    `  ${cmd('--version, -V')}${desc('Show jwebgen version.')}`,
+    `  ${cmd('--version, -V, -v')}${desc('Show jwebgen version.')}`,
     `  ${cmd('--setup [--dry-run]')}${desc('Run setup diagnostics + guided safe actions; preview only with --dry-run.')}`,
     `  ${cmd('--update')}${desc('Show safe update guidance for global installs.')}`,
     `  ${cmd('--uninstall')}${desc('Show safe uninstall guidance for global installs.')}`,
     `  ${cmd('--status')}${desc('Show project status.')}`,
     `  ${cmd('--dev')}${desc('Start dev loop in current project.')}`,
+    `  ${cmd('--verbose')}${desc('Enable verbose mode for applicable actions (e.g. --dev).')}`,
     `  ${cmd('--watch')}${desc('Alias for --dev.')}`,
     `  ${cmd('--build')}${desc('Run project build script.')}`,
     `  ${cmd('--deploy')}${desc('Run project deploy script.')}`,

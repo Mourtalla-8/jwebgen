@@ -8,9 +8,17 @@ test('parseFlags maps --watch to dev action', () => {
   assert.equal(parsed.actionCount, 1);
 });
 
-test('parseFlags maps --version and -V', () => {
+test('parseFlags maps --version, -V and -v', () => {
   assert.equal(parseFlags(['--version']).action, 'version');
   assert.equal(parseFlags(['-V']).action, 'version');
+  assert.equal(parseFlags(['-v']).action, 'version');
+});
+
+test('parseFlags keeps verbose explicit via --verbose only', () => {
+  const parsed = parseFlags(['--dev', '--verbose']);
+  assert.equal(parsed.action, 'dev');
+  assert.equal(parsed.flags.verbose, true);
+  assert.equal(parsed.flags.version, false);
 });
 
 test('parseFlags maps setup/update/uninstall lifecycle actions', () => {
@@ -73,5 +81,7 @@ test('formatFlagsHelp includes lifecycle commands for setup/update/uninstall', (
   assert.match(help, /--setup \[--dry-run\]/);
   assert.match(help, /--update/);
   assert.match(help, /--uninstall/);
+  assert.match(help, /--version, -V, -v/);
+  assert.match(help, /--verbose/);
 });
 

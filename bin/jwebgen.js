@@ -71,6 +71,9 @@ import { existsSync } from 'node:fs';
 import { jwebgenConfigPath, jwebgenMetaDir } from '../src/project/jwebgenLayout.js';
 import pkg from '../package.json' with { type: 'json' };
 
+const CANCEL_STEP = '__JWEBGEN_CANCEL_STEP__';
+const SKIP_ACTION = '__JWEBGEN_SKIP_ACTION__';
+
 const APP_NAME = 'jwebgen';
 const APP_VERSION = pkg.version;
 const CANONICAL_DEPLOY_SCRIPT = 'deploy.sh';
@@ -298,18 +301,35 @@ async function runCli() {
     const ok = (process.stdin.isTTY && process.stdout.isTTY)
       ? await runSetupAssistant({
           dryRun: flags.dryRun,
+          verbose: flags.verbose,
           confirmPrompt: async ({ message, initialValue }) => {
             const answer = await confirm({ message, initialValue });
-            if (isCancel(answer)) return false;
+            if (isCancel(answer)) return CANCEL_STEP;
             return Boolean(answer);
           },
           selectPrompt: async ({ message, options }) => {
             const answer = await select({
               message,
-              options: options.map((opt) => ({ value: opt, label: opt }))
+              options: [
+                { value: SKIP_ACTION, label: 'None (skip)' },
+                ...options.map((opt) => ({ value: opt, label: opt }))
+              ]
             });
-            if (isCancel(answer)) return null;
+            if (isCancel(answer)) return CANCEL_STEP;
             return answer;
+          },
+          onCommandStart: ({ key }) => {
+            const s = spinner();
+            s.start(`Installing ${key}...`);
+            // store on closure via global temp
+            runCli.__setupSpinner = s;
+          },
+          onCommandEnd: ({ result }) => {
+            const s = runCli.__setupSpinner;
+            runCli.__setupSpinner = null;
+            if (!s) return;
+            if (result?.status === 0) s.stop('Done');
+            else s.stop('Failed');
           }
         })
       : runSetupCheck({ dryRun: flags.dryRun });
@@ -383,7 +403,8 @@ async function runCli() {
 
 runCli().catch((error) => {
   if (error?.exitCode === 130 || error?.signal === 'SIGINT') {
-    process.exit(0);
+    console.log(pc.yellow('Setup cancelled.'));
+    process.exit(130);
   }
   if (error?.jwebgenHandled) {
     process.exit(1);
