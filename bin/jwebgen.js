@@ -63,7 +63,7 @@ import {
   showStatus as showStatusImpl
 } from '../src/cli/projectCommands.js';
 import { runProjectScript as runProjectScriptImpl } from '../src/cli/projectRunner.js';
-import { enforceActionPreflight, runSetupAssistant, runSetupCheck } from '../src/cli/preflight.js';
+import { CANCEL_STEP, SKIP_ACTION, enforceActionPreflight, runSetupAssistant, runSetupCheck } from '../src/cli/preflight.js';
 import { runCreateCommand } from '../src/cli/createCommand.js';
 import { writeFileSafe, makeExecutable } from '../src/cli/fileUtils.js';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -298,18 +298,35 @@ async function runCli() {
     const ok = (process.stdin.isTTY && process.stdout.isTTY)
       ? await runSetupAssistant({
           dryRun: flags.dryRun,
+          verbose: flags.verbose,
           confirmPrompt: async ({ message, initialValue }) => {
             const answer = await confirm({ message, initialValue });
-            if (isCancel(answer)) return false;
+            if (isCancel(answer)) return CANCEL_STEP;
             return Boolean(answer);
           },
           selectPrompt: async ({ message, options }) => {
             const answer = await select({
               message,
-              options: options.map((opt) => ({ value: opt, label: opt }))
+              options: [
+                { value: SKIP_ACTION, label: 'None (skip)' },
+                ...options.map((opt) => ({ value: opt, label: opt }))
+              ]
             });
-            if (isCancel(answer)) return null;
+            if (isCancel(answer)) return CANCEL_STEP;
             return answer;
+          },
+          onCommandStart: ({ key }) => {
+            const s = spinner();
+            s.start(`Installing ${key}...`);
+            // store on closure via global temp
+            runCli.__setupSpinner = s;
+          },
+          onCommandEnd: ({ result }) => {
+            const s = runCli.__setupSpinner;
+            runCli.__setupSpinner = null;
+            if (!s) return;
+            if (result?.status === 0) s.stop('Done');
+            else s.stop('Failed');
           }
         })
       : runSetupCheck({ dryRun: flags.dryRun });
@@ -383,7 +400,8 @@ async function runCli() {
 
 runCli().catch((error) => {
   if (error?.exitCode === 130 || error?.signal === 'SIGINT') {
-    process.exit(0);
+    console.log(pc.yellow('Operation cancelled.'));
+    process.exit(130);
   }
   if (error?.jwebgenHandled) {
     process.exit(1);

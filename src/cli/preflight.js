@@ -1,13 +1,75 @@
 import pc from 'picocolors';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { detectJavaCompiler, evaluateJavaCompatibility, installHint, which } from '../project/inputUtils.js';
+
+export const CANCEL_STEP = '__JWEBGEN_CANCEL_STEP__';
+export const SKIP_ACTION = '__JWEBGEN_SKIP_ACTION__';
+
+class SetupCancelledError extends Error {
+  constructor(message = 'Setup cancelled.') {
+    super(message);
+    this.name = 'SetupCancelledError';
+    this.exitCode = 130;
+    this.jwebgenHandled = true;
+  }
+}
 
 function hasCommand(binary) {
   if (which(binary)) return true;
   const probe = process.platform === 'win32' ? spawnSync('where', [binary], { stdio: 'ignore' }) : spawnSync('which', [binary], { stdio: 'ignore' });
   return probe.status === 0;
+}
+
+function detectAvailablePackageManagers(platform = process.platform, hasCommandImpl = hasCommand) {
+  if (platform === 'win32') {
+    return {
+      winget: hasCommandImpl('winget')
+    };
+  }
+  if (platform === 'darwin') {
+    return {
+      brew: hasCommandImpl('brew')
+    };
+  }
+  // default: linux/other unix
+  const apt = hasCommandImpl('apt-get') || hasCommandImpl('apt');
+  return {
+    apt,
+    dnf: hasCommandImpl('dnf'),
+    pacman: hasCommandImpl('pacman')
+  };
+}
+
+function filterInstallCommandsForEnvironment(commands = [], { platform = process.platform, hasCommandImpl = hasCommand } = {}) {
+  const pm = detectAvailablePackageManagers(platform, hasCommandImpl);
+  const bashOk = platform === 'win32' ? hasCommandImpl('bash.exe') : hasCommandImpl('bash');
+  const curlOk = platform === 'win32' ? hasCommandImpl('curl.exe') : hasCommandImpl('curl');
+
+  const allow = (cmd) => {
+    const c = String(cmd || '');
+    const lower = c.toLowerCase();
+    // Package manager gating
+    if (platform === 'win32') return Boolean(pm.winget) && /\bwinget\b/i.test(c);
+    if (platform === 'darwin') return Boolean(pm.brew) && /\bbrew\b/i.test(c);
+
+    // linux/unix
+    if (/\bpacman\b/i.test(c)) return Boolean(pm.pacman);
+    if (/\bdnf\b/i.test(c)) return Boolean(pm.dnf);
+    if (/\bapt-get\b/i.test(c) || /\bapt\b/i.test(c)) return Boolean(pm.apt);
+
+    // Tooling constraints (e.g. NodeSource curl | bash | apt-get)
+    if (lower.includes('curl ') || lower.includes('curl\t') || lower.includes('curl -')) {
+      if (!curlOk) return false;
+    }
+    if (lower.includes('|') && lower.includes('bash')) {
+      if (!bashOk) return false;
+    }
+    return true;
+  };
+
+  return Array.isArray(commands) ? commands.filter(allow) : [];
 }
 
 function getActionRequirements(action) {
@@ -205,11 +267,14 @@ export function collectSetupState() {
   return { checks, optional, npmPath };
 }
 
-export function computeSuggestedActions(state, platform = process.platform) {
+export function computeSuggestedActions(state, platform = process.platform, { hasCommandImpl = hasCommand } = {}) {
   const actions = [];
   for (const item of state.checks) {
     if (item.ok) continue;
-    const commands = suggestedInstallCommands(item.key, platform);
+    const commands = filterInstallCommandsForEnvironment(suggestedInstallCommands(item.key, platform), {
+      platform,
+      hasCommandImpl
+    });
     if (commands.length === 0) continue;
     actions.push({
       type: 'install',
@@ -236,10 +301,6 @@ function printSetupState(state) {
     const marker = item.ok ? pc.green('OK') : pc.red('MISSING');
     console.log(`${marker} ${item.key}: ${item.display}`);
     if (!item.ok && item.hint) console.log(pc.yellow(`  Fix: ${item.hint}`));
-  }
-  for (const item of state.optional) {
-    const marker = item.ok ? pc.green('OK') : pc.yellow('OPTIONAL');
-    console.log(`${marker} ${item.key}`);
   }
   if (state.npmPath.hasShimButNotOnPath) {
     console.log(pc.yellow('PATH status: jwebgen shim exists in npm global bin but this bin is not on current PATH.'));
@@ -268,26 +329,81 @@ export function runSetupCheck({ dryRun = false } = {}) {
   return true;
 }
 
-function runCommand(command) {
+function capText(input, cap = 200_000) {
+  const text = String(input || '');
+  if (text.length <= cap) return text;
+  return text.slice(-cap);
+}
+
+function tailLines(text, maxLines = 80, maxChars = 8000) {
+  const capped = capText(text, Math.max(maxChars, 50_000));
+  const lines = capped.split(/\r?\n/);
+  const tail = lines.slice(-maxLines).join('\n');
+  return tail.length > maxChars ? tail.slice(-maxChars) : tail;
+}
+
+async function runCommand(command, { timeoutMs = 10 * 60 * 1000 } = {}) {
   const shell = process.platform === 'win32' ? 'cmd.exe' : 'sh';
   const shellArgs = process.platform === 'win32' ? ['/c', command] : ['-lc', command];
   try {
-    const result = spawnSync(shell, shellArgs, {
-      stdio: 'inherit',
-      timeout: 10 * 60 * 1000
+    const child = spawn(shell, shellArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    let timedOut = false;
+
+    const onStdout = (c) => {
+      stdout = capText(stdout + String(c));
+    };
+    const onStderr = (c) => {
+      stderr = capText(stderr + String(c));
+    };
+    child.stdout?.on('data', onStdout);
+    child.stderr?.on('data', onStderr);
+
+    const killTimer = setTimeout(() => {
+      timedOut = true;
+      try {
+        child.kill('SIGTERM');
+      } catch {
+        /* ignore */
+      }
+    }, timeoutMs);
+    killTimer.unref?.();
+
+    let interrupted = false;
+    const onSigint = () => {
+      interrupted = true;
+      try {
+        child.kill('SIGINT');
+      } catch {
+        /* ignore */
+      }
+    };
+    process.once('SIGINT', onSigint);
+
+    const { code, signal } = await new Promise((resolve) => {
+      child.on('exit', (code, signal) => resolve({ code, signal }));
+      child.on('error', () => resolve({ code: 1, signal: null }));
     });
+    process.off('SIGINT', onSigint);
+    clearTimeout(killTimer);
+
     return {
-      status: result.status ?? 1,
-      signal: result.signal || null,
-      timedOut: result.error?.code === 'ETIMEDOUT',
-      error: result.error || null
+      status: code ?? 1,
+      signal: interrupted ? 'SIGINT' : signal || null,
+      timedOut,
+      error: null,
+      stdout,
+      stderr
     };
   } catch (error) {
     return {
       status: 1,
       signal: null,
       timedOut: error?.code === 'ETIMEDOUT',
-      error
+      error,
+      stdout: '',
+      stderr: ''
     };
   }
 }
@@ -297,11 +413,15 @@ export async function runSetupAssistant({
   selectPrompt,
   dryRun = false,
   runCommandImpl = runCommand,
-  collectSetupStateImpl = collectSetupState
+  collectSetupStateImpl = collectSetupState,
+  computeSuggestedActionsImpl = computeSuggestedActions,
+  verbose = false,
+  onCommandStart,
+  onCommandEnd
 } = {}) {
   const state = collectSetupStateImpl();
   printSetupState(state);
-  const actions = computeSuggestedActions(state);
+  const actions = computeSuggestedActionsImpl(state);
   if (actions.length === 0) {
     const failed = state.checks.filter((c) => !c.ok);
     if (failed.length > 0) {
@@ -316,7 +436,10 @@ export async function runSetupAssistant({
   for (const action of actions) {
     console.log(pc.cyan(`- ${action.title}`));
     if (action.type === 'install') {
-      for (const cmd of action.commands) console.log(`  ${cmd}`);
+      const best = action.commands[0] || '';
+      const alternatives = Math.max(0, action.commands.length - 1);
+      if (best) console.log(`  ${best}`);
+      if (alternatives > 0) console.log(pc.cyan(`  (alternatives available: ${alternatives})`));
     } else {
       console.log('  Manual PATH snippets:');
       for (const snippet of action.snippets) console.log(`  ${snippet}`);
@@ -326,14 +449,13 @@ export async function runSetupAssistant({
     console.log(pc.cyan('Setup dry-run enabled: actions are previewed and will not be executed.'));
   }
 
-  for (const action of actions) {
+  if (dryRun) return true;
+
+  for (let i = 0; i < actions.length; i++) {
+    const action = actions[i];
     if (action.type === 'path') {
       console.log(pc.yellow('\nPATH guidance (manual step, no file edits performed):'));
       for (const snippet of action.snippets) console.log(`  ${snippet}`);
-      continue;
-    }
-    if (dryRun) {
-      console.log(pc.cyan(`Dry-run preview: ${action.commands[0]}`));
       continue;
     }
     if (!confirmPrompt) continue;
@@ -343,22 +465,53 @@ export async function runSetupAssistant({
         message: `Choose install command for ${action.key}`,
         options: action.commands
       });
+      if (selected === CANCEL_STEP) {
+        if (i === 0) throw new SetupCancelledError();
+        i = Math.max(-1, i - 2);
+        continue;
+      }
+      if (selected === SKIP_ACTION) {
+        console.log(pc.yellow(`Skipped ${action.key}.`));
+        continue;
+      }
       if (selected) command = selected;
     }
     const approved = await confirmPrompt({
       message: `Run now for ${action.key}?`,
       initialValue: false
     });
+    if (approved === CANCEL_STEP) {
+      if (i === 0) throw new SetupCancelledError();
+      i = Math.max(-1, i - 2);
+      continue;
+    }
     if (!approved) {
       console.log(pc.yellow(`Skipped ${action.key}.`));
       continue;
     }
     console.log(pc.cyan(`Executing: ${command}`));
+    if (typeof onCommandStart === 'function') {
+      try {
+        onCommandStart({ key: action.key, command });
+      } catch {
+        /* ignore */
+      }
+    }
     let result;
     try {
-      result = runCommandImpl(command);
+      result = await runCommandImpl(command);
     } catch (error) {
       result = { status: 1, timedOut: error?.code === 'ETIMEDOUT', error, signal: null };
+    }
+    if (typeof onCommandEnd === 'function') {
+      try {
+        onCommandEnd({ key: action.key, command, result });
+      } catch {
+        /* ignore */
+      }
+    }
+    if (result?.signal === 'SIGINT') {
+      throw new SetupCancelledError();
     }
     if (result.status !== 0) {
       if (result.timedOut) {
@@ -367,6 +520,17 @@ export async function runSetupAssistant({
         console.log(pc.red(`Command execution error for ${action.key}: ${result.error.message || result.error}`));
       } else {
         console.log(pc.red(`Command failed for ${action.key} (exit ${result.status}).`));
+      }
+      if (!verbose) {
+        const combined = [result.stdout, result.stderr].filter(Boolean).join('\n').trim();
+        const excerpt = tailLines(combined);
+        if (excerpt) {
+          console.log(pc.yellow('\nLast output (tail):'));
+          console.log(excerpt);
+        }
+      } else {
+        const combined = [result.stdout, result.stderr].filter(Boolean).join('\n').trim();
+        if (combined) console.log(combined);
       }
       console.log(pc.yellow(`Remediation: ${buildInstallFailureHint(action.key)}`));
     }
