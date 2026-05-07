@@ -327,40 +327,46 @@ async function maybeRunServerInstallAssistant(target, cfg) {
 }
 
 function isServerRunningQuick(target) {
+  const hasCommand = (bin) => {
+    const probe = spawnSync(process.platform === 'win32' ? 'where' : 'which', [bin], { stdio: 'ignore' });
+    return probe.status === 0;
+  };
   if (process.platform === 'win32') {
     const pattern =
       target === 'tomcat'
         ? /tomcat|catalina\\.startup|bootstrap\\.jar/i
         : /wildfly|jboss\\.modules|standalone|jboss\\.home/i;
-    const probe = spawnSync(
-      'powershell.exe',
-      [
-        '-NoProfile',
-        '-NoLogo',
-        '-NonInteractive',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-Command',
-        'Get-CimInstance Win32_Process | Where-Object { $_.Name -eq "java.exe" } | ForEach-Object { $_.CommandLine }'
-      ],
-      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }
-    );
-    const text = String(probe.stdout || '');
-    if (text.trim()) return pattern.test(text);
+    if (hasCommand('powershell.exe')) {
+      const probe = spawnSync(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-NoLogo',
+          '-NonInteractive',
+          '-ExecutionPolicy',
+          'Bypass',
+          '-Command',
+          'Get-CimInstance Win32_Process | Where-Object { $_.Name -eq "java.exe" } | ForEach-Object { $_.CommandLine }'
+        ],
+        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }
+      );
+      const text = String(probe.stdout || '');
+      if (text.trim()) return pattern.test(text);
+    }
   }
-  if (process.platform !== 'win32') {
+  if (process.platform !== 'win32' && hasCommand('pgrep')) {
     const pgPattern = target === 'tomcat' ? 'tomcat|catalina' : 'standalone.sh|org.jboss.as.standalone|wildfly';
     const pgrep = spawnSync('pgrep', ['-f', pgPattern], { stdio: 'ignore' });
     if (pgrep.status === 0) return true;
   }
-  if (target === 'wildfly') {
+  if (target === 'wildfly' && hasCommand('curl')) {
     const probe = spawnSync('curl', ['-fsS', '--max-time', '2', 'http://127.0.0.1:9990/'], { stdio: 'ignore' });
     if (probe.status === 0) return true;
-  } else {
+  } else if (target !== 'wildfly' && hasCommand('curl')) {
     const probe = spawnSync('curl', ['-fsS', '--max-time', '2', 'http://127.0.0.1:8080/'], { stdio: 'ignore' });
     if (probe.status === 0) return true;
   }
-  if (process.platform === 'linux') {
+  if (process.platform === 'linux' && hasCommand('systemctl')) {
     const unit = target === 'wildfly' ? 'wildfly' : 'tomcat10';
     const svc = spawnSync('systemctl', ['is-active', '--quiet', unit], { stdio: 'ignore' });
     if (svc.status === 0) return true;
@@ -761,6 +767,11 @@ function detectPackageManagers() {
   if (process.platform === 'win32') return { winget: has('winget') };
   if (process.platform === 'darwin') return { brew: has('brew') };
   return { apt: has('apt-get') || has('apt'), dnf: has('dnf'), pacman: has('pacman') };
+}
+
+function hasCommand(bin) {
+  const p = spawnSync(process.platform === 'win32' ? 'where' : 'which', [bin], { stdio: 'ignore' });
+  return p.status === 0;
 }
 
 function serverInstallCommands(target) {
