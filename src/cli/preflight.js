@@ -4,8 +4,8 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { detectJavaCompiler, evaluateJavaCompatibility, installHint, which } from '../project/inputUtils.js';
 
-const CANCEL_STEP = '__JWEBGEN_CANCEL_STEP__';
-const SKIP_ACTION = '__JWEBGEN_SKIP_ACTION__';
+export const CANCEL_STEP = '__JWEBGEN_CANCEL_STEP__';
+export const SKIP_ACTION = '__JWEBGEN_SKIP_ACTION__';
 
 class SetupCancelledError extends Error {
   constructor(message = 'Setup cancelled.') {

@@ -63,16 +63,13 @@ import {
   showStatus as showStatusImpl
 } from '../src/cli/projectCommands.js';
 import { runProjectScript as runProjectScriptImpl } from '../src/cli/projectRunner.js';
-import { enforceActionPreflight, runSetupAssistant, runSetupCheck } from '../src/cli/preflight.js';
+import { CANCEL_STEP, SKIP_ACTION, enforceActionPreflight, runSetupAssistant, runSetupCheck } from '../src/cli/preflight.js';
 import { runCreateCommand } from '../src/cli/createCommand.js';
 import { writeFileSafe, makeExecutable } from '../src/cli/fileUtils.js';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { jwebgenConfigPath, jwebgenMetaDir } from '../src/project/jwebgenLayout.js';
 import pkg from '../package.json' with { type: 'json' };
-
-const CANCEL_STEP = '__JWEBGEN_CANCEL_STEP__';
-const SKIP_ACTION = '__JWEBGEN_SKIP_ACTION__';
 
 const APP_NAME = 'jwebgen';
 const APP_VERSION = pkg.version;
