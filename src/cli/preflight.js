@@ -119,27 +119,63 @@ function detectNpmGlobalBin() {
   };
 }
 
+const INSTALL_MATRIX = {
+  java: {
+    win32: {
+      installCommands: ['winget install EclipseAdoptium.Temurin.17.JDK'],
+      failureHint: 'Retry with winget as Administrator, then verify with javac -version.'
+    },
+    darwin: {
+      installCommands: ['brew install --cask temurin'],
+      failureHint: 'Retry with Homebrew, then open a new terminal and re-run jwebgen --setup --dry-run.'
+    },
+    default: {
+      installCommands: ['sudo apt install -y default-jdk', 'sudo dnf install -y java-17-openjdk-devel', 'sudo pacman -S --noconfirm jdk-openjdk']
+    }
+  },
+  maven: {
+    win32: {
+      installCommands: ['winget install Apache.Maven'],
+      failureHint: 'Retry with winget as Administrator, then verify with mvn -version.'
+    },
+    darwin: {
+      installCommands: ['brew install maven'],
+      failureHint: 'Retry with Homebrew, then open a new terminal and re-run jwebgen --setup --dry-run.'
+    },
+    default: {
+      installCommands: ['sudo apt install -y maven', 'sudo dnf install -y maven', 'sudo pacman -S --noconfirm maven']
+    }
+  },
+  node: {
+    win32: {
+      installCommands: ['winget install OpenJS.NodeJS.LTS'],
+      failureHint: 'Retry with winget as Administrator, then restart terminal and run jwebgen --setup --dry-run.'
+    },
+    darwin: {
+      installCommands: ['brew install node@22'],
+      failureHint: 'Retry with Homebrew, then open a new terminal and re-run jwebgen --setup --dry-run.'
+    },
+    default: {
+      installCommands: [
+        'curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && sudo apt-get install -y nodejs',
+        'sudo dnf install -y nodejs npm',
+        'sudo pacman -S --noconfirm nodejs npm'
+      ]
+    }
+  }
+};
+
 function suggestedInstallCommands(requirementKey, platform = process.platform) {
-  if (requirementKey === 'java') {
-    if (platform === 'win32') return ['winget install EclipseAdoptium.Temurin.17.JDK'];
-    if (platform === 'darwin') return ['brew install --cask temurin'];
-    return ['sudo apt install -y default-jdk', 'sudo dnf install -y java-17-openjdk-devel', 'sudo pacman -S --noconfirm jdk-openjdk'];
-  }
-  if (requirementKey === 'maven') {
-    if (platform === 'win32') return ['winget install Apache.Maven'];
-    if (platform === 'darwin') return ['brew install maven'];
-    return ['sudo apt install -y maven', 'sudo dnf install -y maven', 'sudo pacman -S --noconfirm maven'];
-  }
-  if (requirementKey === 'node') {
-    if (platform === 'win32') return ['winget install OpenJS.NodeJS.LTS'];
-    if (platform === 'darwin') return ['brew install node@22'];
-    return [
-      'curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && sudo apt-get install -y nodejs',
-      'sudo dnf install -y nodejs npm',
-      'sudo pacman -S --noconfirm nodejs npm'
-    ];
-  }
-  return [];
+  const entry = INSTALL_MATRIX[requirementKey];
+  if (!entry) return [];
+  return entry[platform]?.installCommands || entry.default?.installCommands || [];
+}
+
+export function buildInstallFailureHint(requirementKey, platform = process.platform) {
+  const entry = INSTALL_MATRIX[requirementKey];
+  const hint = entry?.[platform]?.failureHint || entry?.default?.failureHint;
+  if (hint) return hint;
+  return 'Retry with your package manager command, then re-run jwebgen --setup --dry-run.';
 }
 
 function pathSnippets(npmGlobalBin, platform = process.platform) {
@@ -233,14 +269,37 @@ export function runSetupCheck({ dryRun = false } = {}) {
 }
 
 function runCommand(command) {
-  if (process.platform === 'win32') {
-    return spawnSync('cmd.exe', ['/c', command], { stdio: 'inherit' });
+  const shell = process.platform === 'win32' ? 'cmd.exe' : 'sh';
+  const shellArgs = process.platform === 'win32' ? ['/c', command] : ['-lc', command];
+  try {
+    const result = spawnSync(shell, shellArgs, {
+      stdio: 'inherit',
+      timeout: 10 * 60 * 1000
+    });
+    return {
+      status: result.status ?? 1,
+      signal: result.signal || null,
+      timedOut: result.error?.code === 'ETIMEDOUT',
+      error: result.error || null
+    };
+  } catch (error) {
+    return {
+      status: 1,
+      signal: null,
+      timedOut: error?.code === 'ETIMEDOUT',
+      error
+    };
   }
-  return spawnSync('sh', ['-lc', command], { stdio: 'inherit' });
 }
 
-export async function runSetupAssistant({ confirmPrompt, selectPrompt, dryRun = false } = {}) {
-  const state = collectSetupState();
+export async function runSetupAssistant({
+  confirmPrompt,
+  selectPrompt,
+  dryRun = false,
+  runCommandImpl = runCommand,
+  collectSetupStateImpl = collectSetupState
+} = {}) {
+  const state = collectSetupStateImpl();
   printSetupState(state);
   const actions = computeSuggestedActions(state);
   if (actions.length === 0) {
@@ -295,13 +354,32 @@ export async function runSetupAssistant({ confirmPrompt, selectPrompt, dryRun = 
       continue;
     }
     console.log(pc.cyan(`Executing: ${command}`));
-    const result = runCommand(command);
+    let result;
+    try {
+      result = runCommandImpl(command);
+    } catch (error) {
+      result = { status: 1, timedOut: error?.code === 'ETIMEDOUT', error, signal: null };
+    }
     if (result.status !== 0) {
-      console.log(pc.red(`Command failed for ${action.key}. Please run manually or try another package manager command.`));
+      if (result.timedOut) {
+        console.log(pc.red(`Command timed out for ${action.key}.`));
+      } else if (result.error) {
+        console.log(pc.red(`Command execution error for ${action.key}: ${result.error.message || result.error}`));
+      } else {
+        console.log(pc.red(`Command failed for ${action.key} (exit ${result.status}).`));
+      }
+      console.log(pc.yellow(`Remediation: ${buildInstallFailureHint(action.key)}`));
+    }
+    const recheckState = collectSetupStateImpl();
+    const check = recheckState.checks.find((item) => item.key === action.key);
+    if (check?.ok) {
+      console.log(pc.green(`Verification after ${action.key}: ${check.display}`));
+    } else if (check) {
+      console.log(pc.yellow(`Verification after ${action.key}: still missing/incompatible (${check.display}).`));
     }
   }
 
-  const nextState = collectSetupState();
+  const nextState = collectSetupStateImpl();
   console.log(pc.cyan('\nPost-action verification:'));
   printSetupState(nextState);
   const failed = nextState.checks.filter((c) => !c.ok);

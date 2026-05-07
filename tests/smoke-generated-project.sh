@@ -42,6 +42,14 @@ echo "[smoke] execute helper scripts (servlet/jsp)"
 (cd "$TMP_ROOT/smokeapp" && node "$SCRIPTS/add-jsp.mjs" smoke-page)
 [[ -f "$TMP_ROOT/smokeapp/src/main/webapp/WEB-INF/jsp/smoke-page.jsp" ]] || fail "add-jsp.mjs did not generate jsp"
 
+echo "[smoke] execute CLI variants for servlet/jsp normalization"
+(cd "$TMP_ROOT/smokeapp" && node "$ROOT_DIR/bin/jwebgen.js" --servlet ApiServlet)
+[[ -f "$TMP_ROOT/smokeapp/src/main/java/com/exo/smokeapp/web/ApiServlet.java" ]] || fail "--servlet ApiServlet should generate ApiServlet.java"
+[[ ! -f "$TMP_ROOT/smokeapp/src/main/java/com/exo/smokeapp/web/ApiServletServlet.java" ]] || fail "--servlet should not duplicate Servlet suffix"
+(cd "$TMP_ROOT/smokeapp" && node "$ROOT_DIR/bin/jwebgen.js" --jsp home.jsp)
+[[ -f "$TMP_ROOT/smokeapp/src/main/webapp/WEB-INF/jsp/home.jsp" ]] || fail "--jsp home.jsp should generate single .jsp suffix"
+[[ ! -f "$TMP_ROOT/smokeapp/src/main/webapp/WEB-INF/jsp/home.jsp.jsp" ]] || fail "--jsp should not duplicate .jsp suffix"
+
 CFG="$TMP_ROOT/smokeapp/.jwebgen/.jwebgenrc"
 printf '%s\n' 'export JWEBGEN_SERVER_TARGET="tomcat"' 'export JWEBGEN_HTTP_PORT="8099"' >"$CFG"
 

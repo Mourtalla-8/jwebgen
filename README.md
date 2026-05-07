@@ -79,6 +79,7 @@ jwebgen --clean --deploy
   - `jwebgen --setup`
   - `jwebgen --update` (prints safe update guidance)
   - `jwebgen --uninstall` (prints safe uninstall guidance)
+  - local fallback when global shim is unavailable: `npx jwebgen --update` (or `node bin/jwebgen.js --update` from checkout)
 - Project:
   - `jwebgen --new <name> [--yes] [--tomcat|--wildfly]`
   - `jwebgen --status`
@@ -97,10 +98,12 @@ jwebgen --clean --deploy
 - `jwebgen --setup` in interactive terminals (TTY):
   - runs diagnostics,
   - proposes safe actions per OS,
-  - asks for explicit confirmation before running any suggested install command.
+  - asks for explicit confirmation before running any suggested install command,
+  - re-checks the selected dependency immediately after each accepted action.
 - `jwebgen --setup --dry-run`:
   - previews setup actions without executing commands,
   - keeps PATH handling as guidance-only.
+- if an install command fails, setup prints a platform-oriented remediation hint and keeps remaining checks explicit.
 - `jwebgen --setup` in non-interactive mode (CI/script):
   - diagnostics only (no prompt, no command execution).
 - PATH management stays non-destructive:

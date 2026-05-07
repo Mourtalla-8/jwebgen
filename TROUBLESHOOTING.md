@@ -77,6 +77,9 @@ No global setup alternative:
   - `jwebgen --update`
 - Uninstall guidance:
   - `jwebgen --uninstall`
+- If global `jwebgen` is not on PATH but the local checkout exists:
+  - `npx jwebgen --update`
+  - `node bin/jwebgen.js --update`
 
 ## Port already in use (`8080`, `9990`, live reload ports)
 

@@ -254,6 +254,8 @@ function showUpdateGuidance() {
 function showUninstallGuidance() {
   console.log(pc.cyan('Safe uninstall flow (global install):'));
   console.log('  npm uninstall -g jwebgen');
+  console.log(pc.cyan('If running from a local checkout only:'));
+  console.log('  remove the clone folder when you no longer need local one-off runs.');
   console.log(pc.cyan('Optional cleanup: remove old clones or temp projects manually.'));
 }
 
