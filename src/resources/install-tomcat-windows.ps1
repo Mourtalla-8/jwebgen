@@ -28,7 +28,7 @@ try {
 
   $shaRaw = (Invoke-WebRequest -Uri $checksumUrl -UseBasicParsing).Content
   $expected = ($shaRaw -split '\s+')[0].Trim().ToLowerInvariant()
-  if (-not $expected -or $expected.Length -lt 64) {
+  if (-not $expected -or $expected.Length -ne 128 -or $expected -notmatch '^[0-9a-f]{128}$') {
     throw "Could not parse checksum from $checksumUrl"
   }
   $actual = (Get-FileHash -Path $zipPath -Algorithm SHA512).Hash.ToLowerInvariant()

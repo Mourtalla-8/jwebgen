@@ -11,6 +11,7 @@ $binPath = Join-Path $installDir 'bin'
 $stagingRoot = Join-Path $destRoot ("$base-staging-" + [Guid]::NewGuid().ToString('N'))
 $zipPath = Join-Path $stagingRoot $zip
 $stagedInstallDir = Join-Path $stagingRoot $base
+$backupDir = "$installDir.backup-" + (Get-Date -Format 'yyyyMMddHHmmss')
 
 New-Item -ItemType Directory -Force -Path $destRoot | Out-Null
 New-Item -ItemType Directory -Force -Path $stagingRoot | Out-Null
@@ -22,6 +23,8 @@ try {
     Invoke-WebRequest -Uri $fallbackUrl -OutFile $zipPath -UseBasicParsing
   }
 
+  # PSScriptAnalyzer flags SHA1 as weak, but WildFly/JBoss currently publishes this archive checksum at $checksumUrl as .sha1.
+  # We parse $shaRaw into $expected and compare with $actual to enforce upstream integrity until stronger checksums are available.
   $shaRaw = (Invoke-WebRequest -Uri $checksumUrl -UseBasicParsing).Content
   $expected = ($shaRaw -split '\s+')[0].Trim().ToLowerInvariant()
   if (-not $expected -or $expected.Length -lt 40) {
@@ -37,10 +40,21 @@ try {
     throw "WildFly staged install verification failed: missing standalone/deployments folder."
   }
 
-  if (Test-Path -LiteralPath $installDir) {
-    Remove-Item -LiteralPath $installDir -Recurse -Force
+  $hadExistingInstall = Test-Path -LiteralPath $installDir
+  if ($hadExistingInstall) {
+    Move-Item -LiteralPath $installDir -Destination $backupDir
   }
-  Move-Item -LiteralPath $stagedInstallDir -Destination $installDir
+  try {
+    Move-Item -LiteralPath $stagedInstallDir -Destination $installDir
+    if ($hadExistingInstall -and (Test-Path -LiteralPath $backupDir)) {
+      Remove-Item -LiteralPath $backupDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+  } catch {
+    if ($hadExistingInstall -and (Test-Path -LiteralPath $backupDir) -and -not (Test-Path -LiteralPath $installDir)) {
+      Move-Item -LiteralPath $backupDir -Destination $installDir
+    }
+    throw
+  }
 } finally {
   if (Test-Path -LiteralPath $zipPath) {
     Remove-Item -LiteralPath $zipPath -Force -ErrorAction SilentlyContinue
