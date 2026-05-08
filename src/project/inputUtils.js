@@ -119,6 +119,16 @@ export function installHint(tool) {
     if (platform === 'win32') return 'jwebgen --install maven';
     return 'Linux: pacman -S maven | apt install maven | dnf install maven';
   }
+  if (tool === 'tomcat') {
+    if (platform === 'darwin') return 'brew install tomcat, or: jwebgen --install tomcat';
+    if (platform === 'win32') return 'jwebgen --install tomcat';
+    return 'jwebgen --install tomcat (or your distro Tomcat package)';
+  }
+  if (tool === 'wildfly') {
+    if (platform === 'darwin') return 'brew install wildfly-as, or: jwebgen --install wildfly';
+    if (platform === 'win32') return 'jwebgen --install wildfly';
+    return 'jwebgen --install wildfly (or your distro WildFly package)';
+  }
   return 'Install it from the official source.';
 }
 

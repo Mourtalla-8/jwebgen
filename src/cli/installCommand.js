@@ -1,7 +1,7 @@
 import pc from 'picocolors';
 import { runInstallTool } from './preflight.js';
 
-const ALLOWED = new Set(['java', 'maven', 'node']);
+const ALLOWED = new Set(['java', 'maven', 'tomcat', 'wildfly']);
 
 /**
  * CLI entry for `jwebgen --install <tool>`.
@@ -13,7 +13,7 @@ export async function runInstallCli(tool) {
     .trim()
     .toLowerCase();
   if (!ALLOWED.has(key)) {
-    console.error(pc.red(`Unknown tool "${tool}". Use: java, maven, or node.`));
+    console.error(pc.red(`Unknown tool "${tool}". Use: java, maven, tomcat, or wildfly.`));
     return 1;
   }
   return runInstallTool(key);
