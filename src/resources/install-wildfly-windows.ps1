@@ -69,10 +69,21 @@ try {
 $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
 $norm = { param($p) try { [IO.Path]::GetFullPath($p).TrimEnd('\') } catch { $p.TrimEnd('\') } }
 $binN = & $norm $binPath
+$destRootN = (& $norm $destRoot).ToLowerInvariant()
 $parts = @()
-if ($userPath) { $parts = $userPath -split ';' | Where-Object { $_ } | ForEach-Object { & $norm $_ } }
+if ($userPath) {
+  $parts = $userPath -split ';' | Where-Object { $_ } | ForEach-Object { & $norm $_ } | Where-Object {
+    $entryLower = $_.ToLowerInvariant()
+    $underDestRoot = $entryLower.StartsWith($destRootN + '\')
+    $looksLikeWildflyBin = $entryLower -match '\\wildfly-[^\\]+\\bin$'
+    -not ($underDestRoot -and $looksLikeWildflyBin)
+  }
+}
 $have = $parts -contains $binN
 if (-not $have) {
-  $joined = if ($userPath) { ($userPath.TrimEnd(';') + ';' + $binPath) } else { $binPath }
+  $joinedBase = ($parts -join ';').Trim(';')
+  $joined = if ($joinedBase) { ($joinedBase + ';' + $binPath) } else { $binPath }
   [Environment]::SetEnvironmentVariable('Path', $joined, 'User')
+} elseif ($userPath -ne ($parts -join ';')) {
+  [Environment]::SetEnvironmentVariable('Path', ($parts -join ';'), 'User')
 }

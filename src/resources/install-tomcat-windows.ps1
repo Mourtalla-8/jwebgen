@@ -79,8 +79,8 @@ if ($userPath) {
     $entryLower = $entry.ToLowerInvariant()
     $underDestRoot = $entryLower.StartsWith($destRootN + '\')
     $looksLikeTomcatBin = $entryLower -match '\\apache-tomcat-[^\\]+\\bin$'
-    $anyBinUnderRoot = $underDestRoot -and $entryLower -match '\\bin$'
-    -not ($looksLikeTomcatBin -or $anyBinUnderRoot)
+    $tomcatBinUnderRoot = $underDestRoot -and $entryLower -match '\\apache-tomcat-[^\\]+\\bin$'
+    -not ($looksLikeTomcatBin -or $tomcatBinUnderRoot)
   }
 }
 $have = $parts -contains $binN
