@@ -15,6 +15,16 @@ function runCapture(command, args, options = {}) {
   return execFileSync(command, args, { encoding: 'utf8', shell: useShell, ...options });
 }
 
+function runCaptureAllowNonZero(command, args, options = {}) {
+  try {
+    return { status: 0, output: runCapture(command, args, options) };
+  } catch (error) {
+    const status = Number.isInteger(error?.status) ? error.status : 1;
+    const output = `${String(error?.stdout || '')}${String(error?.stderr || '')}`;
+    return { status, output };
+  }
+}
+
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const tmpRoot = mkdtempSync(path.join(os.tmpdir(), 'jwebgen-global-smoke-'));
 const prefixDir = path.join(tmpRoot, 'npm-prefix');
@@ -39,7 +49,13 @@ console.log('[global-smoke] jwebgen --help');
 run(jwebgenCommand, ['--help'], { cwd: workDir, env });
 
 console.log('[global-smoke] jwebgen --setup --dry-run');
-run(jwebgenCommand, ['--setup', '--dry-run'], { cwd: workDir, env });
+const setupDryRun = runCaptureAllowNonZero(jwebgenCommand, ['--setup', '--dry-run'], { cwd: workDir, env });
+if (![0, 1].includes(setupDryRun.status)) {
+  throw new Error(`unexpected exit code from --setup --dry-run: ${setupDryRun.status}`);
+}
+if (!setupDryRun.output.includes('jwebgen setup diagnostics')) {
+  throw new Error('setup dry-run output missing diagnostics header');
+}
 
 const shouldRunHostInstall = process.env.CI === 'true' || process.env.RUN_GLOBAL_SMOKE === '1';
 if (shouldRunHostInstall) {
