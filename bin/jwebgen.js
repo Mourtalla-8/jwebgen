@@ -63,7 +63,7 @@ import {
   showStatus as showStatusImpl
 } from '../src/cli/projectCommands.js';
 import { runProjectScript as runProjectScriptImpl } from '../src/cli/projectRunner.js';
-import { CANCEL_STEP, SKIP_ACTION, enforceActionPreflight, runSetupAssistant, runSetupCheck } from '../src/cli/preflight.js';
+import { CANCEL_STEP, SetupCancelledError, enforceActionPreflight, runSetupAssistant, runSetupCheck } from '../src/cli/preflight.js';
 import { runInstallCli } from '../src/cli/installCommand.js';
 import { runCreateCommand } from '../src/cli/createCommand.js';
 import { writeFileSafe, makeExecutable } from '../src/cli/fileUtils.js';
@@ -76,6 +76,7 @@ const APP_NAME = 'jwebgen';
 const APP_VERSION = pkg.version;
 const CANONICAL_DEPLOY_SCRIPT = 'deploy.sh';
 const LEGACY_DEPLOY_SCRIPT = 'deploy-tomcat.sh';
+const INSTALLABLE_TOOLS = new Set(['java', 'maven', 'tomcat', 'wildfly']);
 
 const SERVER_OPTIONS = [
   { value: 'tomcat', label: 'Tomcat' },
@@ -297,16 +298,25 @@ async function runCli() {
   if (action === 'version') return showVersion();
   if (action === 'install') {
     const tool = String(flags.installTool || '').trim();
-    if (!tool) {
-      console.log(pc.red('Usage: jwebgen --install <java|maven|node>'));
+    if (!tool || !INSTALLABLE_TOOLS.has(tool)) {
+      console.log(pc.red('Usage: jwebgen --install <java|maven|tomcat|wildfly>'));
       process.exit(1);
     }
-    const code = await runInstallCli(tool);
+    const spin = spinner();
+    spin.start(`Installing ${tool}...`);
+    let code = 1;
+    try {
+      code = await runInstallCli(tool);
+    } finally {
+      spin.stop(code === 0 ? 'Done' : 'Failed');
+    }
     process.exit(typeof code === 'number' ? code : 1);
   }
   if (action === 'setup') {
-    const ok = (process.stdin.isTTY && process.stdout.isTTY)
-      ? await runSetupAssistant({
+    let ok = false;
+    if (process.stdin.isTTY && process.stdout.isTTY) {
+      try {
+        ok = await runSetupAssistant({
           dryRun: flags.dryRun,
           verbose: flags.verbose,
           confirmPrompt: async ({ message, initialValue }) => {
@@ -315,20 +325,18 @@ async function runCli() {
             return Boolean(answer);
           },
           selectPrompt: async ({ message, options }) => {
-            const answer = await select({
-              message,
-              options: [
-                { value: SKIP_ACTION, label: 'None' },
-                ...options.map((opt) => ({ value: opt, label: opt }))
-              ]
-            });
+            const normalized = (options || []).map((opt) =>
+              opt && typeof opt === 'object' && 'value' in opt && 'label' in opt
+                ? { value: opt.value, label: String(opt.label) }
+                : { value: opt, label: String(opt) }
+            );
+            const answer = await select({ message, options: normalized });
             if (isCancel(answer)) return CANCEL_STEP;
             return answer;
           },
           onCommandStart: ({ key }) => {
             const s = spinner();
             s.start(`Installing ${key}...`);
-            // store on closure via global temp
             runCli.__setupSpinner = s;
           },
           onCommandEnd: ({ result }) => {
@@ -338,8 +346,19 @@ async function runCli() {
             if (result?.status === 0) s.stop('Done');
             else s.stop('Failed');
           }
-        })
-      : runSetupCheck({ dryRun: flags.dryRun });
+        });
+      } catch (err) {
+        if (err instanceof SetupCancelledError) {
+          console.log(pc.yellow('Setup cancelled.'));
+          process.exit(typeof err.exitCode === 'number' ? err.exitCode : 130);
+        }
+        console.error(pc.red('Setup stopped due to an unexpected error.'));
+        if (flags.verbose && err?.message) console.error(pc.yellow(String(err.message)));
+        process.exit(1);
+      }
+    } else {
+      ok = runSetupCheck({ dryRun: flags.dryRun });
+    }
     if (!ok) process.exit(1);
     return;
   }

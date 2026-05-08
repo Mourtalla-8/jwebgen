@@ -92,7 +92,7 @@ test('isLikelyLegacySubcommand detects old subcommand tokens', () => {
 test('formatFlagsHelp includes lifecycle commands for setup/update/uninstall', () => {
   const help = formatFlagsHelp({ appName: 'jwebgen' });
   assert.match(help, /--setup \[--dry-run\]/);
-  assert.match(help, /--install <java\|maven\|node>/);
+  assert.match(help, /--install <java\|maven\|tomcat\|wildfly>/);
   assert.match(help, /--update/);
   assert.match(help, /--uninstall/);
   assert.match(help, /--version, -V, -v/);

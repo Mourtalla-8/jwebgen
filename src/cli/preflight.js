@@ -3,6 +3,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { detectJavaCompiler, evaluateJavaCompatibility, installHint, which } from '../project/inputUtils.js';
+import { resolveTomcatHome, resolveWildflyPaths, validateWildflyDeploymentsPath } from '../project/serverPaths.js';
 import { runWindowsMavenPortableInstall } from '../project/windowsSetupInstall.js';
 import { filterInstallMethods, getInstallMethodsForKey, installCliLine } from './installMatrix.js';
 
@@ -22,8 +23,13 @@ const FAILURE_HINTS = {
     darwin: 'Retry with Homebrew, then open a new terminal and re-run jwebgen --setup --dry-run.',
     default: 'Retry with your package manager command, then re-run jwebgen --setup --dry-run.'
   },
-  node: {
-    win32: 'Retry with winget as Administrator, then open a new session and run jwebgen --setup --dry-run.',
+  tomcat: {
+    win32: 'Retry with winget as Administrator if needed, then open a new session and re-run jwebgen --setup --dry-run.',
+    darwin: 'Retry with Homebrew, then open a new terminal and re-run jwebgen --setup --dry-run.',
+    default: 'Retry with your package manager command, then re-run jwebgen --setup --dry-run.'
+  },
+  wildfly: {
+    win32: 'Retry with winget as Administrator if needed, then open a new session and re-run jwebgen --setup --dry-run.',
     darwin: 'Retry with Homebrew, then open a new terminal and re-run jwebgen --setup --dry-run.',
     default: 'Retry with your package manager command, then re-run jwebgen --setup --dry-run.'
   }
@@ -36,7 +42,7 @@ Reopen your terminal or app session, then run:
 or:
 - jwebgen --setup --dry-run`;
 
-class SetupCancelledError extends Error {
+export class SetupCancelledError extends Error {
   constructor(message = 'Setup cancelled.') {
     super(message);
     this.name = 'SetupCancelledError';
@@ -52,30 +58,45 @@ function hasCommand(binary) {
 }
 
 function getActionRequirements(action) {
-  if (action === 'create') return ['node', 'java', 'maven'];
+  if (action === 'create') return ['java', 'maven'];
   if (action === 'build') return ['java', 'maven'];
-  if (action === 'deploy' || action === 'dev' || action === 'servlet' || action === 'jsp') return ['node', 'java', 'maven'];
+  if (action === 'deploy' || action === 'dev' || action === 'servlet' || action === 'jsp') return ['java', 'maven'];
   return [];
 }
 
+function checkTomcatRequirement(platform = process.platform) {
+  const home = resolveTomcatHome({ platform });
+  const ok = Boolean(
+    home && existsSync(home) && existsSync(path.join(home, 'webapps'))
+  );
+  return {
+    key: 'tomcat',
+    ok,
+    display: ok ? 'Tomcat available' : 'not installed',
+    hint: ok ? '' : installHint('tomcat')
+  };
+}
+
+function checkWildflyRequirement(platform = process.platform) {
+  const { wildflyHome, deployments } = resolveWildflyPaths({ platform });
+  const depValidation = deployments ? validateWildflyDeploymentsPath(deployments) : { ok: false };
+  const depPath = depValidation.ok ? depValidation.resolved : '';
+  const depOk = Boolean(depValidation.ok && depPath && existsSync(depPath));
+  const homeOk = !wildflyHome || existsSync(wildflyHome);
+  const ok = depOk && homeOk && Boolean(deployments);
+  return {
+    key: 'wildfly',
+    ok,
+    display: ok ? 'WildFly available' : 'not installed',
+    hint: ok ? '' : installHint('wildfly')
+  };
+}
+
 export function checkRequirement(req) {
-  if (req === 'node') {
-    const version = process.version;
-    const [majorRaw, minorRaw] = version.replace(/^v/, '').split('.');
-    const major = Number.parseInt(majorRaw, 10);
-    const minor = Number.parseInt(minorRaw, 10);
-    const ok = Number.isInteger(major) && Number.isInteger(minor) && (major > 20 || (major === 20 && minor >= 12));
-    return {
-      key: 'node',
-      ok,
-      display: ok ? `Node ${version}` : `Node ${version} (requires >= 20.12)`,
-      hint: ok ? '' : 'Install Node.js 20.12+ from https://nodejs.org/'
-    };
-  }
   if (req === 'java') {
     const java = detectJavaCompiler();
     if (!java.present) {
-      return { key: 'java', ok: false, display: 'javac not found', hint: installHint('java') };
+      return { key: 'java', ok: false, display: 'not installed', hint: installHint('java') };
     }
     const compatibility = evaluateJavaCompatibility(java.majorRelease, 11);
     return {
@@ -89,13 +110,18 @@ export function checkRequirement(req) {
     const hasMvnCmd = hasCommand('mvn.cmd');
     const hasMvn = hasCommand('mvn');
     const ok = hasMvnCmd || hasMvn;
-    const bin = hasMvnCmd ? 'mvn.cmd' : hasMvn ? 'mvn' : process.platform === 'win32' ? 'mvn.cmd' : 'mvn';
     return {
       key: 'maven',
       ok,
-      display: ok ? `${bin} detected` : `${bin} not found`,
+      display: ok ? 'Maven available' : 'not installed',
       hint: ok ? '' : installHint('maven')
     };
+  }
+  if (req === 'tomcat') {
+    return checkTomcatRequirement();
+  }
+  if (req === 'wildfly') {
+    return checkWildflyRequirement();
   }
   return { key: req, ok: true, display: `${req} ok`, hint: '' };
 }
@@ -184,7 +210,12 @@ function pathSnippets(npmGlobalBin, platform = process.platform) {
 }
 
 export function collectSetupState() {
-  const checks = [checkRequirement('node'), checkRequirement('java'), checkRequirement('maven')];
+  const checks = [
+    checkRequirement('java'),
+    checkRequirement('maven'),
+    checkRequirement('tomcat'),
+    checkRequirement('wildfly')
+  ];
   const optional = [
     { key: 'bash', ok: hasCommand(process.platform === 'win32' ? 'bash.exe' : 'bash') },
     { key: 'curl', ok: hasCommand(process.platform === 'win32' ? 'curl.exe' : 'curl') }
@@ -224,7 +255,13 @@ export function printSetupState(state, { includeFixHints = false, includeNpmPath
   console.log(pc.cyan(`Platform: ${process.platform}`));
   for (const item of state.checks) {
     const marker = item.ok ? pc.green('OK') : pc.red('MISSING');
-    console.log(`${marker} ${item.key}: ${item.display}`);
+    if (!item.ok) {
+      console.log(`${marker} ${item.key}`);
+    } else if (item.key === 'java' && item.display) {
+      console.log(`${marker} ${item.key}: ${item.display}`);
+    } else {
+      console.log(`${marker} ${item.key}`);
+    }
     if (includeFixHints && !item.ok && item.hint) console.log(pc.yellow(`  Fix: ${item.hint}`));
   }
   if (includeNpmPathNote && state.npmPath.hasShimButNotOnPath && state.npmPath.bin) {
@@ -277,6 +314,19 @@ function tailLines(text, maxLines = 80, maxChars = 8000) {
   const lines = capped.split(/\r?\n/);
   const tail = lines.slice(-maxLines).join('\n');
   return tail.length > maxChars ? tail.slice(-maxChars) : tail;
+}
+
+/** Strip noisy PowerShell wrapper lines from captured install output (user-facing). */
+function sanitizeInstallOutputLog(text) {
+  const lines = String(text || '')
+    .split(/\r?\n/)
+    .filter((line) => {
+      const l = line.trim();
+      if (/^Processing\s+-File\b/i.test(l)) return false;
+      if (/^Illegal characters in path\.?$/i.test(l)) return false;
+      return true;
+    });
+  return lines.join('\n').trim();
 }
 
 export async function runCommand(command, { timeoutMs = 10 * 60 * 1000 } = {}) {
@@ -347,7 +397,7 @@ export async function runCommand(command, { timeoutMs = 10 * 60 * 1000 } = {}) {
 
 async function executeInstallMethod(method, runCommandImpl) {
   if (method.internalId === 'maven-windows-portable') {
-    return runWindowsMavenPortableInstall(runCommandImpl);
+    return runWindowsMavenPortableInstall();
   }
   if (method.shellCommand) {
     return runCommandImpl(method.shellCommand);
@@ -387,7 +437,9 @@ export async function runInstallTool(tool, { runCommandImpl = runCommand } = {})
   if (result.status !== 0) {
     console.error(pc.red(`Install failed for ${tool}.`));
     if (result.stderr || result.stdout) {
-      const tail = tailLines([result.stdout, result.stderr].filter(Boolean).join('\n'));
+      const raw = [result.stdout, result.stderr].filter(Boolean).join('\n');
+      const cleaned = sanitizeInstallOutputLog(raw);
+      const tail = tailLines(cleaned);
       if (tail) console.error(tail);
     }
     console.error(pc.yellow(buildInstallFailureHint(tool, platform)));
@@ -423,7 +475,10 @@ export async function runSetupAssistant({
 
   if (dryRun) {
     printDryRunInstallPreviews(actions);
-    return true;
+    const failedChecks = state.checks.filter((c) => !c.ok);
+    if (failedChecks.length === 0) return true;
+    const installableKeys = new Set(actions.filter((a) => a.type === 'install').map((a) => a.key));
+    return failedChecks.every((c) => installableKeys.has(c.key));
   }
 
   console.log(pc.cyan('\nGuided setup actions:'));
@@ -511,14 +566,14 @@ export async function runSetupAssistant({
         console.log(pc.red(`Command failed for ${action.key} (exit ${result.status}).`));
       }
       if (!verbose) {
-        const combined = [result.stdout, result.stderr].filter(Boolean).join('\n').trim();
+        const combined = sanitizeInstallOutputLog([result.stdout, result.stderr].filter(Boolean).join('\n').trim());
         const excerpt = tailLines(combined);
         if (excerpt) {
           console.log(pc.yellow('\nLast output (tail):'));
           console.log(excerpt);
         }
       } else {
-        const combined = [result.stdout, result.stderr].filter(Boolean).join('\n').trim();
+        const combined = sanitizeInstallOutputLog([result.stdout, result.stderr].filter(Boolean).join('\n').trim());
         if (combined) console.log(combined);
       }
       console.log(pc.yellow(`Remediation: ${buildInstallFailureHint(action.key)}`));
@@ -533,7 +588,7 @@ export async function runSetupAssistant({
     console.log(pc.yellow(`\n${SESSION_HINT}`));
   }
   if (failed.length > 0) {
-    const summary = failed.map((c) => `${c.key}: ${c.display}`).join('; ');
+    const summary = failed.map((c) => c.key).join(', ');
     console.log(pc.red(`Setup finished with missing or incompatible tools: ${summary}`));
     return false;
   }
@@ -550,7 +605,7 @@ export function enforceActionPreflight(action) {
   if (failed.length === 0) return;
   console.error(pc.red(`Cannot run "${action}" because required dependencies are missing or incompatible.`));
   for (const item of failed) {
-    console.error(pc.yellow(`- ${item.key}: ${item.display}`));
+    console.error(pc.yellow(`- ${item.key}`));
     if (item.hint) console.error(pc.yellow(`  Fix: ${item.hint}`));
   }
   process.exit(1);

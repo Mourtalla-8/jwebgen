@@ -8,7 +8,6 @@ const SKIP_ACTION = '__JWEBGEN_SKIP_ACTION__';
 test('computeSuggestedActions suggests install actions for missing dependencies', () => {
   const state = {
     checks: [
-      { key: 'node', ok: true },
       { key: 'java', ok: false },
       { key: 'maven', ok: false }
     ],
@@ -25,7 +24,6 @@ test('computeSuggestedActions suggests install actions for missing dependencies'
 test('computeSuggestedActions filters Linux install methods to detected package managers', () => {
   const state = {
     checks: [
-      { key: 'node', ok: true },
       { key: 'java', ok: false },
       { key: 'maven', ok: false }
     ],
@@ -44,7 +42,6 @@ test('computeSuggestedActions filters Linux install methods to detected package 
 test('computeSuggestedActions returns no install actions when no package manager is detected', () => {
   const state = {
     checks: [
-      { key: 'node', ok: true },
       { key: 'java', ok: false },
       { key: 'maven', ok: false }
     ],
@@ -60,9 +57,10 @@ test('computeSuggestedActions returns no install actions when no package manager
 test('computeSuggestedActions suggests PATH guidance when npm global bin is missing from PATH', () => {
   const state = {
     checks: [
-      { key: 'node', ok: true },
       { key: 'java', ok: true },
-      { key: 'maven', ok: true }
+      { key: 'maven', ok: true },
+      { key: 'tomcat', ok: true },
+      { key: 'wildfly', ok: true }
     ],
     optional: [],
     npmPath: {
@@ -89,9 +87,10 @@ test('computeSuggestedActions suggests PATH guidance when npm global bin is miss
 test('computeSuggestedActions returns empty list when everything is ready', () => {
   const state = {
     checks: [
-      { key: 'node', ok: true },
       { key: 'java', ok: true },
-      { key: 'maven', ok: true }
+      { key: 'maven', ok: true },
+      { key: 'tomcat', ok: true },
+      { key: 'wildfly', ok: true }
     ],
     optional: [],
     npmPath: {
@@ -111,9 +110,10 @@ test('computeSuggestedActions returns empty list when everything is ready', () =
 test('computeSuggestedActions on win32 suggests embedded Maven when maven is missing', () => {
   const state = {
     checks: [
-      { key: 'node', ok: true },
       { key: 'java', ok: true },
-      { key: 'maven', ok: false }
+      { key: 'maven', ok: false },
+      { key: 'tomcat', ok: true },
+      { key: 'wildfly', ok: true }
     ],
     optional: [],
     npmPath: {
@@ -141,8 +141,8 @@ test('buildInstallFailureHint gives Windows-specific remediation for maven', () 
   assert.match(hint, /--setup --dry-run/);
 });
 
-test('buildInstallFailureHint gives generic Linux remediation for node', () => {
-  const hint = buildInstallFailureHint('node', 'linux');
+test('buildInstallFailureHint gives generic Linux remediation for wildfly', () => {
+  const hint = buildInstallFailureHint('wildfly', 'linux');
   assert.match(hint, /package manager/i);
   assert.match(hint, /--setup --dry-run/);
 });
@@ -176,18 +176,18 @@ test('runSetupAssistant classifies timeout failures and prints remediation hint'
     await runSetupAssistant({
       confirmPrompt: async () => true,
       collectSetupStateImpl: () => ({
-        checks: [{ key: 'node', ok: false, display: 'missing node', hint: '' }],
+        checks: [{ key: 'tomcat', ok: false, display: 'missing', hint: '' }],
         optional: [],
         npmPath: mockNpm
       }),
-      computeSuggestedActionsImpl: () => singleInstallAction('node', 'sleep 9999'),
+      computeSuggestedActionsImpl: () => singleInstallAction('tomcat', 'sleep 9999'),
       runCommandImpl: () => ({ status: 1, timedOut: true, error: null, signal: null })
     });
   } finally {
     console.log = originalLog;
   }
   const output = logs.join('\n');
-  assert.match(output, /timed out for node/i);
+  assert.match(output, /timed out for tomcat/i);
   assert.match(output, /Remediation:/);
   assert.match(output, /--setup --dry-run/);
 });

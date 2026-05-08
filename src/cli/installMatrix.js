@@ -127,42 +127,60 @@ export function getInstallMethodsForKey(key, platform) {
     return out;
   }
 
-  if (key === 'node') {
+  if (key === 'tomcat') {
     if (platform === 'win32') {
-      const shellCommand = 'winget install OpenJS.NodeJS.LTS';
+      const shellCommand = 'winget install Apache.Tomcat9';
       out.push({
-        id: 'node-win-winget',
-        label: 'winget (Node.js LTS)',
+        id: 'tomcat-win-winget',
+        label: 'winget (Apache Tomcat)',
         shellCommand,
         previewLine: previewForShell(shellCommand),
         internalId: null
       });
     } else if (platform === 'darwin') {
-      const shellCommand = 'brew install node@22';
+      const shellCommand = 'brew install tomcat';
       out.push({
-        id: 'node-darwin-brew',
-        label: 'Homebrew (Node 22)',
+        id: 'tomcat-darwin-brew',
+        label: 'Homebrew (Tomcat)',
         shellCommand,
         previewLine: previewForShell(shellCommand),
         internalId: null
       });
     } else {
       const rows = [
-        {
-          id: 'node-linux-nodesource',
-          label: 'NodeSource + apt (Node 20)',
-          shellCommand:
-            'curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && sudo apt-get install -y nodejs'
-        },
-        { id: 'node-linux-dnf', label: 'dnf (nodejs)', shellCommand: 'sudo dnf install -y nodejs npm' },
-        { id: 'node-linux-pacman', label: 'pacman (nodejs)', shellCommand: 'sudo pacman -S --noconfirm nodejs npm' }
+        { id: 'tomcat-linux-apt', label: 'apt (tomcat10)', shellCommand: 'sudo apt install -y tomcat10' },
+        { id: 'tomcat-linux-dnf', label: 'dnf (tomcat)', shellCommand: 'sudo dnf install -y tomcat' },
+        { id: 'tomcat-linux-pacman', label: 'pacman (tomcat10)', shellCommand: 'sudo pacman -S --noconfirm tomcat10' }
       ];
       for (const r of rows) {
-        out.push({
-          ...r,
-          previewLine: previewForShell(r.shellCommand),
-          internalId: null
-        });
+        out.push({ ...r, previewLine: previewForShell(r.shellCommand), internalId: null });
+      }
+    }
+    return out;
+  }
+
+  if (key === 'wildfly') {
+    if (platform === 'win32') {
+      // No stable built-in Windows package mapping for WildFly yet.
+      return out;
+    }
+    if (platform === 'darwin') {
+      const shellCommand = 'brew install wildfly-as';
+      out.push({
+        id: 'wildfly-darwin-brew',
+        label: 'Homebrew (WildFly)',
+        shellCommand,
+        previewLine: previewForShell(shellCommand),
+        internalId: null
+      });
+    } else {
+      const rows = [
+        { id: 'wildfly-linux-apt', label: 'apt (wildfly)', shellCommand: 'sudo apt install -y wildfly' },
+        { id: 'wildfly-linux-dnf', label: 'dnf (wildfly)', shellCommand: 'sudo dnf install -y wildfly' },
+        { id: 'wildfly-linux-pacman', label: 'pacman (wildfly)', shellCommand: 'sudo pacman -S --noconfirm wildfly' }
+      ];
+      for (const r of rows) {
+        out.push({ ...r, previewLine: previewForShell(r.shellCommand), internalId: null });
       }
     }
     return out;
