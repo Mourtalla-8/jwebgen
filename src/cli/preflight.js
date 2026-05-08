@@ -327,7 +327,8 @@ function printSetupState(state) {
   }
 }
 
-export function runSetupCheck({ dryRun = false } = {}) {
+/** Non-interactive setup diagnostics; `dryRun` is accepted for CLI parity (no extra logging). */
+export function runSetupCheck({ dryRun: _dryRun = false } = {}) {
   const state = collectSetupState();
   printSetupState(state);
   const failed = state.checks.filter((c) => !c.ok);
