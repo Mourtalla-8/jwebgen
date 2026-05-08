@@ -41,8 +41,13 @@ run(jwebgenCommand, ['--help'], { cwd: workDir, env });
 console.log('[global-smoke] jwebgen --setup --dry-run');
 run(jwebgenCommand, ['--setup', '--dry-run'], { cwd: workDir, env });
 
-console.log('[global-smoke] jwebgen --install maven');
-run(jwebgenCommand, ['--install', 'maven'], { cwd: workDir, env });
+const shouldRunHostInstall = process.env.CI === 'true' || process.env.RUN_GLOBAL_SMOKE === '1';
+if (shouldRunHostInstall) {
+  console.log('[global-smoke] jwebgen --install maven');
+  run(jwebgenCommand, ['--install', 'maven'], { cwd: workDir, env });
+} else {
+  console.log('[global-smoke] skipped jwebgen --install maven (set RUN_GLOBAL_SMOKE=1 to enable locally)');
+}
 
 console.log('[global-smoke] jwebgen --new globalapp --yes');
 run(jwebgenCommand, ['--new', 'globalapp', '--yes'], { cwd: workDir, env });

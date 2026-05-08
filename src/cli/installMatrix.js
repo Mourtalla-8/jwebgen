@@ -30,15 +30,15 @@ function shellInstallAllowed(shellCommand, platform, hasCommandImpl) {
     return Boolean(pm.winget) && /\bwinget\b/i.test(c);
   }
   if (platform === 'darwin') return Boolean(pm.brew) && /\bbrew\b/i.test(c);
-  if (/\bpacman\b/i.test(c)) return Boolean(pm.pacman);
-  if (/\bdnf\b/i.test(c)) return Boolean(pm.dnf);
-  if (/\bapt-get\b/i.test(c) || /\bapt\b/i.test(c)) return Boolean(pm.apt);
   if (lower.includes('curl ') || lower.includes('curl\t') || lower.includes('curl -')) {
     if (!curlOk) return false;
   }
   if (lower.includes('|') && lower.includes('bash')) {
     if (!bashOk) return false;
   }
+  if (/\bpacman\b/i.test(c)) return Boolean(pm.pacman);
+  if (/\bdnf\b/i.test(c)) return Boolean(pm.dnf);
+  if (/\bapt-get\b/i.test(c) || /\bapt\b/i.test(c)) return Boolean(pm.apt);
   return true;
 }
 
