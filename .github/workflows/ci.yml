@@ -56,6 +56,10 @@ jobs:
         if: runner.os != 'Linux'
         run: node bin/jwebgen.js --setup
 
+      - name: CLI install maven (idempotent when already present)
+        if: runner.os != 'Linux'
+        run: node bin/jwebgen.js --install maven
+
       - name: Golden fixtures (macOS/Windows)
         if: runner.os != 'Linux'
         run: bash ./tests/golden-check.sh
