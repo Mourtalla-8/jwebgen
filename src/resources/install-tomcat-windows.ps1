@@ -57,7 +57,7 @@ try {
     try {
       Remove-Item -LiteralPath $backupDir -Recurse -Force -ErrorAction Stop
     } catch {
-      Write-Warning "Tomcat backup cleanup failed at $backupDir: $($_.Exception.Message)"
+      Write-Warning "Tomcat backup cleanup failed at ${backupDir}: $($_.Exception.Message)"
     }
   }
 } finally {
