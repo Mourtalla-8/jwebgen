@@ -1,11 +1,21 @@
 $ErrorActionPreference = 'Stop'
 $v = '3.9.9'
-$url = "https://dlcdn.apache.org/maven/maven-3/$v/binaries/apache-maven-$v-bin.zip"
-$shaUrl = "$url.sha512"
+$zipName = "apache-maven-$v-bin.zip"
+$primaryUrl = "https://downloads.apache.org/maven/maven-3/$v/binaries/$zipName"
+$fallbackUrl = "https://archive.apache.org/dist/maven/maven-3/$v/binaries/$zipName"
+$url = $primaryUrl
+$shaUrl = "$primaryUrl.sha512"
+$fallbackShaUrl = "$fallbackUrl.sha512"
 $zip = Join-Path $env:TEMP "apache-maven-$v-bin.zip"
 $destRoot = Join-Path $env:LOCALAPPDATA 'Programs'
 New-Item -ItemType Directory -Force -Path $destRoot | Out-Null
-Invoke-WebRequest -Uri $url -OutFile $zip
+try {
+  Invoke-WebRequest -Uri $primaryUrl -OutFile $zip -UseBasicParsing
+} catch {
+  $url = $fallbackUrl
+  $shaUrl = $fallbackShaUrl
+  Invoke-WebRequest -Uri $fallbackUrl -OutFile $zip -UseBasicParsing
+}
 try {
   $shaRaw = (Invoke-WebRequest -Uri $shaUrl -UseBasicParsing).Content
   $expected = ($shaRaw -split '\s+')[0].Trim().ToLowerInvariant()

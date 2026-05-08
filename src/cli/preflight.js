@@ -4,7 +4,11 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { detectJavaCompiler, evaluateJavaCompatibility, installHint, which } from '../project/inputUtils.js';
 import { resolveTomcatHome, resolveWildflyPaths, validateWildflyDeploymentsPath } from '../project/serverPaths.js';
-import { runWindowsMavenPortableInstall } from '../project/windowsSetupInstall.js';
+import {
+  runWindowsMavenPortableInstall,
+  runWindowsTomcatPortableInstall,
+  runWindowsWildflyPortableInstall
+} from '../project/windowsSetupInstall.js';
 import { filterInstallMethods, getInstallMethodsForKey, installCliLine } from './installMatrix.js';
 
 export const CANCEL_STEP = '__JWEBGEN_CANCEL_STEP__';
@@ -24,12 +28,14 @@ const FAILURE_HINTS = {
     default: 'Retry with your package manager command, then re-run jwebgen --setup --dry-run.'
   },
   tomcat: {
-    win32: 'Retry with winget as Administrator if needed, then open a new session and re-run jwebgen --setup --dry-run.',
+    win32:
+      'Retry with the guided installer, then open a new session and re-run jwebgen --setup --dry-run.',
     darwin: 'Retry with Homebrew, then open a new terminal and re-run jwebgen --setup --dry-run.',
     default: 'Retry with your package manager command, then re-run jwebgen --setup --dry-run.'
   },
   wildfly: {
-    win32: 'Retry with winget as Administrator if needed, then open a new session and re-run jwebgen --setup --dry-run.',
+    win32:
+      'Retry with the guided installer, then open a new session and re-run jwebgen --setup --dry-run.',
     darwin: 'Retry with Homebrew, then open a new terminal and re-run jwebgen --setup --dry-run.',
     default: 'Retry with your package manager command, then re-run jwebgen --setup --dry-run.'
   }
@@ -228,8 +234,7 @@ export function computeSuggestedActions(state, platform = process.platform, { ha
   const actions = [];
   for (const item of state.checks) {
     if (item.ok) continue;
-    const raw = getInstallMethodsForKey(item.key, platform);
-    const installMethods = filterInstallMethods(raw, platform, hasCommandImpl);
+    const installMethods = resolveInstallMethods(item.key, platform, hasCommandImpl);
     if (installMethods.length === 0) continue;
     actions.push({
       type: 'install',
@@ -247,6 +252,11 @@ export function computeSuggestedActions(state, platform = process.platform, { ha
     });
   }
   return actions;
+}
+
+export function resolveInstallMethods(key, platform = process.platform, hasCommandImpl = hasCommand) {
+  const raw = getInstallMethodsForKey(key, platform);
+  return filterInstallMethods(raw, platform, hasCommandImpl);
 }
 
 /** @param {{ includeFixHints?: boolean, includeNpmPathNote?: boolean }} [opts] */
@@ -280,6 +290,7 @@ function printDryRunInstallPreviews(actions) {
   for (const action of installActions) {
     console.log(pc.cyan(`- Install ${action.key}`));
     for (const m of action.installMethods) {
+      if (m.label) console.log(`  Method: ${m.label}`);
       if (m.previewLine) console.log(`  ${m.previewLine}`);
     }
     console.log(`  ${installCliLine(action.key)}`);
@@ -399,6 +410,12 @@ async function executeInstallMethod(method, runCommandImpl) {
   if (method.internalId === 'maven-windows-portable') {
     return runWindowsMavenPortableInstall();
   }
+  if (method.internalId === 'tomcat-windows-portable') {
+    return runWindowsTomcatPortableInstall();
+  }
+  if (method.internalId === 'wildfly-windows-portable') {
+    return runWindowsWildflyPortableInstall();
+  }
   if (method.shellCommand) {
     return runCommandImpl(method.shellCommand);
   }
@@ -425,8 +442,7 @@ export async function runInstallTool(tool, { runCommandImpl = runCommand } = {})
       return 1;
     }
   }
-  const raw = getInstallMethodsForKey(tool, platform);
-  const methods = filterInstallMethods(raw, platform, hasCommand);
+  const methods = resolveInstallMethods(tool, platform, hasCommand);
   if (methods.length === 0) {
     console.error(pc.red(`No install method is available for ${tool} on this system.`));
     return 1;

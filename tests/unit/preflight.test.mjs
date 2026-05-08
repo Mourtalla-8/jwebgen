@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildInstallFailureHint, computeSuggestedActions, runSetupAssistant } from '../../src/cli/preflight.js';
+import {
+  buildInstallFailureHint,
+  computeSuggestedActions,
+  resolveInstallMethods,
+  runSetupAssistant
+} from '../../src/cli/preflight.js';
 
 const CANCEL_STEP = '__JWEBGEN_CANCEL_STEP__';
 const SKIP_ACTION = '__JWEBGEN_SKIP_ACTION__';
@@ -132,6 +137,47 @@ test('computeSuggestedActions on win32 suggests embedded Maven when maven is mis
   assert.equal(maven.installMethods.length, 1);
   assert.equal(maven.installMethods[0].internalId, 'maven-windows-portable');
   assert.equal(maven.installMethods[0].shellCommand, null);
+});
+
+test('computeSuggestedActions on win32 suggests embedded Tomcat and WildFly installers', () => {
+  const state = {
+    checks: [
+      { key: 'java', ok: true },
+      { key: 'maven', ok: true },
+      { key: 'tomcat', ok: false },
+      { key: 'wildfly', ok: false }
+    ],
+    optional: [],
+    npmPath: {
+      hasBin: true,
+      inPath: true,
+      jwebgenReachable: true,
+      hasShimButNotOnPath: false,
+      bin: '/tmp/npm-global/bin'
+    }
+  };
+  const actions = computeSuggestedActions(state, 'win32', {
+    hasCommandImpl: (bin) => bin === 'powershell' || bin === 'powershell.exe'
+  });
+  const tomcat = actions.find((a) => a.type === 'install' && a.key === 'tomcat');
+  const wildfly = actions.find((a) => a.type === 'install' && a.key === 'wildfly');
+  assert.ok(tomcat);
+  assert.ok(wildfly);
+  assert.equal(tomcat.installMethods[0].internalId, 'tomcat-windows-portable');
+  assert.equal(wildfly.installMethods[0].internalId, 'wildfly-windows-portable');
+});
+
+test('resolveInstallMethods returns same Windows methods as setup actions', () => {
+  const state = {
+    checks: [{ key: 'tomcat', ok: false }],
+    optional: [],
+    npmPath: { hasShimButNotOnPath: false, hasShimInBin: false, inPath: false, resolvedOutsideBin: false }
+  };
+  const hasCommandImpl = (bin) => bin === 'powershell' || bin === 'powershell.exe';
+  const actions = computeSuggestedActions(state, 'win32', { hasCommandImpl });
+  const fromActions = actions.find((a) => a.key === 'tomcat')?.installMethods || [];
+  const direct = resolveInstallMethods('tomcat', 'win32', hasCommandImpl);
+  assert.deepEqual(direct, fromActions);
 });
 
 test('buildInstallFailureHint gives Windows-specific remediation for maven', () => {
@@ -313,6 +359,38 @@ test('runSetupAssistant dry-run prints jwebgen --install line without EncodedCom
   const output = logs.join('\n');
   assert.match(output, /jwebgen --install java/);
   assert.doesNotMatch(output, /EncodedCommand/i);
+});
+
+test('runSetupAssistant dry-run prints method labels for install options', async () => {
+  const logs = [];
+  const originalLog = console.log;
+  console.log = (...args) => logs.push(args.join(' '));
+  try {
+    await runSetupAssistant({
+      dryRun: true,
+      confirmPrompt: async () => true,
+      collectSetupStateImpl: () => ({
+        checks: [{ key: 'tomcat', ok: false, display: 'not installed', hint: '' }],
+        optional: [],
+        npmPath: mockNpm
+      }),
+      computeSuggestedActionsImpl: () => [
+        {
+          type: 'install',
+          key: 'tomcat',
+          title: 'Install tomcat',
+          installMethods: [
+            { id: 'm1', label: 'Tomcat from apache.org', shellCommand: null, previewLine: null, internalId: 'tomcat-windows-portable' }
+          ]
+        }
+      ]
+    });
+  } finally {
+    console.log = originalLog;
+  }
+  const output = logs.join('\n');
+  assert.match(output, /Method: Tomcat from apache\.org/);
+  assert.match(output, /jwebgen --install tomcat/);
 });
 
 test('runSetupAssistant shows only tail on failure when not verbose', async () => {
