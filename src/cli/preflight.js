@@ -323,7 +323,7 @@ function sanitizeInstallOutputLog(text) {
     .filter((line) => {
       const l = line.trim();
       if (/^Processing\s+-File\b/i.test(l)) return false;
-      if (/Illegal characters in path/i.test(l)) return false;
+      if (/^Illegal characters in path\.?$/i.test(l)) return false;
       return true;
     });
   return lines.join('\n').trim();
@@ -475,7 +475,10 @@ export async function runSetupAssistant({
 
   if (dryRun) {
     printDryRunInstallPreviews(actions);
-    return true;
+    const failedChecks = state.checks.filter((c) => !c.ok);
+    if (failedChecks.length === 0) return true;
+    const installableKeys = new Set(actions.filter((a) => a.type === 'install').map((a) => a.key));
+    return failedChecks.every((c) => installableKeys.has(c.key));
   }
 
   console.log(pc.cyan('\nGuided setup actions:'));

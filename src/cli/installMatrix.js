@@ -129,7 +129,7 @@ export function getInstallMethodsForKey(key, platform) {
 
   if (key === 'tomcat') {
     if (platform === 'win32') {
-      const shellCommand = 'winget install Apache.Tomcat';
+      const shellCommand = 'winget install Apache.Tomcat9';
       out.push({
         id: 'tomcat-win-winget',
         label: 'winget (Apache Tomcat)',
@@ -160,16 +160,7 @@ export function getInstallMethodsForKey(key, platform) {
   }
 
   if (key === 'wildfly') {
-    if (platform === 'win32') {
-      const shellCommand = 'winget install WildFly.WildFly';
-      out.push({
-        id: 'wildfly-win-winget',
-        label: 'winget (WildFly)',
-        shellCommand,
-        previewLine: previewForShell(shellCommand),
-        internalId: null
-      });
-    } else if (platform === 'darwin') {
+    if (platform === 'darwin') {
       const shellCommand = 'brew install wildfly-as';
       out.push({
         id: 'wildfly-darwin-brew',
