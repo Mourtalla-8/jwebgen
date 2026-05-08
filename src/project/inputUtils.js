@@ -1,6 +1,7 @@
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { windowsMavenPortableInstallShellCommand } from './windowsSetupInstall.js';
 
 export function slugifyArtifactId(input) {
   return String(input)
@@ -109,12 +110,14 @@ export function installHint(tool) {
   const platform = os.platform();
   if (tool === 'java') {
     if (platform === 'darwin') return 'brew install --cask temurin';
-    if (platform === 'win32') return 'winget install EclipseAdoptium.Temurin.17.JDK';
-    return 'Linux: pacman -S jdk-openjdk | apt install default-jdk | dnf install java-17-openjdk-devel';
+    if (platform === 'win32') {
+      return 'winget install EclipseAdoptium.Temurin.21.JDK (or winget install Microsoft.OpenJDK.21)';
+    }
+    return 'Linux: pacman -S jdk-openjdk | apt install default-jdk | dnf install java-21-openjdk-devel';
   }
   if (tool === 'maven') {
     if (platform === 'darwin') return 'brew install maven';
-    if (platform === 'win32') return 'winget install Apache.Maven';
+    if (platform === 'win32') return windowsMavenPortableInstallShellCommand();
     return 'Linux: pacman -S maven | apt install maven | dnf install maven';
   }
   return 'Install it from the official source.';

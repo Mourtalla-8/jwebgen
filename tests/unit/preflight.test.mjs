@@ -106,10 +106,36 @@ test('computeSuggestedActions returns empty list when everything is ready', () =
   assert.deepEqual(actions, []);
 });
 
+test('computeSuggestedActions on win32 suggests portable Maven when maven is missing', () => {
+  const state = {
+    checks: [
+      { key: 'node', ok: true },
+      { key: 'java', ok: true },
+      { key: 'maven', ok: false }
+    ],
+    optional: [],
+    npmPath: {
+      hasBin: true,
+      inPath: true,
+      jwebgenReachable: true,
+      hasShimButNotOnPath: false,
+      bin: '/tmp/npm-global/bin'
+    }
+  };
+  const actions = computeSuggestedActions(state, 'win32', {
+    hasCommandImpl: (bin) => bin === 'powershell' || bin === 'powershell.exe'
+  });
+  const maven = actions.find((a) => a.type === 'install' && a.key === 'maven');
+  assert.ok(maven);
+  assert.match(maven.commands[0], /^powershell(\.exe)?\s/i);
+  assert.match(maven.commands[0], /-EncodedCommand\s+\S+/);
+});
+
 test('buildInstallFailureHint gives Windows-specific remediation', () => {
   const hint = buildInstallFailureHint('maven', 'win32');
-  assert.match(hint, /winget/i);
+  assert.match(hint, /terminal|VS Code/i);
   assert.match(hint, /mvn -version/);
+  assert.match(hint, /--setup --dry-run/);
 });
 
 test('buildInstallFailureHint gives generic Linux remediation', () => {
