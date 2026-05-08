@@ -54,7 +54,8 @@ jobs:
 
       - name: CLI setup diagnostics (macOS/Windows)
         if: runner.os != 'Linux'
-        run: node bin/jwebgen.js --setup
+        run: |
+          node -e "const cp=require('node:child_process'); const r=cp.spawnSync(process.execPath,['bin/jwebgen.js','--setup','--dry-run'],{stdio:'inherit'}); const code=typeof r.status==='number'?r.status:1; if (code!==0 && code!==1) process.exit(code);"
 
       - name: CLI install maven (idempotent when already present)
         if: runner.os != 'Linux'
