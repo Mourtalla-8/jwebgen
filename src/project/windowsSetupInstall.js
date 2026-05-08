@@ -1,10 +1,14 @@
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-/** Pinned Apache Maven binary release (matches embedded script). */
+/** Pinned Apache binary releases used by embedded scripts. */
 export const WINDOWS_MAVEN_PORTABLE_VERSION = '3.9.9';
+export const WINDOWS_TOMCAT_PORTABLE_VERSION = '10.1.39';
+export const WINDOWS_WILDFLY_PORTABLE_VERSION = '31.0.1.Final';
 
-const SCRIPT_URL = new URL('../resources/install-maven-windows.ps1', import.meta.url);
+const MAVEN_SCRIPT_URL = new URL('../resources/install-maven-windows.ps1', import.meta.url);
+const TOMCAT_SCRIPT_URL = new URL('../resources/install-tomcat-windows.ps1', import.meta.url);
+const WILDFLY_SCRIPT_URL = new URL('../resources/install-wildfly-windows.ps1', import.meta.url);
 
 const OUTPUT_CAP = 200_000;
 
@@ -15,17 +19,18 @@ function capText(input, cap = OUTPUT_CAP) {
 }
 
 export function getWindowsMavenPortableScriptPath() {
-  return fileURLToPath(SCRIPT_URL);
+  return fileURLToPath(MAVEN_SCRIPT_URL);
 }
 
-/**
- * Installs Maven on Windows via the embedded official-binary script.
- * Uses argv (no cmd.exe /c) so the script path is never mis-quoted.
- * @param {{ timeoutMs?: number }} [opts]
- * @returns {Promise<{ status: number, timedOut: boolean, error: Error | null, signal: string | null, stdout: string, stderr: string }>}
- */
-export async function runWindowsMavenPortableInstall({ timeoutMs = 10 * 60 * 1000 } = {}) {
-  const scriptPath = getWindowsMavenPortableScriptPath();
+export function getWindowsTomcatPortableScriptPath() {
+  return fileURLToPath(TOMCAT_SCRIPT_URL);
+}
+
+export function getWindowsWildflyPortableScriptPath() {
+  return fileURLToPath(WILDFLY_SCRIPT_URL);
+}
+
+async function runPowerShellScript(scriptPath, { timeoutMs = 10 * 60 * 1000 } = {}) {
   const exe = 'powershell.exe';
   const args = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath];
 
@@ -88,4 +93,31 @@ export async function runWindowsMavenPortableInstall({ timeoutMs = 10 * 60 * 100
       stderr
     };
   }
+}
+
+/**
+ * Installs Maven on Windows via the embedded official-binary script.
+ * @param {{ timeoutMs?: number }} [opts]
+ * @returns {Promise<{ status: number, timedOut: boolean, error: Error | null, signal: string | null, stdout: string, stderr: string }>}
+ */
+export async function runWindowsMavenPortableInstall({ timeoutMs = 10 * 60 * 1000 } = {}) {
+  return runPowerShellScript(getWindowsMavenPortableScriptPath(), { timeoutMs });
+}
+
+/**
+ * Installs Tomcat on Windows via an embedded official-binary script.
+ * @param {{ timeoutMs?: number }} [opts]
+ * @returns {Promise<{ status: number, timedOut: boolean, error: Error | null, signal: string | null, stdout: string, stderr: string }>}
+ */
+export async function runWindowsTomcatPortableInstall({ timeoutMs = 10 * 60 * 1000 } = {}) {
+  return runPowerShellScript(getWindowsTomcatPortableScriptPath(), { timeoutMs });
+}
+
+/**
+ * Installs WildFly on Windows via an embedded official-binary script.
+ * @param {{ timeoutMs?: number }} [opts]
+ * @returns {Promise<{ status: number, timedOut: boolean, error: Error | null, signal: string | null, stdout: string, stderr: string }>}
+ */
+export async function runWindowsWildflyPortableInstall({ timeoutMs = 10 * 60 * 1000 } = {}) {
+  return runPowerShellScript(getWindowsWildflyPortableScriptPath(), { timeoutMs });
 }

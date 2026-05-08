@@ -129,13 +129,12 @@ export function getInstallMethodsForKey(key, platform) {
 
   if (key === 'tomcat') {
     if (platform === 'win32') {
-      const shellCommand = 'winget install Apache.Tomcat9';
       out.push({
-        id: 'tomcat-win-winget',
-        label: 'winget (Apache Tomcat)',
-        shellCommand,
-        previewLine: previewForShell(shellCommand),
-        internalId: null
+        id: 'tomcat-win-embedded',
+        label: 'Tomcat from apache.org',
+        shellCommand: null,
+        previewLine: null,
+        internalId: 'tomcat-windows-portable'
       });
     } else if (platform === 'darwin') {
       const shellCommand = 'brew install tomcat';
@@ -161,7 +160,13 @@ export function getInstallMethodsForKey(key, platform) {
 
   if (key === 'wildfly') {
     if (platform === 'win32') {
-      // No stable built-in Windows package mapping for WildFly yet.
+      out.push({
+        id: 'wildfly-win-embedded',
+        label: 'WildFly official release',
+        shellCommand: null,
+        previewLine: null,
+        internalId: 'wildfly-windows-portable'
+      });
       return out;
     }
     if (platform === 'darwin') {
@@ -191,7 +196,11 @@ export function getInstallMethodsForKey(key, platform) {
 
 export function filterInstallMethods(methods, platform, hasCommandImpl) {
   return methods.filter((m) => {
-    if (m.internalId === 'maven-windows-portable') {
+    if (
+      m.internalId === 'maven-windows-portable'
+      || m.internalId === 'tomcat-windows-portable'
+      || m.internalId === 'wildfly-windows-portable'
+    ) {
       return platform === 'win32' && (hasCommandImpl('powershell') || hasCommandImpl('powershell.exe'));
     }
     if (m.shellCommand) return shellInstallAllowed(m.shellCommand, platform, hasCommandImpl);
