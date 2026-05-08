@@ -3,6 +3,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { detectJavaCompiler, evaluateJavaCompatibility, installHint, which } from '../project/inputUtils.js';
+import { windowsMavenPortableInstallShellCommand } from '../project/windowsSetupInstall.js';
 
 export const CANCEL_STEP = '__JWEBGEN_CANCEL_STEP__';
 export const SKIP_ACTION = '__JWEBGEN_SKIP_ACTION__';
@@ -50,8 +51,14 @@ function filterInstallCommandsForEnvironment(commands = [], { platform = process
   const allow = (cmd) => {
     const c = String(cmd || '');
     const lower = c.toLowerCase();
-    // Package manager gating
-    if (platform === 'win32') return Boolean(pm.winget) && /\bwinget\b/i.test(c);
+    // Package manager gating (Windows: winget installs + encoded portable Maven via PowerShell)
+    if (platform === 'win32') {
+      const trimmed = c.trimStart();
+      if (/^powershell(\.exe)?\b/i.test(trimmed)) {
+        return hasCommandImpl('powershell') || hasCommandImpl('powershell.exe');
+      }
+      return Boolean(pm.winget) && /\bwinget\b/i.test(c);
+    }
     if (platform === 'darwin') return Boolean(pm.brew) && /\bbrew\b/i.test(c);
 
     // linux/unix
@@ -184,21 +191,30 @@ function detectNpmGlobalBin() {
 const INSTALL_MATRIX = {
   java: {
     win32: {
-      installCommands: ['winget install EclipseAdoptium.Temurin.17.JDK'],
-      failureHint: 'Retry with winget as Administrator, then verify with javac -version.'
+      installCommands: [
+        'winget install EclipseAdoptium.Temurin.21.JDK',
+        'winget install Microsoft.OpenJDK.21'
+      ],
+      failureHint:
+        'Retry with winget as Administrator if needed, then close and reopen the terminal (or VS Code) and run javac -version or jwebgen --setup --dry-run.'
     },
     darwin: {
       installCommands: ['brew install --cask temurin'],
       failureHint: 'Retry with Homebrew, then open a new terminal and re-run jwebgen --setup --dry-run.'
     },
     default: {
-      installCommands: ['sudo apt install -y default-jdk', 'sudo dnf install -y java-17-openjdk-devel', 'sudo pacman -S --noconfirm jdk-openjdk']
+      installCommands: [
+        'sudo apt install -y default-jdk',
+        'sudo dnf install -y java-21-openjdk-devel',
+        'sudo pacman -S --noconfirm jdk-openjdk'
+      ]
     }
   },
   maven: {
     win32: {
-      installCommands: ['winget install Apache.Maven'],
-      failureHint: 'Retry with winget as Administrator, then verify with mvn -version.'
+      installCommands: [windowsMavenPortableInstallShellCommand()],
+      failureHint:
+        'If the script failed, check the output above. After a successful run, close and reopen the terminal (or VS Code), then run mvn -version or jwebgen --setup --dry-run.'
     },
     darwin: {
       installCommands: ['brew install maven'],
@@ -302,12 +318,12 @@ function printSetupState(state) {
     console.log(`${marker} ${item.key}: ${item.display}`);
     if (!item.ok && item.hint) console.log(pc.yellow(`  Fix: ${item.hint}`));
   }
-  if (state.npmPath.hasShimButNotOnPath) {
-    console.log(pc.yellow('PATH status: jwebgen shim exists in npm global bin but this bin is not on current PATH.'));
-  } else if (state.npmPath.hasShimInBin && state.npmPath.inPath) {
-    console.log(pc.green('PATH status: npm global bin with jwebgen shim is already in PATH.'));
-  } else if (state.npmPath.resolvedOutsideBin) {
-    console.log(pc.yellow('PATH status: jwebgen is reachable, but not from the detected npm global bin path.'));
+  if (state.npmPath.hasShimButNotOnPath && state.npmPath.bin) {
+    console.log(
+      pc.yellow(
+        `npm global folder is not on PATH (jwebgen was installed with npm -g). Add this folder to PATH: ${state.npmPath.bin}`
+      )
+    );
   }
 }
 
@@ -318,12 +334,6 @@ export function runSetupCheck({ dryRun = false } = {}) {
   if (failed.length > 0) {
     console.log(pc.red('Preflight failed: required tools are missing.'));
     return false;
-  }
-  if (state.npmPath.hasShimButNotOnPath) {
-    console.log(pc.yellow('The global jwebgen shim exists but npm global bin is not currently in PATH.'));
-  }
-  if (dryRun) {
-    console.log(pc.cyan('Setup dry-run: preview only, no command execution.'));
   }
   console.log(pc.green('Preflight succeeded: required tools are available.'));
   return true;
@@ -432,7 +442,7 @@ export async function runSetupAssistant({
     return true;
   }
 
-  console.log(pc.cyan('\nGuided setup actions (safe-by-default):'));
+  console.log(pc.cyan('\nGuided setup actions:'));
   for (const action of actions) {
     console.log(pc.cyan(`- ${action.title}`));
     if (action.type === 'install') {
@@ -445,12 +455,10 @@ export async function runSetupAssistant({
       for (const snippet of action.snippets) console.log(`  ${snippet}`);
     }
   }
-  if (dryRun) {
-    console.log(pc.cyan('Setup dry-run enabled: actions are previewed and will not be executed.'));
-  }
 
   if (dryRun) return true;
 
+  let pendingWinSessionRefresh = false;
   for (let i = 0; i < actions.length; i++) {
     const action = actions[i];
     if (action.type === 'path') {
@@ -533,22 +541,40 @@ export async function runSetupAssistant({
         if (combined) console.log(combined);
       }
       console.log(pc.yellow(`Remediation: ${buildInstallFailureHint(action.key)}`));
-    }
-    const recheckState = collectSetupStateImpl();
-    const check = recheckState.checks.find((item) => item.key === action.key);
-    if (check?.ok) {
-      console.log(pc.green(`Verification after ${action.key}: ${check.display}`));
-    } else if (check) {
-      console.log(pc.yellow(`Verification after ${action.key}: still missing/incompatible (${check.display}).`));
+    } else {
+      const recheckState = collectSetupStateImpl();
+      const check = recheckState.checks.find((item) => item.key === action.key);
+      if (check?.ok) {
+        console.log(pc.green(`Verification after ${action.key}: ${check.display}`));
+      } else if (check) {
+        const winTooling =
+          process.platform === 'win32' && (action.key === 'java' || action.key === 'maven' || action.key === 'node');
+        if (winTooling) {
+          console.log(
+            pc.yellow(
+              `Install for ${action.key} finished, but this session still sees: ${check.display}. On Windows, close and reopen the terminal (or VS Code), then run java -version, mvn -version, or jwebgen --setup --dry-run to confirm.`
+            )
+          );
+          pendingWinSessionRefresh = true;
+        } else {
+          console.log(pc.yellow(`Verification after ${action.key}: still missing/incompatible (${check.display}).`));
+        }
+      }
     }
   }
 
   const nextState = collectSetupStateImpl();
-  console.log(pc.cyan('\nPost-action verification:'));
-  printSetupState(nextState);
   const failed = nextState.checks.filter((c) => !c.ok);
   if (failed.length > 0) {
-    console.log(pc.red('Setup assistant finished with remaining missing dependencies.'));
+    if (pendingWinSessionRefresh && process.platform === 'win32') {
+      console.log(
+        pc.yellow(
+          '\nReminder: PATH changes from installers apply to new terminal sessions. Close and reopen the terminal (or VS Code), then run jwebgen --setup --dry-run to verify.'
+        )
+      );
+    }
+    const summary = failed.map((c) => `${c.key}: ${c.display}`).join('; ');
+    console.log(pc.red(`Setup finished with missing or incompatible tools: ${summary}`));
     return false;
   }
   console.log(pc.green('Setup assistant completed successfully.'));

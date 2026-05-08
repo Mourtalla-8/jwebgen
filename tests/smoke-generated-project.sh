@@ -25,7 +25,7 @@ if [ "$SETUP_STATUS" -ne 0 ] && [ "$SETUP_STATUS" -ne 1 ]; then
   fail "--setup returned unexpected exit code: $SETUP_STATUS"
 fi
 echo "$SETUP_OUT" | grep -q "jwebgen setup diagnostics" || fail "--setup output missing diagnostics header"
-echo "$SETUP_OUT" | grep -q "Setup dry-run" || fail "--setup --dry-run output missing preview marker"
+echo "$SETUP_OUT" | grep -qE "Preflight (succeeded|failed)" || fail "--setup --dry-run output missing preflight result"
 if echo "$SETUP_OUT" | grep -q "Run now for"; then
   fail "non-interactive setup should not prompt for confirmation"
 fi
