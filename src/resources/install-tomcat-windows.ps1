@@ -10,6 +10,7 @@ $binPath = Join-Path $installDir 'bin'
 $stagingRoot = Join-Path $destRoot ("$base-staging-" + [Guid]::NewGuid().ToString('N'))
 $zipPath = Join-Path $stagingRoot $zip
 $stagedInstallDir = Join-Path $stagingRoot $base
+$backupDir = "$installDir.backup-" + (Get-Date -Format 'yyyyMMddHHmmss')
 
 New-Item -ItemType Directory -Force -Path $destRoot | Out-Null
 New-Item -ItemType Directory -Force -Path $stagingRoot | Out-Null
@@ -40,10 +41,21 @@ try {
     throw "Tomcat staged install verification failed: missing webapps folder."
   }
 
-  if (Test-Path -LiteralPath $installDir) {
-    Remove-Item -LiteralPath $installDir -Recurse -Force
+  $hadExistingInstall = Test-Path -LiteralPath $installDir
+  if ($hadExistingInstall) {
+    Move-Item -LiteralPath $installDir -Destination $backupDir
   }
-  Move-Item -LiteralPath $stagedInstallDir -Destination $installDir
+  try {
+    Move-Item -LiteralPath $stagedInstallDir -Destination $installDir
+    if ($hadExistingInstall -and (Test-Path -LiteralPath $backupDir)) {
+      Remove-Item -LiteralPath $backupDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+  } catch {
+    if ($hadExistingInstall -and (Test-Path -LiteralPath $backupDir) -and -not (Test-Path -LiteralPath $installDir)) {
+      Move-Item -LiteralPath $backupDir -Destination $installDir
+    }
+    throw
+  }
 } finally {
   if (Test-Path -LiteralPath $zipPath) {
     Remove-Item -LiteralPath $zipPath -Force -ErrorAction SilentlyContinue
