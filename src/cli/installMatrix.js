@@ -160,6 +160,10 @@ export function getInstallMethodsForKey(key, platform) {
   }
 
   if (key === 'wildfly') {
+    if (platform === 'win32') {
+      // No stable built-in Windows package mapping for WildFly yet.
+      return out;
+    }
     if (platform === 'darwin') {
       const shellCommand = 'brew install wildfly-as';
       out.push({
