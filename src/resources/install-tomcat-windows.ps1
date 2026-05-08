@@ -47,14 +47,18 @@ try {
   }
   try {
     Move-Item -LiteralPath $stagedInstallDir -Destination $installDir
-    if ($hadExistingInstall -and (Test-Path -LiteralPath $backupDir)) {
-      Remove-Item -LiteralPath $backupDir -Recurse -Force -ErrorAction SilentlyContinue
-    }
   } catch {
     if ($hadExistingInstall -and (Test-Path -LiteralPath $backupDir) -and -not (Test-Path -LiteralPath $installDir)) {
       Move-Item -LiteralPath $backupDir -Destination $installDir
     }
     throw
+  }
+  if ($hadExistingInstall -and (Test-Path -LiteralPath $backupDir)) {
+    try {
+      Remove-Item -LiteralPath $backupDir -Recurse -Force -ErrorAction Stop
+    } catch {
+      Write-Warning "Tomcat backup cleanup failed at $backupDir: $($_.Exception.Message)"
+    }
   }
 } finally {
   if (Test-Path -LiteralPath $zipPath) {
@@ -78,9 +82,8 @@ if ($userPath) {
     $entry = $_
     $entryLower = $entry.ToLowerInvariant()
     $underDestRoot = $entryLower.StartsWith($destRootN + '\')
-    $looksLikeTomcatBin = $entryLower -match '\\apache-tomcat-[^\\]+\\bin$'
     $tomcatBinUnderRoot = $underDestRoot -and $entryLower -match '\\apache-tomcat-[^\\]+\\bin$'
-    -not ($looksLikeTomcatBin -or $tomcatBinUnderRoot)
+    -not $tomcatBinUnderRoot
   }
 }
 $have = $parts -contains $binN
