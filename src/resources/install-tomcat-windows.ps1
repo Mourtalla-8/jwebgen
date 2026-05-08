@@ -4,33 +4,53 @@ $base = "apache-tomcat-$v"
 $zip = "$base-windows-x64.zip"
 $primaryUrl = "https://dlcdn.apache.org/tomcat/tomcat-10/v$v/bin/$zip"
 $fallbackUrl = "https://archive.apache.org/dist/tomcat/tomcat-10/v$v/bin/$zip"
-$zipPath = Join-Path $env:TEMP $zip
 $destRoot = Join-Path $env:LOCALAPPDATA 'Programs'
 $installDir = Join-Path $destRoot $base
 $binPath = Join-Path $installDir 'bin'
+$stagingRoot = Join-Path $destRoot ("$base-staging-" + [Guid]::NewGuid().ToString('N'))
+$zipPath = Join-Path $stagingRoot $zip
+$stagedInstallDir = Join-Path $stagingRoot $base
 
 New-Item -ItemType Directory -Force -Path $destRoot | Out-Null
-
-if (Test-Path -LiteralPath $installDir) {
-  Remove-Item -LiteralPath $installDir -Recurse -Force
-}
+New-Item -ItemType Directory -Force -Path $stagingRoot | Out-Null
 
 try {
-  Invoke-WebRequest -Uri $primaryUrl -OutFile $zipPath -UseBasicParsing
-} catch {
-  Invoke-WebRequest -Uri $fallbackUrl -OutFile $zipPath -UseBasicParsing
-}
+  $downloadUrl = $primaryUrl
+  $checksumUrl = "$primaryUrl.sha512"
+  try {
+    Invoke-WebRequest -Uri $primaryUrl -OutFile $zipPath -UseBasicParsing
+  } catch {
+    $downloadUrl = $fallbackUrl
+    $checksumUrl = "$fallbackUrl.sha512"
+    Invoke-WebRequest -Uri $fallbackUrl -OutFile $zipPath -UseBasicParsing
+  }
 
-try {
-  Expand-Archive -LiteralPath $zipPath -DestinationPath $destRoot -Force
+  $shaRaw = (Invoke-WebRequest -Uri $checksumUrl -UseBasicParsing).Content
+  $expected = ($shaRaw -split '\s+')[0].Trim().ToLowerInvariant()
+  if (-not $expected -or $expected.Length -lt 64) {
+    throw "Could not parse checksum from $checksumUrl"
+  }
+  $actual = (Get-FileHash -Path $zipPath -Algorithm SHA512).Hash.ToLowerInvariant()
+  if ($actual -ne $expected) {
+    throw "Checksum verification failed for $downloadUrl"
+  }
+
+  Expand-Archive -LiteralPath $zipPath -DestinationPath $stagingRoot -Force
+  if (-not (Test-Path -LiteralPath (Join-Path $stagedInstallDir 'webapps'))) {
+    throw "Tomcat staged install verification failed: missing webapps folder."
+  }
+
+  if (Test-Path -LiteralPath $installDir) {
+    Remove-Item -LiteralPath $installDir -Recurse -Force
+  }
+  Move-Item -LiteralPath $stagedInstallDir -Destination $installDir
 } finally {
   if (Test-Path -LiteralPath $zipPath) {
     Remove-Item -LiteralPath $zipPath -Force -ErrorAction SilentlyContinue
   }
-}
-
-if (-not (Test-Path -LiteralPath (Join-Path $installDir 'webapps'))) {
-  throw "Tomcat install verification failed: missing webapps folder."
+  if (Test-Path -LiteralPath $stagingRoot) {
+    Remove-Item -LiteralPath $stagingRoot -Recurse -Force -ErrorAction SilentlyContinue
+  }
 }
 
 [Environment]::SetEnvironmentVariable('TOMCAT_HOME', $installDir, 'User')
