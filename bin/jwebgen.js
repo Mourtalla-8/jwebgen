@@ -64,6 +64,7 @@ import {
 } from '../src/cli/projectCommands.js';
 import { runProjectScript as runProjectScriptImpl } from '../src/cli/projectRunner.js';
 import { CANCEL_STEP, SKIP_ACTION, enforceActionPreflight, runSetupAssistant, runSetupCheck } from '../src/cli/preflight.js';
+import { runInstallCli } from '../src/cli/installCommand.js';
 import { runCreateCommand } from '../src/cli/createCommand.js';
 import { writeFileSafe, makeExecutable } from '../src/cli/fileUtils.js';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -294,6 +295,15 @@ async function runCli() {
     return;
   }
   if (action === 'version') return showVersion();
+  if (action === 'install') {
+    const tool = String(flags.installTool || '').trim();
+    if (!tool) {
+      console.log(pc.red('Usage: jwebgen --install <java|maven|node>'));
+      process.exit(1);
+    }
+    const code = await runInstallCli(tool);
+    process.exit(typeof code === 'number' ? code : 1);
+  }
   if (action === 'setup') {
     const ok = (process.stdin.isTTY && process.stdout.isTTY)
       ? await runSetupAssistant({
@@ -308,7 +318,7 @@ async function runCli() {
             const answer = await select({
               message,
               options: [
-                { value: SKIP_ACTION, label: 'None (skip)' },
+                { value: SKIP_ACTION, label: 'None' },
                 ...options.map((opt) => ({ value: opt, label: opt }))
               ]
             });

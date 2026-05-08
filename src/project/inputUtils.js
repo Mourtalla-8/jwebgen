@@ -1,7 +1,6 @@
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { windowsMavenPortableInstallShellCommand } from './windowsSetupInstall.js';
 
 export function slugifyArtifactId(input) {
   return String(input)
@@ -117,7 +116,7 @@ export function installHint(tool) {
   }
   if (tool === 'maven') {
     if (platform === 'darwin') return 'brew install maven';
-    if (platform === 'win32') return windowsMavenPortableInstallShellCommand();
+    if (platform === 'win32') return 'jwebgen --install maven';
     return 'Linux: pacman -S maven | apt install maven | dnf install maven';
   }
   return 'Install it from the official source.';

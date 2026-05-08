@@ -41,6 +41,9 @@ run(jwebgenCommand, ['--help'], { cwd: workDir, env });
 console.log('[global-smoke] jwebgen --setup --dry-run');
 run(jwebgenCommand, ['--setup', '--dry-run'], { cwd: workDir, env });
 
+console.log('[global-smoke] jwebgen --install maven');
+run(jwebgenCommand, ['--install', 'maven'], { cwd: workDir, env });
+
 console.log('[global-smoke] jwebgen --new globalapp --yes');
 run(jwebgenCommand, ['--new', 'globalapp', '--yes'], { cwd: workDir, env });
 

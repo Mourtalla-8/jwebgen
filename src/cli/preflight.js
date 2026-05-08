@@ -3,10 +3,38 @@ import { spawn, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { detectJavaCompiler, evaluateJavaCompatibility, installHint, which } from '../project/inputUtils.js';
-import { windowsMavenPortableInstallShellCommand } from '../project/windowsSetupInstall.js';
+import { runWindowsMavenPortableInstall } from '../project/windowsSetupInstall.js';
+import { filterInstallMethods, getInstallMethodsForKey, installCliLine } from './installMatrix.js';
 
 export const CANCEL_STEP = '__JWEBGEN_CANCEL_STEP__';
 export const SKIP_ACTION = '__JWEBGEN_SKIP_ACTION__';
+
+const FAILURE_HINTS = {
+  java: {
+    win32:
+      'Retry with winget as Administrator if needed, then open a new session and run javac -version or jwebgen --setup --dry-run.',
+    darwin: 'Retry with Homebrew, then open a new terminal and re-run jwebgen --setup --dry-run.',
+    default: 'Retry with your package manager command, then re-run jwebgen --setup --dry-run.'
+  },
+  maven: {
+    win32:
+      'If installation failed, check the output above. Then open a new session and run mvn -version or jwebgen --setup --dry-run.',
+    darwin: 'Retry with Homebrew, then open a new terminal and re-run jwebgen --setup --dry-run.',
+    default: 'Retry with your package manager command, then re-run jwebgen --setup --dry-run.'
+  },
+  node: {
+    win32: 'Retry with winget as Administrator, then open a new session and run jwebgen --setup --dry-run.',
+    darwin: 'Retry with Homebrew, then open a new terminal and re-run jwebgen --setup --dry-run.',
+    default: 'Retry with your package manager command, then re-run jwebgen --setup --dry-run.'
+  }
+};
+
+const SESSION_HINT = `Some installed tools may require a new shell/session before becoming available.
+Reopen your terminal or app session, then run:
+- java -version
+- mvn -version
+or:
+- jwebgen --setup --dry-run`;
 
 class SetupCancelledError extends Error {
   constructor(message = 'Setup cancelled.') {
@@ -23,62 +51,6 @@ function hasCommand(binary) {
   return probe.status === 0;
 }
 
-function detectAvailablePackageManagers(platform = process.platform, hasCommandImpl = hasCommand) {
-  if (platform === 'win32') {
-    return {
-      winget: hasCommandImpl('winget')
-    };
-  }
-  if (platform === 'darwin') {
-    return {
-      brew: hasCommandImpl('brew')
-    };
-  }
-  // default: linux/other unix
-  const apt = hasCommandImpl('apt-get') || hasCommandImpl('apt');
-  return {
-    apt,
-    dnf: hasCommandImpl('dnf'),
-    pacman: hasCommandImpl('pacman')
-  };
-}
-
-function filterInstallCommandsForEnvironment(commands = [], { platform = process.platform, hasCommandImpl = hasCommand } = {}) {
-  const pm = detectAvailablePackageManagers(platform, hasCommandImpl);
-  const bashOk = platform === 'win32' ? hasCommandImpl('bash.exe') : hasCommandImpl('bash');
-  const curlOk = platform === 'win32' ? hasCommandImpl('curl.exe') : hasCommandImpl('curl');
-
-  const allow = (cmd) => {
-    const c = String(cmd || '');
-    const lower = c.toLowerCase();
-    // Package manager gating (Windows: winget installs + encoded portable Maven via PowerShell)
-    if (platform === 'win32') {
-      const trimmed = c.trimStart();
-      if (/^powershell(\.exe)?\b/i.test(trimmed)) {
-        return hasCommandImpl('powershell') || hasCommandImpl('powershell.exe');
-      }
-      return Boolean(pm.winget) && /\bwinget\b/i.test(c);
-    }
-    if (platform === 'darwin') return Boolean(pm.brew) && /\bbrew\b/i.test(c);
-
-    // linux/unix
-    if (/\bpacman\b/i.test(c)) return Boolean(pm.pacman);
-    if (/\bdnf\b/i.test(c)) return Boolean(pm.dnf);
-    if (/\bapt-get\b/i.test(c) || /\bapt\b/i.test(c)) return Boolean(pm.apt);
-
-    // Tooling constraints (e.g. NodeSource curl | bash | apt-get)
-    if (lower.includes('curl ') || lower.includes('curl\t') || lower.includes('curl -')) {
-      if (!curlOk) return false;
-    }
-    if (lower.includes('|') && lower.includes('bash')) {
-      if (!bashOk) return false;
-    }
-    return true;
-  };
-
-  return Array.isArray(commands) ? commands.filter(allow) : [];
-}
-
 function getActionRequirements(action) {
   if (action === 'create') return ['node', 'java', 'maven'];
   if (action === 'build') return ['java', 'maven'];
@@ -86,7 +58,7 @@ function getActionRequirements(action) {
   return [];
 }
 
-function checkRequirement(req) {
+export function checkRequirement(req) {
   if (req === 'node') {
     const version = process.version;
     const [majorRaw, minorRaw] = version.replace(/^v/, '').split('.');
@@ -188,72 +160,10 @@ function detectNpmGlobalBin() {
   };
 }
 
-const INSTALL_MATRIX = {
-  java: {
-    win32: {
-      installCommands: [
-        'winget install EclipseAdoptium.Temurin.21.JDK',
-        'winget install Microsoft.OpenJDK.21'
-      ],
-      failureHint:
-        'Retry with winget as Administrator if needed, then close and reopen the terminal (or VS Code) and run javac -version or jwebgen --setup --dry-run.'
-    },
-    darwin: {
-      installCommands: ['brew install --cask temurin'],
-      failureHint: 'Retry with Homebrew, then open a new terminal and re-run jwebgen --setup --dry-run.'
-    },
-    default: {
-      installCommands: [
-        'sudo apt install -y default-jdk',
-        'sudo dnf install -y java-21-openjdk-devel',
-        'sudo pacman -S --noconfirm jdk-openjdk'
-      ]
-    }
-  },
-  maven: {
-    win32: {
-      installCommands: [windowsMavenPortableInstallShellCommand()],
-      failureHint:
-        'If the script failed, check the output above. After a successful run, close and reopen the terminal (or VS Code), then run mvn -version or jwebgen --setup --dry-run.'
-    },
-    darwin: {
-      installCommands: ['brew install maven'],
-      failureHint: 'Retry with Homebrew, then open a new terminal and re-run jwebgen --setup --dry-run.'
-    },
-    default: {
-      installCommands: ['sudo apt install -y maven', 'sudo dnf install -y maven', 'sudo pacman -S --noconfirm maven']
-    }
-  },
-  node: {
-    win32: {
-      installCommands: ['winget install OpenJS.NodeJS.LTS'],
-      failureHint: 'Retry with winget as Administrator, then restart terminal and run jwebgen --setup --dry-run.'
-    },
-    darwin: {
-      installCommands: ['brew install node@22'],
-      failureHint: 'Retry with Homebrew, then open a new terminal and re-run jwebgen --setup --dry-run.'
-    },
-    default: {
-      installCommands: [
-        'curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && sudo apt-get install -y nodejs',
-        'sudo dnf install -y nodejs npm',
-        'sudo pacman -S --noconfirm nodejs npm'
-      ]
-    }
-  }
-};
-
-function suggestedInstallCommands(requirementKey, platform = process.platform) {
-  const entry = INSTALL_MATRIX[requirementKey];
-  if (!entry) return [];
-  return entry[platform]?.installCommands || entry.default?.installCommands || [];
-}
-
 export function buildInstallFailureHint(requirementKey, platform = process.platform) {
-  const entry = INSTALL_MATRIX[requirementKey];
-  const hint = entry?.[platform]?.failureHint || entry?.default?.failureHint;
-  if (hint) return hint;
-  return 'Retry with your package manager command, then re-run jwebgen --setup --dry-run.';
+  const row = FAILURE_HINTS[requirementKey];
+  if (!row) return 'Retry with your package manager command, then re-run jwebgen --setup --dry-run.';
+  return row[platform] || row.default;
 }
 
 function pathSnippets(npmGlobalBin, platform = process.platform) {
@@ -287,16 +197,14 @@ export function computeSuggestedActions(state, platform = process.platform, { ha
   const actions = [];
   for (const item of state.checks) {
     if (item.ok) continue;
-    const commands = filterInstallCommandsForEnvironment(suggestedInstallCommands(item.key, platform), {
-      platform,
-      hasCommandImpl
-    });
-    if (commands.length === 0) continue;
+    const raw = getInstallMethodsForKey(item.key, platform);
+    const installMethods = filterInstallMethods(raw, platform, hasCommandImpl);
+    if (installMethods.length === 0) continue;
     actions.push({
       type: 'install',
       key: item.key,
       title: `Install ${item.key}`,
-      commands
+      installMethods
     });
   }
   if (state.npmPath.hasShimButNotOnPath) {
@@ -310,15 +218,16 @@ export function computeSuggestedActions(state, platform = process.platform, { ha
   return actions;
 }
 
-function printSetupState(state) {
+/** @param {{ includeFixHints?: boolean, includeNpmPathNote?: boolean }} [opts] */
+export function printSetupState(state, { includeFixHints = false, includeNpmPathNote = true } = {}) {
   console.log(pc.cyan('jwebgen setup diagnostics'));
   console.log(pc.cyan(`Platform: ${process.platform}`));
   for (const item of state.checks) {
     const marker = item.ok ? pc.green('OK') : pc.red('MISSING');
     console.log(`${marker} ${item.key}: ${item.display}`);
-    if (!item.ok && item.hint) console.log(pc.yellow(`  Fix: ${item.hint}`));
+    if (includeFixHints && !item.ok && item.hint) console.log(pc.yellow(`  Fix: ${item.hint}`));
   }
-  if (state.npmPath.hasShimButNotOnPath && state.npmPath.bin) {
+  if (includeNpmPathNote && state.npmPath.hasShimButNotOnPath && state.npmPath.bin) {
     console.log(
       pc.yellow(
         `npm global folder is not on PATH (jwebgen was installed with npm -g). Add this folder to PATH: ${state.npmPath.bin}`
@@ -327,10 +236,27 @@ function printSetupState(state) {
   }
 }
 
-/** Non-interactive setup diagnostics; `dryRun` is accepted for CLI parity (no extra logging). */
-export function runSetupCheck({ dryRun: _dryRun = false } = {}) {
+function printDryRunInstallPreviews(actions) {
+  const installActions = actions.filter((a) => a.type === 'install');
+  if (installActions.length === 0) return;
+  console.log(pc.cyan('\nGuided setup actions:'));
+  for (const action of installActions) {
+    console.log(pc.cyan(`- Install ${action.key}`));
+    for (const m of action.installMethods) {
+      if (m.previewLine) console.log(`  ${m.previewLine}`);
+    }
+    console.log(`  ${installCliLine(action.key)}`);
+  }
+}
+
+/** Non-interactive setup diagnostics. */
+export function runSetupCheck({ dryRun = false } = {}) {
   const state = collectSetupState();
-  printSetupState(state);
+  printSetupState(state, { includeFixHints: false, includeNpmPathNote: !dryRun });
+  const actions = computeSuggestedActions(state);
+  if (dryRun) {
+    printDryRunInstallPreviews(actions);
+  }
   const failed = state.checks.filter((c) => !c.ok);
   if (failed.length > 0) {
     console.log(pc.red('Preflight failed: required tools are missing.'));
@@ -353,7 +279,7 @@ function tailLines(text, maxLines = 80, maxChars = 8000) {
   return tail.length > maxChars ? tail.slice(-maxChars) : tail;
 }
 
-async function runCommand(command, { timeoutMs = 10 * 60 * 1000 } = {}) {
+export async function runCommand(command, { timeoutMs = 10 * 60 * 1000 } = {}) {
   const shell = process.platform === 'win32' ? 'cmd.exe' : 'sh';
   const shellArgs = process.platform === 'win32' ? ['/c', command] : ['-lc', command];
   try {
@@ -419,6 +345,58 @@ async function runCommand(command, { timeoutMs = 10 * 60 * 1000 } = {}) {
   }
 }
 
+async function executeInstallMethod(method, runCommandImpl) {
+  if (method.internalId === 'maven-windows-portable') {
+    return runWindowsMavenPortableInstall(runCommandImpl);
+  }
+  if (method.shellCommand) {
+    return runCommandImpl(method.shellCommand);
+  }
+  return { status: 1, timedOut: false, error: new Error('No install method'), signal: null, stdout: '', stderr: '' };
+}
+
+/**
+ * Non-interactive install used by `jwebgen --install <tool>`.
+ * @param {string} tool
+ * @param {{ runCommandImpl?: typeof runCommand }} [opts]
+ * @returns {Promise<number>} process exit code
+ */
+export async function runInstallTool(tool, { runCommandImpl = runCommand } = {}) {
+  const platform = process.platform;
+  const check = checkRequirement(tool);
+  if (check.ok) {
+    console.log(pc.green(`${tool} already satisfied.`));
+    return 0;
+  }
+  if (tool === 'java') {
+    const java = detectJavaCompiler();
+    if (java.present && evaluateJavaCompatibility(java.majorRelease, 11).status !== 'ok') {
+      console.error(pc.red('Java is present but not compatible with jwebgen (requires JDK 11+).'));
+      return 1;
+    }
+  }
+  const raw = getInstallMethodsForKey(tool, platform);
+  const methods = filterInstallMethods(raw, platform, hasCommand);
+  if (methods.length === 0) {
+    console.error(pc.red(`No install method is available for ${tool} on this system.`));
+    return 1;
+  }
+  const method = methods[0];
+  const result = await executeInstallMethod(method, runCommandImpl);
+  if (result?.signal === 'SIGINT') return 130;
+  if (result.status !== 0) {
+    console.error(pc.red(`Install failed for ${tool}.`));
+    if (result.stderr || result.stdout) {
+      const tail = tailLines([result.stdout, result.stderr].filter(Boolean).join('\n'));
+      if (tail) console.error(tail);
+    }
+    console.error(pc.yellow(buildInstallFailureHint(tool, platform)));
+    return 1;
+  }
+  console.log(pc.green(`${tool} installed.`));
+  return 0;
+}
+
 export async function runSetupAssistant({
   confirmPrompt,
   selectPrompt,
@@ -431,7 +409,7 @@ export async function runSetupAssistant({
   onCommandEnd
 } = {}) {
   const state = collectSetupStateImpl();
-  printSetupState(state);
+  printSetupState(state, { includeFixHints: false, includeNpmPathNote: !dryRun });
   const actions = computeSuggestedActionsImpl(state);
   if (actions.length === 0) {
     const failed = state.checks.filter((c) => !c.ok);
@@ -443,23 +421,17 @@ export async function runSetupAssistant({
     return true;
   }
 
+  if (dryRun) {
+    printDryRunInstallPreviews(actions);
+    return true;
+  }
+
   console.log(pc.cyan('\nGuided setup actions:'));
   for (const action of actions) {
     console.log(pc.cyan(`- ${action.title}`));
-    if (action.type === 'install') {
-      const best = action.commands[0] || '';
-      const alternatives = Math.max(0, action.commands.length - 1);
-      if (best) console.log(`  ${best}`);
-      if (alternatives > 0) console.log(pc.cyan(`  (alternatives available: ${alternatives})`));
-    } else {
-      console.log('  Manual PATH snippets:');
-      for (const snippet of action.snippets) console.log(`  ${snippet}`);
-    }
   }
 
-  if (dryRun) return true;
-
-  let pendingWinSessionRefresh = false;
+  let anyInstallExitOk = false;
   for (let i = 0; i < actions.length; i++) {
     const action = actions[i];
     if (action.type === 'path') {
@@ -468,23 +440,31 @@ export async function runSetupAssistant({
       continue;
     }
     if (!confirmPrompt) continue;
-    let command = action.commands[0];
-    if (action.commands.length > 1 && selectPrompt) {
+
+    const methodOptions = action.installMethods.map((m) => ({ value: m.id, label: m.label }));
+    let chosenId = methodOptions[0]?.value;
+    if (selectPrompt && methodOptions.length > 0) {
       const selected = await selectPrompt({
-        message: `Choose install command for ${action.key}`,
-        options: action.commands
+        message: `Choose install method for ${action.key}`,
+        options: [{ value: SKIP_ACTION, label: 'None' }, ...methodOptions]
       });
       if (selected === CANCEL_STEP) {
         if (i === 0) throw new SetupCancelledError();
         i = Math.max(-1, i - 2);
         continue;
       }
-      if (selected === SKIP_ACTION) {
+      if (selected === SKIP_ACTION || selected == null) {
         console.log(pc.yellow(`Skipped ${action.key}.`));
         continue;
       }
-      if (selected) command = selected;
+      chosenId = selected;
     }
+    const method = action.installMethods.find((m) => m.id === chosenId);
+    if (!method) {
+      console.log(pc.yellow(`Skipped ${action.key}.`));
+      continue;
+    }
+
     const approved = await confirmPrompt({
       message: `Run now for ${action.key}?`,
       initialValue: false
@@ -498,23 +478,23 @@ export async function runSetupAssistant({
       console.log(pc.yellow(`Skipped ${action.key}.`));
       continue;
     }
-    console.log(pc.cyan(`Executing: ${command}`));
+
     if (typeof onCommandStart === 'function') {
       try {
-        onCommandStart({ key: action.key, command });
+        onCommandStart({ key: action.key });
       } catch {
         /* ignore */
       }
     }
     let result;
     try {
-      result = await runCommandImpl(command);
+      result = await executeInstallMethod(method, runCommandImpl);
     } catch (error) {
       result = { status: 1, timedOut: error?.code === 'ETIMEDOUT', error, signal: null };
     }
     if (typeof onCommandEnd === 'function') {
       try {
-        onCommandEnd({ key: action.key, command, result });
+        onCommandEnd({ key: action.key, result });
       } catch {
         /* ignore */
       }
@@ -543,37 +523,16 @@ export async function runSetupAssistant({
       }
       console.log(pc.yellow(`Remediation: ${buildInstallFailureHint(action.key)}`));
     } else {
-      const recheckState = collectSetupStateImpl();
-      const check = recheckState.checks.find((item) => item.key === action.key);
-      if (check?.ok) {
-        console.log(pc.green(`Verification after ${action.key}: ${check.display}`));
-      } else if (check) {
-        const winTooling =
-          process.platform === 'win32' && (action.key === 'java' || action.key === 'maven' || action.key === 'node');
-        if (winTooling) {
-          console.log(
-            pc.yellow(
-              `Install for ${action.key} finished, but this session still sees: ${check.display}. On Windows, close and reopen the terminal (or VS Code), then run java -version, mvn -version, or jwebgen --setup --dry-run to confirm.`
-            )
-          );
-          pendingWinSessionRefresh = true;
-        } else {
-          console.log(pc.yellow(`Verification after ${action.key}: still missing/incompatible (${check.display}).`));
-        }
-      }
+      anyInstallExitOk = true;
     }
   }
 
   const nextState = collectSetupStateImpl();
   const failed = nextState.checks.filter((c) => !c.ok);
+  if (anyInstallExitOk) {
+    console.log(pc.yellow(`\n${SESSION_HINT}`));
+  }
   if (failed.length > 0) {
-    if (pendingWinSessionRefresh && process.platform === 'win32') {
-      console.log(
-        pc.yellow(
-          '\nReminder: PATH changes from installers apply to new terminal sessions. Close and reopen the terminal (or VS Code), then run jwebgen --setup --dry-run to verify.'
-        )
-      );
-    }
     const summary = failed.map((c) => `${c.key}: ${c.display}`).join('; ');
     console.log(pc.red(`Setup finished with missing or incompatible tools: ${summary}`));
     return false;

@@ -9,6 +9,7 @@ const ACTION_FLAGS = new Set([
   '--restart',
   '--reload',
   '--setup',
+  '--install',
   '--update',
   '--uninstall',
   '--dev',
@@ -28,6 +29,8 @@ export function parseFlags(argv = []) {
     help: false,
     version: false,
     setup: false,
+    install: false,
+    installTool: null,
     update: false,
     uninstall: false,
     status: false,
@@ -63,6 +66,15 @@ export function parseFlags(argv = []) {
     }
     if (a === '--setup') {
       flags.setup = true;
+      continue;
+    }
+    if (a === '--install') {
+      flags.install = true;
+      const next = argv[i + 1];
+      if (next && !String(next).startsWith('-')) {
+        flags.installTool = String(next).toLowerCase();
+        i += 1;
+      }
       continue;
     }
     if (a === '--update') {
@@ -148,6 +160,7 @@ export function parseFlags(argv = []) {
   const actions = [
     flags.help ? 'help' : null,
     flags.version ? 'version' : null,
+    flags.install ? 'install' : null,
     flags.setup ? 'setup' : null,
     flags.update ? 'update' : null,
     flags.uninstall ? 'uninstall' : null,
@@ -191,6 +204,7 @@ export function formatFlagsHelp({ appName = 'jwebgen' } = {}) {
     `  ${cmd('--help, -h')}${desc('Show this help message.')}`,
     `  ${cmd('--version, -V, -v')}${desc('Show jwebgen version.')}`,
     `  ${cmd('--setup [--dry-run]')}${desc('Run setup diagnostics + guided safe actions; preview only with --dry-run.')}`,
+    `  ${cmd('--install <java|maven|node>')}${desc('Install a missing tool using built-in drivers (non-interactive).')}`,
     `  ${cmd('--update')}${desc('Show safe update guidance for global installs.')}`,
     `  ${cmd('--uninstall')}${desc('Show safe uninstall guidance for global installs.')}`,
     `  ${cmd('--status')}${desc('Show project status.')}`,
