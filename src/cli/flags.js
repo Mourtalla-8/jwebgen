@@ -204,7 +204,7 @@ export function formatFlagsHelp({ appName = 'jwebgen' } = {}) {
     `  ${cmd('--help, -h')}${desc('Show this help message.')}`,
     `  ${cmd('--version, -V, -v')}${desc('Show jwebgen version.')}`,
     `  ${cmd('--setup [--dry-run]')}${desc('Run setup diagnostics + guided safe actions; preview only with --dry-run.')}`,
-    `  ${cmd('--install <java|maven|tomcat|wildfly>')}${desc('Install a missing tool using built-in drivers (non-interactive).')}`,
+    `  ${cmd('--install <maven|tomcat|wildfly>')}${desc('Install a missing tool using built-in drivers (non-interactive).')}`,
     `  ${cmd('--update')}${desc('Show safe update guidance for global installs.')}`,
     `  ${cmd('--uninstall')}${desc('Show safe uninstall guidance for global installs.')}`,
     `  ${cmd('--status')}${desc('Show project status.')}`,

@@ -4,7 +4,6 @@
  */
 
 export const PREVIEW_MAX_LEN = 120;
-export const JAVA_WINDOWS_INTERNAL_INSTALLER_ID = 'java-win-jwebgen-internal';
 
 export function installCliLine(tool) {
   return `jwebgen --install ${tool}`;
@@ -81,13 +80,6 @@ export function getInstallMethodsForKey(key, platform) {
         shellCommand: t2,
         previewLine: previewForShell(t2),
         internalId: null
-      });
-      out.push({
-        id: JAVA_WINDOWS_INTERNAL_INSTALLER_ID,
-        label: 'jwebgen internal installer',
-        shellCommand: null,
-        previewLine: installCliLine('java'),
-        internalId: JAVA_WINDOWS_INTERNAL_INSTALLER_ID
       });
     } else if (platform === 'darwin') {
       const shellCommand = 'brew install --cask temurin';
@@ -217,14 +209,6 @@ export function filterInstallMethods(methods, platform, hasCommandImpl) {
       || m.internalId === 'wildfly-windows-portable'
     ) {
       return platform === 'win32' && (hasCommandImpl('powershell') || hasCommandImpl('powershell.exe'));
-    }
-    if (m.internalId === JAVA_WINDOWS_INTERNAL_INSTALLER_ID) {
-      // This method delegates to the first runnable Java installer (currently winget) at runtime.
-      return (
-        platform === 'win32'
-        && (hasCommandImpl('powershell') || hasCommandImpl('powershell.exe'))
-        && hasCommandImpl('winget')
-      );
     }
     if (m.shellCommand) return shellInstallAllowed(m.shellCommand, platform, hasCommandImpl);
     return false;

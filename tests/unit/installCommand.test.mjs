@@ -6,3 +6,8 @@ test('runInstallCli rejects unknown tool', async () => {
   const code = await runInstallCli('gradle');
   assert.equal(code, 1);
 });
+
+test('runInstallCli rejects java (use winget or --setup instead)', async () => {
+  const code = await runInstallCli('java');
+  assert.equal(code, 1);
+});

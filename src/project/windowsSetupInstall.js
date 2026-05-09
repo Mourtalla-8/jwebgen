@@ -1,10 +1,10 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-/** Pinned Apache binary releases used by embedded scripts. */
-export const WINDOWS_MAVEN_PORTABLE_VERSION = '3.9.9';
-export const WINDOWS_TOMCAT_PORTABLE_VERSION = '10.1.39';
-export const WINDOWS_WILDFLY_PORTABLE_VERSION = '31.0.1.Final';
+/** Pinned releases used by embedded PowerShell installers (keep in sync with src/resources/install-*-windows.ps1). */
+export const WINDOWS_MAVEN_PORTABLE_VERSION = '3.9.15';
+export const WINDOWS_TOMCAT_PORTABLE_VERSION = '10.1.54';
+export const WINDOWS_WILDFLY_PORTABLE_VERSION = '39.0.1.Final';
 
 const MAVEN_SCRIPT_URL = new URL('../resources/install-maven-windows.ps1', import.meta.url);
 const TOMCAT_SCRIPT_URL = new URL('../resources/install-tomcat-windows.ps1', import.meta.url);

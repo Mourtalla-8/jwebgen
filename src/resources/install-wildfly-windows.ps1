@@ -1,104 +1,207 @@
 $ErrorActionPreference = 'Stop'
-$v = '31.0.1.Final'
-$base = "wildfly-$v"
-$zip = "$base.zip"
-$primaryUrl = "https://github.com/wildfly/wildfly/releases/download/$v/$zip"
-$fallbackUrl = "https://download.jboss.org/wildfly/$v/$zip"
-$primaryChecksumUrl = "https://github.com/wildfly/wildfly/releases/download/$v/$zip.sha1"
-$fallbackChecksumUrl = "https://download.jboss.org/wildfly/$v/$zip.sha1"
-$checksumUrl = $primaryChecksumUrl
-$destRoot = Join-Path $env:LOCALAPPDATA 'Programs'
-$installDir = Join-Path $destRoot $base
-$binPath = Join-Path $installDir 'bin'
-$stagingRoot = Join-Path $destRoot ("$base-staging-" + [Guid]::NewGuid().ToString('N'))
-$zipPath = Join-Path $stagingRoot $zip
-$stagedInstallDir = Join-Path $stagingRoot $base
-$backupDir = "$installDir.backup-" + (Get-Date -Format 'yyyyMMddHHmmss')
 
-New-Item -ItemType Directory -Force -Path $destRoot | Out-Null
-New-Item -ItemType Directory -Force -Path $stagingRoot | Out-Null
+# ================================
+# CONFIGURATION
+# ================================
+$version = '39.0.1.Final'
+$base = "wildfly-$version"
+$zipName = "$base.zip"
+
+# URLs
+$primaryUrl = "https://github.com/wildfly/wildfly/releases/download/$version/$zipName"
+$fallbackUrl = "https://download.jboss.org/wildfly/$version/$zipName"
+
+$primaryChecksumUrl = "$primaryUrl.sha1"
+$fallbackChecksumUrl = "$fallbackUrl.sha1"
+
+# Installation directory:
+# C:\jwebgen\wildfly-39.0.1.Final
+$installRoot = Join-Path $env:SystemDrive 'jwebgen'
+$wildflyDir = Join-Path $installRoot $base
+$binDir = Join-Path $wildflyDir 'bin'
+
+# Download location:
+# C:\Users\<User>\Downloads
+$downloadsDir = Join-Path $env:USERPROFILE 'Downloads'
+$zipPath = Join-Path $downloadsDir $zipName
+$checksumPath = Join-Path $downloadsDir "$zipName.sha1"
+
+# ================================
+# HELPERS
+# ================================
+function Download-File {
+    param(
+        [Parameter(Mandatory)][string]$Url,
+        [Parameter(Mandatory)][string]$OutFile
+    )
+
+    if (Test-Path -LiteralPath $OutFile) {
+        Remove-Item -LiteralPath $OutFile -Force -ErrorAction SilentlyContinue
+    }
+
+    Invoke-WebRequest -Uri $Url -OutFile $OutFile -ErrorAction Stop
+
+    if (-not (Test-Path -LiteralPath $OutFile)) {
+        throw "Download failed"
+    }
+}
+
+function Get-Sha1FromFile {
+    param(
+        [Parameter(Mandatory)][string]$Path
+    )
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        throw "Checksum file not found"
+    }
+
+    $text = Get-Content -LiteralPath $Path -Raw
+    if ($null -eq $text) {
+        throw "Checksum file is empty"
+    }
+
+    $text = [string]$text
+
+    # Remove BOM if present
+    if ($text.Length -gt 0 -and $text[0] -eq [char]0xFEFF) {
+        $text = $text.Substring(1)
+    }
+
+    $text = $text.Trim()
+
+    $match = [regex]::Match($text, '[0-9a-fA-F]{40}')
+    if (-not $match.Success) {
+        throw "Checksum parse error"
+    }
+
+    return $match.Value.ToLowerInvariant()
+}
+
+function Set-UserEnvironment {
+    param(
+        [Parameter(Mandatory)][string]$WildFlyDir,
+        [Parameter(Mandatory)][string]$BinDir,
+        [Parameter(Mandatory)][string]$InstallRoot
+    )
+
+    [Environment]::SetEnvironmentVariable('WILDFLY_HOME', $WildFlyDir, 'User')
+
+    $Normalize = {
+        param([string]$p)
+
+        if ([string]::IsNullOrWhiteSpace($p)) {
+            return $null
+        }
+
+        try {
+            return [IO.Path]::GetFullPath($p).TrimEnd('\')
+        }
+        catch {
+            return $p.TrimEnd('\')
+        }
+    }
+
+    $normalizedBin = & $Normalize $BinDir
+    $normalizedInstallRoot = (& $Normalize $InstallRoot).ToLowerInvariant()
+
+    $currentUserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+    $entries = @()
+
+    if (-not [string]::IsNullOrWhiteSpace($currentUserPath)) {
+        $entries = $currentUserPath -split ';' |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+            ForEach-Object { & $Normalize $_ } |
+            Where-Object {
+                $entryLower = $_.ToLowerInvariant()
+
+                -not (
+                    $entryLower.StartsWith($normalizedInstallRoot) -and
+                    $entryLower -match 'wildfly-[^\\]+\\bin$'
+                )
+            }
+    }
+
+    if ($entries -notcontains $normalizedBin) {
+        $entries += $BinDir
+    }
+
+    $newPath = ($entries -join ';').Trim(';')
+    [Environment]::SetEnvironmentVariable('Path', $newPath, 'User')
+}
+
+# ================================
+# INIT
+# ================================
+New-Item -ItemType Directory -Force -Path $installRoot | Out-Null
+New-Item -ItemType Directory -Force -Path $downloadsDir | Out-Null
 
 try {
-  try {
-    Invoke-WebRequest -Uri $primaryUrl -OutFile $zipPath -UseBasicParsing
-  } catch {
-    $checksumUrl = $fallbackChecksumUrl
-    Invoke-WebRequest -Uri $fallbackUrl -OutFile $zipPath -UseBasicParsing
-  }
-
-  # PSScriptAnalyzer flags SHA1 as weak, but WildFly/JBoss currently publishes this archive checksum at $checksumUrl as .sha1.
-  # We parse $shaRaw into $expected and compare with $actual to enforce upstream integrity until stronger checksums are available.
-  $shaRaw = (Invoke-WebRequest -Uri $checksumUrl -UseBasicParsing).Content
-  # Parse flexible .sha1 formats:
-  # - optional UTF-8 BOM
-  # - optional leading whitespace / blank lines
-  # - either: "<HASH>" or "<HASH> <filename>"
-  $shaText = [string]$shaRaw
-  if ($shaText.Length -gt 0 -and $shaText[0] -eq [char]0xFEFF) {
-    $shaText = $shaText.Substring(1)
-  }
-  $m = [regex]::Match($shaText, '(?im)^[\s\r\n]*([0-9a-f]{40})\b')
-  if (-not $m.Success) {
-    throw "Could not parse checksum from $checksumUrl"
-  }
-  $expected = $m.Groups[1].Value.ToLowerInvariant()
-  if (-not $expected -or $expected.Length -ne 40 -or $expected -notmatch '^[0-9a-f]{40}$') {
-    throw "Could not parse checksum from $checksumUrl"
-  }
-  $actual = (Get-FileHash -Path $zipPath -Algorithm SHA1).Hash.ToLowerInvariant()
-  if ($actual -ne $expected) {
-    throw "Checksum verification failed for $zip"
-  }
-
-  Expand-Archive -LiteralPath $zipPath -DestinationPath $stagingRoot -Force
-  if (-not (Test-Path -LiteralPath (Join-Path $stagedInstallDir 'standalone\deployments'))) {
-    throw "WildFly staged install verification failed: missing standalone/deployments folder."
-  }
-
-  $hadExistingInstall = Test-Path -LiteralPath $installDir
-  if ($hadExistingInstall) {
-    Move-Item -LiteralPath $installDir -Destination $backupDir
-  }
-  try {
-    Move-Item -LiteralPath $stagedInstallDir -Destination $installDir
-    if ($hadExistingInstall -and (Test-Path -LiteralPath $backupDir)) {
-      Remove-Item -LiteralPath $backupDir -Recurse -Force -ErrorAction SilentlyContinue
+    # Optional Java check (silent)
+    try {
+        java -version *> $null
     }
-  } catch {
-    if ($hadExistingInstall -and (Test-Path -LiteralPath $backupDir) -and -not (Test-Path -LiteralPath $installDir)) {
-      Move-Item -LiteralPath $backupDir -Destination $installDir
+    catch {
+        # Ignore if Java is not installed
     }
-    throw
-  }
-} finally {
-  if (Test-Path -LiteralPath $zipPath) {
+
+    # Download ZIP with fallback
+    try {
+        Download-File -Url $primaryUrl -OutFile $zipPath
+    }
+    catch {
+        Download-File -Url $fallbackUrl -OutFile $zipPath
+    }
+
+    # Download checksum with fallback
+    try {
+        Download-File -Url $primaryChecksumUrl -OutFile $checksumPath
+    }
+    catch {
+        Download-File -Url $fallbackChecksumUrl -OutFile $checksumPath
+    }
+
+    # Verify checksum
+    $expected = Get-Sha1FromFile -Path $checksumPath
+    $actual = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA1).Hash.ToLowerInvariant()
+
+    if ($expected -ne $actual) {
+        throw "Checksum failed"
+    }
+
+    # Remove previous installation
+    if (Test-Path -LiteralPath $wildflyDir) {
+        Remove-Item -LiteralPath $wildflyDir -Recurse -Force -ErrorAction Stop
+    }
+
+    # Extract ZIP
+    Expand-Archive -LiteralPath $zipPath -DestinationPath $installRoot -Force
+
+    # Verify installation
+    if (-not (Test-Path -LiteralPath $wildflyDir)) {
+        throw "WildFly directory not found after extraction"
+    }
+
+    if (-not (Test-Path -LiteralPath (Join-Path $wildflyDir 'bin'))) {
+        throw "Invalid WildFly structure"
+    }
+
+    if (-not (Test-Path -LiteralPath (Join-Path $wildflyDir 'standalone'))) {
+        throw "Invalid WildFly structure"
+    }
+
+    # Configure environment variables
+    Set-UserEnvironment `
+        -WildFlyDir $wildflyDir `
+        -BinDir $binDir `
+        -InstallRoot $installRoot
+
+    # Final verification
+    if (-not (Test-Path -LiteralPath (Join-Path $binDir 'standalone.bat'))) {
+        throw "WildFly installation incomplete"
+    }
+}
+finally {
+    # Cleanup downloaded files
     Remove-Item -LiteralPath $zipPath -Force -ErrorAction SilentlyContinue
-  }
-  if (Test-Path -LiteralPath $stagingRoot) {
-    Remove-Item -LiteralPath $stagingRoot -Recurse -Force -ErrorAction SilentlyContinue
-  }
-}
-
-[Environment]::SetEnvironmentVariable('WILDFLY_HOME', $installDir, 'User')
-
-$userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-$norm = { param($p) try { [IO.Path]::GetFullPath($p).TrimEnd('\') } catch { $p.TrimEnd('\') } }
-$binN = & $norm $binPath
-$destRootN = (& $norm $destRoot).ToLowerInvariant()
-$parts = @()
-if ($userPath) {
-  $parts = $userPath -split ';' | Where-Object { $_ } | ForEach-Object { & $norm $_ } | Where-Object {
-    $entryLower = $_.ToLowerInvariant()
-    $underDestRoot = $entryLower.StartsWith($destRootN + '\')
-    $looksLikeWildflyBin = $entryLower -match '\\wildfly-[^\\]+\\bin$'
-    -not ($underDestRoot -and $looksLikeWildflyBin)
-  }
-}
-$have = $parts -contains $binN
-if (-not $have) {
-  $joinedBase = ($parts -join ';').Trim(';')
-  $joined = if ($joinedBase) { ($joinedBase + ';' + $binPath) } else { $binPath }
-  [Environment]::SetEnvironmentVariable('Path', $joined, 'User')
-} elseif ($userPath -ne ($parts -join ';')) {
-  [Environment]::SetEnvironmentVariable('Path', ($parts -join ';'), 'User')
+    Remove-Item -LiteralPath $checksumPath -Force -ErrorAction SilentlyContinue
 }

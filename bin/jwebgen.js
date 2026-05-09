@@ -76,7 +76,7 @@ const APP_NAME = 'jwebgen';
 const APP_VERSION = pkg.version;
 const CANONICAL_DEPLOY_SCRIPT = 'deploy.sh';
 const LEGACY_DEPLOY_SCRIPT = 'deploy-tomcat.sh';
-const INSTALLABLE_TOOLS = new Set(['java', 'maven', 'tomcat', 'wildfly']);
+const INSTALLABLE_TOOLS = new Set(['maven', 'tomcat', 'wildfly']);
 
 const SERVER_OPTIONS = [
   { value: 'tomcat', label: 'Tomcat' },
@@ -299,7 +299,7 @@ async function runCli() {
   if (action === 'install') {
     const tool = String(flags.installTool || '').trim();
     if (!tool || !INSTALLABLE_TOOLS.has(tool)) {
-      console.log(pc.red('Usage: jwebgen --install <java|maven|tomcat|wildfly>'));
+      console.log(pc.red('Usage: jwebgen --install <maven|tomcat|wildfly>'));
       process.exit(1);
     }
     const spin = spinner();

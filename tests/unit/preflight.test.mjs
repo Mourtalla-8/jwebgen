@@ -138,7 +138,7 @@ test('computeSuggestedActions on win32 suggests embedded Maven when maven is mis
   assert.equal(maven.installMethods[0].shellCommand, null);
 });
 
-test('computeSuggestedActions on win32 includes jwebgen internal Java installer option', () => {
+test('computeSuggestedActions on win32 offers winget Java installers only (no jwebgen --install java)', () => {
   const state = {
     checks: [
       { key: 'java', ok: false },
@@ -160,7 +160,8 @@ test('computeSuggestedActions on win32 includes jwebgen internal Java installer 
   });
   const java = actions.find((a) => a.type === 'install' && a.key === 'java');
   assert.ok(java);
-  assert.equal(java.installMethods.some((m) => m.internalId === 'java-win-jwebgen-internal'), true);
+  assert.equal(java.installMethods.some((m) => m.internalId != null), false);
+  assert.equal(java.installMethods.some((m) => /\bwinget\b/i.test(String(m.shellCommand || ''))), true);
 });
 
 test('computeSuggestedActions on win32 suggests embedded Tomcat and WildFly installers', () => {
@@ -402,7 +403,7 @@ test('runSetupAssistant dry-run prints method labels for install options', async
   assert.match(output, /jwebgen --install tomcat/);
 });
 
-test('runSetupAssistant setup mode offers all Java methods including jwebgen internal installer', async () => {
+test('runSetupAssistant setup mode offers winget Java install options on Windows', async () => {
   const seenOptions = [];
   await runSetupAssistant({
     confirmPrompt: async () => false,
@@ -430,7 +431,7 @@ test('runSetupAssistant setup mode offers all Java methods including jwebgen int
   assert.equal(seenOptions.includes('None'), true);
   assert.equal(seenOptions.includes('winget (Eclipse Temurin 21 JDK)'), true);
   assert.equal(seenOptions.includes('winget (Microsoft OpenJDK 21)'), true);
-  assert.equal(seenOptions.includes('jwebgen internal installer'), true);
+  assert.equal(seenOptions.includes('jwebgen internal installer'), false);
 });
 
 test('runSetupAssistant treats winget already-installed/no-upgrade as success', async () => {
