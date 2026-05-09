@@ -112,12 +112,20 @@ assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'function hasCommand', 'worker probes
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, "hasCommand('systemctl')", 'worker gates systemctl usage by availability');
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, "hasCommand('ss')", 'worker gates ss usage by availability');
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, "hasCommand('lsof')", 'worker falls back to lsof when ss unavailable');
+assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'function hasListenerOnPort', 'worker detects listening ports on Windows/macOS');
+assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'async function redeployOnly', 'worker can redeploy without full rebuild');
+assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'function stopSelectedServer', 'worker stops server started from dev UI');
+assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'spawnSync', 'worker uses sync spawn for shutdown on exit');
+assertContains(DEV_WORKER_SCRIPT_TEMPLATE, "payload.cmd === 'refresh'", 'worker handles dashboard refresh command');
+assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'healthCycleRunning', 'worker serializes server health cycles');
+assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, "cmd: 'refresh'", 'dashboard queues worker refresh on key f');
 
 assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, 'function serverDownHint', 'dashboard embeds OS-aware server hints');
 assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, 'JWEBGEN_SERVER_TARGET', 'dashboard distinguishes Tomcat/WildFly from env');
 assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, "serverDownHint(", 'dashboard invokes serverDownHint from render wiring');
 assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, "s.server === 'down'", 'dashboard ties hint to server down state');
-assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, '[s] start server', 'dashboard exposes start server control');
+assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, 'showStartServer', 'dashboard gates start server control on server state');
+assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, '[s] start server', 'dashboard exposes start server label when server is down');
 assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, 'sudo systemctl start tomcat10', 'dashboard linux Tomcat hint suggests sudo');
 assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, 'prefer standalone.sh', 'dashboard linux WildFly hint prefers standalone');
 

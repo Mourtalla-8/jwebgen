@@ -1,6 +1,6 @@
 export const DEV_WORKER_SCRIPT_TEMPLATE = `import http from 'node:http';
 import crypto from 'node:crypto';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import net from 'node:net';
 import { readdirSync, statSync, watch as fsWatch, writeFileSync, appendFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
 import path from 'node:path';
@@ -40,6 +40,8 @@ const state = {
   proxyPort
 };
 let startInProgress = false;
+let serverStartedByDev = false;
+let redeployRetryScheduled = false;
 function syncPublicUrls() {
   state.proxyUrl = 'http://localhost:' + proxyPort + '/' + appName + '/';
   state.appUrl = 'http://localhost:' + httpPort + '/' + appName + '/';
@@ -93,6 +95,37 @@ function portOwner(port) {
     }).catch(() => resolve(null));
   });
 }
+function hasListenerOnPort(port) {
+  return new Promise((resolve) => {
+    const p = Number(port);
+    if (!Number.isFinite(p) || p <= 0) return resolve(false);
+    if (process.platform === 'win32') {
+      const ns = spawn('netstat', ['-ano'], { stdio: ['ignore', 'pipe', 'ignore'] });
+      let out = '';
+      ns.stdout.on('data', (c) => { out += String(c); });
+      ns.on('error', () => resolve(false));
+      ns.on('exit', () => {
+        const portStr = String(p);
+        for (const line of out.split(/\\r?\\n/)) {
+          if (!/LISTENING/i.test(line)) continue;
+          if (line.includes(':' + portStr) || line.includes('[::]:' + portStr) || line.includes(']:' + portStr)) {
+            return resolve(true);
+          }
+        }
+        resolve(false);
+      });
+      return;
+    }
+    hasCommand('lsof').then((ok) => {
+      if (!ok) return resolve(false);
+      const lf = spawn('lsof', ['-nP', '-iTCP:' + p, '-sTCP:LISTEN'], { stdio: ['ignore', 'pipe', 'ignore'] });
+      let buf = '';
+      lf.stdout.on('data', (c) => { buf += String(c); });
+      lf.on('error', () => resolve(false));
+      lf.on('exit', (code) => resolve(code === 0 && buf.trim().length > 0));
+    }).catch(() => resolve(false));
+  });
+}
 function resolveTomcatHome() {
   return String(process.env.TOMCAT_HOME || process.env.TOMCAT10 || process.env.CATALINA_HOME || '').trim();
 }
@@ -106,14 +139,74 @@ function runAndWait(command, args = []) {
     p.on('exit', (code) => resolve(code === 0));
   });
 }
-function runDetached(command, args = []) {
+function runDetached(command, args = [], opts = {}) {
   try {
-    const p = spawn(command, args, { detached: true, stdio: 'ignore', shell: false });
+    const p = spawn(command, args, { detached: true, stdio: 'ignore', shell: false, ...opts });
+    p.on('error', () => {});
     p.unref();
     return true;
   } catch {
     return false;
   }
+}
+function spawnWinServerBatch(home, batchRel) {
+  try {
+    const p = spawn('cmd.exe', ['/d', '/c', 'call', batchRel], {
+      cwd: home,
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true
+    });
+    p.on('error', () => {});
+    p.unref();
+    return true;
+  } catch {
+    return false;
+  }
+}
+function stopSelectedServer() {
+  if (!serverStartedByDev) return;
+  try {
+    if (serverTarget === 'tomcat') {
+      const home = resolveTomcatHome();
+      if (home) {
+        if (process.platform === 'win32') {
+          spawnSync('cmd.exe', ['/d', '/c', 'call', 'bin\\\\shutdown.bat'], {
+            cwd: home,
+            stdio: 'ignore',
+            windowsHide: true,
+            timeout: 25000
+          });
+        } else {
+          const sh = path.join(home, 'bin', 'shutdown.sh');
+          if (existsSync(sh)) {
+            spawnSync(sh, [], { cwd: home, stdio: 'ignore', timeout: 25000 });
+          }
+        }
+      }
+    } else if (serverTarget === 'wildfly') {
+      const home = resolveWildflyHome();
+      if (home) {
+        if (process.platform === 'win32') {
+          const cliBat = path.join(home, 'bin', 'jboss-cli.bat');
+          if (existsSync(cliBat)) {
+            spawnSync('cmd.exe', ['/d', '/c', 'call', 'bin\\\\jboss-cli.bat', '--connect', '--command=:shutdown'], {
+              cwd: home,
+              stdio: 'ignore',
+              windowsHide: true,
+              timeout: 25000
+            });
+          }
+        } else {
+          const cliSh = path.join(home, 'bin', 'jboss-cli.sh');
+          if (existsSync(cliSh)) {
+            spawnSync(cliSh, ['--connect', '--command=:shutdown'], { cwd: home, stdio: 'ignore', timeout: 25000 });
+          }
+        }
+      }
+    }
+  } catch {}
+  serverStartedByDev = false;
 }
 async function startSelectedServer() {
   if (startInProgress) return;
@@ -121,6 +214,7 @@ async function startSelectedServer() {
   emit('server_start_requested', { target: serverTarget });
   try {
     let started = false;
+    let markStartedByUs = false;
     if (process.platform === 'linux' && await hasCommand('systemctl')) {
       const unit = serverTarget === 'wildfly' ? 'wildfly' : 'tomcat10';
       started = await runAndWait('systemctl', ['start', unit]);
@@ -130,10 +224,12 @@ async function startSelectedServer() {
       const home = resolveTomcatHome();
       if (home) {
         if (process.platform === 'win32') {
-          started = runDetached('cmd.exe', ['/c', path.join(home, 'bin', 'startup.bat')]);
+          started = spawnWinServerBatch(home, 'bin\\\\startup.bat');
+          if (started) markStartedByUs = true;
         } else {
           started = runDetached(path.join(home, 'bin', 'startup.sh'), []);
           if (!started) started = runDetached(path.join(home, 'bin', 'catalina.sh'), ['start']);
+          if (started) markStartedByUs = true;
         }
       }
     }
@@ -141,9 +237,24 @@ async function startSelectedServer() {
       const home = resolveWildflyHome();
       if (home) {
         if (process.platform === 'win32') {
-          started = runDetached('cmd.exe', ['/c', path.join(home, 'bin', 'standalone.bat')]);
+          started = spawnWinServerBatch(home, 'bin\\\\standalone.bat');
+          if (!started) {
+            try {
+              const p = spawn('cmd.exe', ['/d', '/c', 'start', '/B', '""', 'cmd.exe', '/d', '/c', 'call', 'bin\\\\standalone.bat'], {
+                cwd: home,
+                detached: true,
+                stdio: 'ignore',
+                windowsHide: true
+              });
+              p.on('error', () => {});
+              p.unref();
+              started = true;
+            } catch {}
+          }
+          if (started) markStartedByUs = true;
         } else {
           started = runDetached(path.join(home, 'bin', 'standalone.sh'), []);
+          if (started) markStartedByUs = true;
         }
       }
     }
@@ -151,6 +262,7 @@ async function startSelectedServer() {
       emit('server_start_failed', { target: serverTarget, reason: 'no_supported_start_method' });
       return;
     }
+    if (markStartedByUs) serverStartedByDev = true;
     emit('server_start_triggered', { target: serverTarget });
     await new Promise((r) => setTimeout(r, 1000));
     const check = await serverUp();
@@ -159,20 +271,6 @@ async function startSelectedServer() {
   } finally {
     startInProgress = false;
   }
-}
-function processUiCommand() {
-  if (!commandFile || !existsSync(commandFile)) return;
-  let raw = '';
-  try {
-    raw = readFileSync(commandFile, 'utf8');
-  } catch {
-    return;
-  }
-  try { rmSync(commandFile, { force: true }); } catch {}
-  let payload = null;
-  try { payload = JSON.parse(String(raw || '{}')); } catch { payload = null; }
-  if (!payload || payload.cmd !== 'start_server') return;
-  void startSelectedServer();
 }
 function findFreePort(startAt) {
   return new Promise((resolve) => {
@@ -409,19 +507,31 @@ if (parentPid > 1) {
     try {
       process.kill(parentPid, 0);
     } catch {
+      stopSelectedServer();
       process.exit(0);
     }
   }, 1500).unref();
 }
+
+process.on('SIGINT', () => {
+  stopSelectedServer();
+  process.exit(130);
+});
+process.on('SIGTERM', () => {
+  stopSelectedServer();
+  process.exit(143);
+});
 
 let running = false;
 let queued = false;
 let timer = null;
 let lastBuildQueuedAt = 0;
 let lastDeployFinishedAt = 0;
+let deployOnlyBusy = false;
 const DOUBLE_RELOAD = process.env.JWEBGEN_DOUBLE_RELOAD === '1';
 async function rebuild() {
   if (running) { queued = true; return; }
+  if (deployOnlyBusy) { queued = true; return; }
   running = true;
   state.phase = 'running'; state.build = 'running'; state.deploy = 'pending'; saveState();
   try {
@@ -445,6 +555,37 @@ async function rebuild() {
   } finally {
     running = false;
     if (queued) { queued = false; queueRebuild(); }
+  }
+}
+async function redeployOnly() {
+  if (deployOnlyBusy || running) return;
+  deployOnlyBusy = true;
+  state.phase = 'running';
+  state.deploy = 'running';
+  saveState();
+  try {
+    await runScript('deploy.sh');
+    state.deploy = 'ok';
+    state.phase = 'idle';
+    saveState();
+    notifyReload();
+    if (DOUBLE_RELOAD) setTimeout(() => notifyReload(), 600);
+    lastDeployFinishedAt = Date.now();
+  } catch (err) {
+    const msg = String(err?.message || '');
+    const failedDuringDeploy = state.deploy === 'running';
+    if (msg.includes('__JWEBGEN_EVENT__ server_down')) emit('server_down');
+    if (msg.includes('__JWEBGEN_EVENT__ deploy_sudo_required')) emit('deploy_sudo_required');
+    if (failedDuringDeploy && !msg.includes('__JWEBGEN_EVENT__ deploy_sudo_required')) emit('deploy_error');
+    state.phase = 'idle';
+    if (state.deploy === 'running') state.deploy = 'error';
+    saveState();
+  } finally {
+    deployOnlyBusy = false;
+    if (queued) {
+      queued = false;
+      void rebuild();
+    }
   }
 }
 function queueRebuild() {
@@ -546,13 +687,22 @@ function serverUp() {
           if (Number(mgmtRes.statusCode || 0) > 0) return resolve({ ok: true, status: 'app_down_000', httpStatus: 0 });
           checkPortOwner();
         });
-        mgmtReq.on('error', () => checkPortOwner());
-        mgmtReq.on('timeout', () => { mgmtReq.destroy(); checkPortOwner(); });
+        const wildflyMgmtDown = () => {
+          hasListenerOnPort(9990).then((listening) => {
+            if (listening) return resolve({ ok: true, status: 'app_down_000', httpStatus: 0 });
+            checkPortOwner();
+          });
+        };
+        mgmtReq.on('error', wildflyMgmtDown);
+        mgmtReq.on('timeout', () => { mgmtReq.destroy(); wildflyMgmtDown(); });
         mgmtReq.end();
         return;
       }
       if (process.platform !== 'linux') {
-        checkPortOwner();
+        hasListenerOnPort(httpPort).then((listening) => {
+          if (listening) return resolve({ ok: true, status: 'app_down' });
+          checkPortOwner();
+        });
         return;
       }
       hasCommand('systemctl').then((available) => {
@@ -580,23 +730,74 @@ function nextAppState(status) {
   return 'unknown';
 }
 let lastStatus = '';
-setInterval(async () => {
-  const check = await serverUp();
-  const nextServer = check.status === 'starting' ? 'checking' : (check.ok ? 'up' : 'down');
-  const nextApp = nextAppState(check.status);
-  let changed = false;
-  if (state.server !== nextServer) { state.server = nextServer; changed = true; }
-  if (state.app !== nextApp) { state.app = nextApp; changed = true; }
-  if (changed) saveState();
-  if (check.status !== lastStatus) {
-    lastStatus = check.status;
-    if (check.status === 'port_conflict') emit('http_port_conflict', { port: httpPort, owner: check.owner || '' });
-    else if (check.status === 'down') emit('server_down', { reason: check.status, port: httpPort });
-    else if (check.status === 'app_down' || check.status === 'app_down_000') {
-      emit('app_unreachable', { port: httpPort, app: appName, httpStatus: check.httpStatus || 0 });
+let healthCycleRunning = false;
+async function runServerHealthCycle() {
+  if (healthCycleRunning) return;
+  healthCycleRunning = true;
+  try {
+    const prevS = state.server;
+    const prevA = state.app;
+    const check = await serverUp();
+    const nextServer = check.status === 'starting' ? 'checking' : (check.ok ? 'up' : 'down');
+    const nextApp = nextAppState(check.status);
+    let changed = false;
+    if (state.server !== nextServer) { state.server = nextServer; changed = true; }
+    if (state.app !== nextApp) { state.app = nextApp; changed = true; }
+    if (changed) saveState();
+    const serverRecovered =
+      (prevS === 'down' || prevS === 'checking') && nextServer === 'up';
+    const appRecovered =
+      nextServer === 'up'
+      && (prevA === 'down' || prevA === 'checking')
+      && nextApp === 'up';
+    if (
+      state.deploy === 'error'
+      && (serverRecovered || appRecovered)
+      && !running
+      && !deployOnlyBusy
+      && !redeployRetryScheduled
+    ) {
+      redeployRetryScheduled = true;
+      void (async () => {
+        try {
+          if (state.build === 'ok') await redeployOnly();
+          else queueRebuild();
+        } finally {
+          redeployRetryScheduled = false;
+        }
+      })();
     }
+    if (check.status !== lastStatus) {
+      lastStatus = check.status;
+      if (check.status === 'port_conflict') emit('http_port_conflict', { port: httpPort, owner: check.owner || '' });
+      else if (check.status === 'down') emit('server_down', { reason: check.status, port: httpPort });
+      else if (check.status === 'app_down' || check.status === 'app_down_000') {
+        emit('app_unreachable', { port: httpPort, app: appName, httpStatus: check.httpStatus || 0 });
+      }
+    }
+  } finally {
+    healthCycleRunning = false;
   }
-}, 1200).unref();
+}
+setInterval(() => { void runServerHealthCycle(); }, 1200).unref();
+function processUiCommand() {
+  if (!commandFile || !existsSync(commandFile)) return;
+  let raw = '';
+  try {
+    raw = readFileSync(commandFile, 'utf8');
+  } catch {
+    return;
+  }
+  try { rmSync(commandFile, { force: true }); } catch {}
+  let payload = null;
+  try { payload = JSON.parse(String(raw || '{}')); } catch { payload = null; }
+  if (!payload || !payload.cmd) return;
+  if (payload.cmd === 'refresh') {
+    void runServerHealthCycle();
+    return;
+  }
+  if (payload.cmd === 'start_server') void startSelectedServer();
+}
 setInterval(() => {
   processUiCommand();
 }, 350).unref();
@@ -665,7 +866,8 @@ function render() {
   const lbl = (k) => color('2;37', String(k).padEnd(LW));
   const kv = (k, v) => lbl(k) + color('2;37', ': ') + padAnsi(v, statusWidth);
   const kvPair = (k1, v1, k2, v2) => '  ' + kv(k1, v1) + '   ' + kv(k2, v2) + '\\n';
-  const controls = color('2;37', '[f] refresh  [s] start server');
+  const showStartServer = s.server === 'down';
+  const controls = color('2;37', showStartServer ? '[f] refresh  [s] start server' : '[f] refresh');
   const serverHint = s.server === 'down' ? ('\\n  ' + color('2;37', serverDownHint())) : '';
   const out = color('1;36', 'jwebgen --dev') + '  ' + phase + '\\n'
     + kvPair('build', build, 'deploy', deploy)
@@ -682,13 +884,21 @@ if (process.stdin.isTTY) {
   process.stdin.on('data', (buf) => {
     const key = String(buf || '').toLowerCase();
     if (key === 'f') {
+      if (commandFile) {
+        try {
+          writeFileSync(commandFile, JSON.stringify({ cmd: 'refresh', ts: Date.now() }), 'utf8');
+        } catch {}
+      }
       render();
       return;
     }
     if (key === 's' && commandFile) {
-      try {
-        writeFileSync(commandFile, JSON.stringify({ cmd: 'start_server', ts: Date.now() }), 'utf8');
-      } catch {}
+      const cur = loadState();
+      if (cur && cur.server === 'down') {
+        try {
+          writeFileSync(commandFile, JSON.stringify({ cmd: 'start_server', ts: Date.now() }), 'utf8');
+        } catch {}
+      }
       render();
     }
   });

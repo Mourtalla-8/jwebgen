@@ -15,8 +15,7 @@ import {
 import {
   commandPreviewForInstallMethod,
   filterInstallMethods,
-  getInstallMethodsForKey,
-  JAVA_WINDOWS_INTERNAL_INSTALLER_ID
+  getInstallMethodsForKey
 } from './installMatrix.js';
 
 export const CANCEL_STEP = '__JWEBGEN_CANCEL_STEP__';
@@ -409,20 +408,11 @@ function normalizeInstallResult(result, method) {
 
 function getInstallLocationForTool(tool) {
   if (process.platform !== 'win32') return '';
-  const root = process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'Programs') : '';
-  if (!root) return '';
-  if (tool === 'maven') return path.join(root, `apache-maven-${WINDOWS_MAVEN_PORTABLE_VERSION}`);
-  if (tool === 'tomcat') return path.join(root, `apache-tomcat-${WINDOWS_TOMCAT_PORTABLE_VERSION}`);
-  if (tool === 'wildfly') return path.join(root, `wildfly-${WINDOWS_WILDFLY_PORTABLE_VERSION}`);
-  if (tool === 'java') {
-    const whereProbe = spawnSync('where', ['javac'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
-    const javacPath = String(whereProbe.stdout || '')
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .find(Boolean);
-    if (!javacPath) return '';
-    return path.dirname(path.dirname(javacPath));
-  }
+  const drive = String(process.env.SystemDrive || 'C:').replace(/[/\\]+$/, '');
+  const jwebgenRoot = path.join(`${drive}${path.sep}`, 'jwebgen');
+  if (tool === 'maven') return path.join(jwebgenRoot, `apache-maven-${WINDOWS_MAVEN_PORTABLE_VERSION}`);
+  if (tool === 'tomcat') return path.join(jwebgenRoot, `apache-tomcat-${WINDOWS_TOMCAT_PORTABLE_VERSION}`);
+  if (tool === 'wildfly') return path.join(jwebgenRoot, `wildfly-${WINDOWS_WILDFLY_PORTABLE_VERSION}`);
   return '';
 }
 
@@ -437,7 +427,7 @@ function printInstallDone(tool) {
 
 function resolvePrimaryInstallMethod(tool, platform, runCommandImpl) {
   const methods = resolveInstallMethods(tool, platform, hasCommand);
-  const resolved = methods.find((method) => method.internalId !== JAVA_WINDOWS_INTERNAL_INSTALLER_ID) || null;
+  const resolved = methods[0] || null;
   if (!resolved) {
     return null;
   }
@@ -445,20 +435,6 @@ function resolvePrimaryInstallMethod(tool, platform, runCommandImpl) {
 }
 
 async function executeInstallMethod(tool, method, runCommandImpl) {
-  if (method.internalId === JAVA_WINDOWS_INTERNAL_INSTALLER_ID) {
-    const primary = resolvePrimaryInstallMethod(tool, process.platform, runCommandImpl);
-    if (!primary) {
-      return {
-        status: 1,
-        timedOut: false,
-        error: new Error('No install method'),
-        signal: null,
-        stdout: '',
-        stderr: ''
-      };
-    }
-    return executeInstallMethod(tool, primary.method, primary.runCommandImpl);
-  }
   if (method.internalId === 'maven-windows-portable') {
     return runWindowsMavenPortableInstall();
   }
@@ -487,13 +463,6 @@ export async function runInstallTool(tool, { runCommandImpl = runCommand } = {})
   if (check.ok) {
     console.log(pc.green(`${tool} already satisfied.`));
     return 0;
-  }
-  if (tool === 'java') {
-    const java = detectJavaCompiler();
-    if (java.present && evaluateJavaCompatibility(java.majorRelease, 11).status !== 'ok') {
-      console.error(pc.red('Java is present but not compatible with jwebgen (requires JDK 11+).'));
-      return 1;
-    }
   }
   const primary = resolvePrimaryInstallMethod(tool, platform, runCommandImpl);
   if (!primary?.method) {

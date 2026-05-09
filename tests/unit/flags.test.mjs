@@ -41,9 +41,10 @@ test('parseFlags maps --install with tool argument', () => {
 });
 
 test('parseFlags maps install before setup when both appear', () => {
-  const parsed = parseFlags(['--install', 'java', '--setup']);
+  const parsed = parseFlags(['--install', 'maven', '--setup']);
   assert.equal(parsed.actionCount, 2);
-  assert.equal(parsed.flags.installTool, 'java');
+  assert.equal(parsed.action, 'install');
+  assert.equal(parsed.flags.installTool, 'maven');
 });
 
 test('parseFlags rejects multiple actions via actionCount', () => {
@@ -92,7 +93,7 @@ test('isLikelyLegacySubcommand detects old subcommand tokens', () => {
 test('formatFlagsHelp includes lifecycle commands for setup/update/uninstall', () => {
   const help = formatFlagsHelp({ appName: 'jwebgen' });
   assert.match(help, /--setup \[--dry-run\]/);
-  assert.match(help, /--install <java\|maven\|tomcat\|wildfly>/);
+  assert.match(help, /--install <maven\|tomcat\|wildfly>/);
   assert.match(help, /--update/);
   assert.match(help, /--uninstall/);
   assert.match(help, /--version, -V, -v/);
