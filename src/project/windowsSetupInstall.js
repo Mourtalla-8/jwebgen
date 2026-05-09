@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 /** Pinned Apache binary releases used by embedded scripts. */
@@ -50,7 +50,11 @@ async function runPowerShellScript(scriptPath, { timeoutMs = 10 * 60 * 1000 } = 
     const killTimer = setTimeout(() => {
       timedOut = true;
       try {
-        child.kill('SIGTERM');
+        if (process.platform === 'win32') {
+          spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+        } else {
+          child.kill('SIGTERM');
+        }
       } catch {
         /* ignore */
       }
@@ -61,7 +65,11 @@ async function runPowerShellScript(scriptPath, { timeoutMs = 10 * 60 * 1000 } = 
     const onSigint = () => {
       interrupted = true;
       try {
-        child.kill('SIGINT');
+        if (process.platform === 'win32') {
+          spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+        } else {
+          child.kill('SIGINT');
+        }
       } catch {
         /* ignore */
       }

@@ -4,7 +4,9 @@ $base = "wildfly-$v"
 $zip = "$base.zip"
 $primaryUrl = "https://github.com/wildfly/wildfly/releases/download/$v/$zip"
 $fallbackUrl = "https://download.jboss.org/wildfly/$v/$zip"
-$checksumUrl = "https://download.jboss.org/wildfly/$v/$zip.sha1"
+$primaryChecksumUrl = "https://github.com/wildfly/wildfly/releases/download/$v/$zip.sha1"
+$fallbackChecksumUrl = "https://download.jboss.org/wildfly/$v/$zip.sha1"
+$checksumUrl = $primaryChecksumUrl
 $destRoot = Join-Path $env:LOCALAPPDATA 'Programs'
 $installDir = Join-Path $destRoot $base
 $binPath = Join-Path $installDir 'bin'
@@ -20,6 +22,7 @@ try {
   try {
     Invoke-WebRequest -Uri $primaryUrl -OutFile $zipPath -UseBasicParsing
   } catch {
+    $checksumUrl = $fallbackChecksumUrl
     Invoke-WebRequest -Uri $fallbackUrl -OutFile $zipPath -UseBasicParsing
   }
 

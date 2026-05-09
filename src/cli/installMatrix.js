@@ -4,9 +4,17 @@
  */
 
 export const PREVIEW_MAX_LEN = 120;
+export const JAVA_WINDOWS_INTERNAL_INSTALLER_ID = 'java-win-jwebgen-internal';
 
 export function installCliLine(tool) {
   return `jwebgen --install ${tool}`;
+}
+
+export function commandPreviewForInstallMethod(method, tool) {
+  if (method?.previewLine) return method.previewLine;
+  if (method?.shellCommand) return method.shellCommand;
+  if (method?.internalId) return installCliLine(tool);
+  return null;
 }
 
 function shellInstallAllowed(shellCommand, platform, hasCommandImpl) {
@@ -73,6 +81,13 @@ export function getInstallMethodsForKey(key, platform) {
         shellCommand: t2,
         previewLine: previewForShell(t2),
         internalId: null
+      });
+      out.push({
+        id: JAVA_WINDOWS_INTERNAL_INSTALLER_ID,
+        label: 'jwebgen internal installer',
+        shellCommand: null,
+        previewLine: installCliLine('java'),
+        internalId: JAVA_WINDOWS_INTERNAL_INSTALLER_ID
       });
     } else if (platform === 'darwin') {
       const shellCommand = 'brew install --cask temurin';
@@ -200,6 +215,7 @@ export function filterInstallMethods(methods, platform, hasCommandImpl) {
       m.internalId === 'maven-windows-portable'
       || m.internalId === 'tomcat-windows-portable'
       || m.internalId === 'wildfly-windows-portable'
+      || m.internalId === JAVA_WINDOWS_INTERNAL_INSTALLER_ID
     ) {
       return platform === 'win32' && (hasCommandImpl('powershell') || hasCommandImpl('powershell.exe'));
     }
