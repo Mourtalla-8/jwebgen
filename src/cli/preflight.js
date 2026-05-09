@@ -363,7 +363,7 @@ export async function runCommand(command, { timeoutMs = 10 * 60 * 1000 } = {}) {
     process.once('SIGINT', onSigint);
 
     const { code, signal } = await new Promise((resolve) => {
-      child.on('exit', (code, signal) => resolve({ code, signal }));
+      child.on('close', (code, signal) => resolve({ code, signal }));
       child.on('error', () => resolve({ code: 1, signal: null }));
     });
     process.off('SIGINT', onSigint);

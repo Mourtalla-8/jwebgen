@@ -215,9 +215,16 @@ export function filterInstallMethods(methods, platform, hasCommandImpl) {
       m.internalId === 'maven-windows-portable'
       || m.internalId === 'tomcat-windows-portable'
       || m.internalId === 'wildfly-windows-portable'
-      || m.internalId === JAVA_WINDOWS_INTERNAL_INSTALLER_ID
     ) {
       return platform === 'win32' && (hasCommandImpl('powershell') || hasCommandImpl('powershell.exe'));
+    }
+    if (m.internalId === JAVA_WINDOWS_INTERNAL_INSTALLER_ID) {
+      // This method delegates to the first runnable Java installer (currently winget) at runtime.
+      return (
+        platform === 'win32'
+        && (hasCommandImpl('powershell') || hasCommandImpl('powershell.exe'))
+        && hasCommandImpl('winget')
+      );
     }
     if (m.shellCommand) return shellInstallAllowed(m.shellCommand, platform, hasCommandImpl);
     return false;
