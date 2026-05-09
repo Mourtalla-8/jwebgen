@@ -415,7 +415,11 @@ function getInstallLocationForTool(tool) {
   if (tool === 'tomcat') return path.join(root, `apache-tomcat-${WINDOWS_TOMCAT_PORTABLE_VERSION}`);
   if (tool === 'wildfly') return path.join(root, `wildfly-${WINDOWS_WILDFLY_PORTABLE_VERSION}`);
   if (tool === 'java') {
-    const javacPath = which('javac.exe') || which('javac');
+    const whereProbe = spawnSync('where', ['javac'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    const javacPath = String(whereProbe.stdout || '')
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find(Boolean);
     if (!javacPath) return '';
     return path.dirname(path.dirname(javacPath));
   }

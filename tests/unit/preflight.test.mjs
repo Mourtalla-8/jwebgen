@@ -459,7 +459,7 @@ test('runSetupAssistant treats winget already-installed/no-upgrade as success', 
   } finally {
     console.log = originalLog;
   }
-  assert.match(logs.join('\n'), /\bDone\b/);
+  assert.match(logs.join('\n'), /Done/);
 });
 
 test('runSetupAssistant shows only tail on failure when not verbose', async () => {
