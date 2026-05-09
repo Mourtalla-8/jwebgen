@@ -29,8 +29,20 @@ try {
   # PSScriptAnalyzer flags SHA1 as weak, but WildFly/JBoss currently publishes this archive checksum at $checksumUrl as .sha1.
   # We parse $shaRaw into $expected and compare with $actual to enforce upstream integrity until stronger checksums are available.
   $shaRaw = (Invoke-WebRequest -Uri $checksumUrl -UseBasicParsing).Content
-  $expected = ($shaRaw -split '\s+')[0].Trim().ToLowerInvariant()
-  if (-not $expected -or $expected.Length -lt 40) {
+  # Parse flexible .sha1 formats:
+  # - optional UTF-8 BOM
+  # - optional leading whitespace / blank lines
+  # - either: "<HASH>" or "<HASH> <filename>"
+  $shaText = [string]$shaRaw
+  if ($shaText.Length -gt 0 -and $shaText[0] -eq [char]0xFEFF) {
+    $shaText = $shaText.Substring(1)
+  }
+  $m = [regex]::Match($shaText, '(?im)^[\s\r\n]*([0-9a-f]{40})\b')
+  if (-not $m.Success) {
+    throw "Could not parse checksum from $checksumUrl"
+  }
+  $expected = $m.Groups[1].Value.ToLowerInvariant()
+  if (-not $expected -or $expected.Length -ne 40 -or $expected -notmatch '^[0-9a-f]{40}$') {
     throw "Could not parse checksum from $checksumUrl"
   }
   $actual = (Get-FileHash -Path $zipPath -Algorithm SHA1).Hash.ToLowerInvariant()

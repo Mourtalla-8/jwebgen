@@ -17,9 +17,27 @@ try {
   Invoke-WebRequest -Uri $fallbackUrl -OutFile $zip -UseBasicParsing
 }
 try {
-  $shaRaw = (Invoke-WebRequest -Uri $shaUrl -UseBasicParsing).Content
-  $expected = ($shaRaw -split '\s+')[0].Trim().ToLowerInvariant()
-  if (-not $expected -or $expected.Length -lt 64) {
+  $shaText = ''
+  try {
+    $shaText = [string](Invoke-WebRequest -Uri $shaUrl -UseBasicParsing).Content
+  } catch {
+    $shaText = [string](Invoke-WebRequest -Uri $fallbackShaUrl -UseBasicParsing).Content
+    $shaUrl = $fallbackShaUrl
+  }
+
+  # Parse flexible .sha512 formats:
+  # - optional UTF-8 BOM
+  # - optional leading whitespace / blank lines
+  # - either: "<HASH>" or "<HASH> <filename>" or "<HASH> *<filename>"
+  if ($shaText.Length -gt 0 -and $shaText[0] -eq [char]0xFEFF) {
+    $shaText = $shaText.Substring(1)
+  }
+  $m = [regex]::Match($shaText, '(?im)^[\s\r\n]*([0-9a-f]{128})\b')
+  if (-not $m.Success) {
+    throw "Could not parse checksum from $shaUrl"
+  }
+  $expected = $m.Groups[1].Value.ToLowerInvariant()
+  if (-not $expected -or $expected.Length -ne 128 -or $expected -notmatch '^[0-9a-f]{128}$') {
     throw "Could not parse checksum from $shaUrl"
   }
   $actual = (Get-FileHash -Path $zip -Algorithm SHA512).Hash.ToLowerInvariant()

@@ -26,8 +26,27 @@ try {
     Invoke-WebRequest -Uri $fallbackUrl -OutFile $zipPath -UseBasicParsing
   }
 
-  $shaRaw = (Invoke-WebRequest -Uri $checksumUrl -UseBasicParsing).Content
-  $expected = ($shaRaw -split '\s+')[0].Trim().ToLowerInvariant()
+  $shaText = ''
+  try {
+    $shaText = [string](Invoke-WebRequest -Uri $checksumUrl -UseBasicParsing).Content
+  } catch {
+    $fallbackChecksumUrl = "$fallbackUrl.sha512"
+    $shaText = [string](Invoke-WebRequest -Uri $fallbackChecksumUrl -UseBasicParsing).Content
+    $checksumUrl = $fallbackChecksumUrl
+  }
+
+  # Parse flexible .sha512 formats:
+  # - optional UTF-8 BOM
+  # - optional leading whitespace / blank lines
+  # - either: "<HASH>" or "<HASH> <filename>" or "<HASH> *<filename>"
+  if ($shaText.Length -gt 0 -and $shaText[0] -eq [char]0xFEFF) {
+    $shaText = $shaText.Substring(1)
+  }
+  $m = [regex]::Match($shaText, '(?im)^[\s\r\n]*([0-9a-f]{128})\b')
+  if (-not $m.Success) {
+    throw "Could not parse checksum from $checksumUrl"
+  }
+  $expected = $m.Groups[1].Value.ToLowerInvariant()
   if (-not $expected -or $expected.Length -ne 128 -or $expected -notmatch '^[0-9a-f]{128}$') {
     throw "Could not parse checksum from $checksumUrl"
   }
