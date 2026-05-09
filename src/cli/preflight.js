@@ -7,39 +7,20 @@ import { resolveTomcatHome, resolveWildflyPaths, validateWildflyDeploymentsPath 
 import {
   runWindowsMavenPortableInstall,
   runWindowsTomcatPortableInstall,
-  runWindowsWildflyPortableInstall
+  runWindowsWildflyPortableInstall,
+  WINDOWS_MAVEN_PORTABLE_VERSION,
+  WINDOWS_TOMCAT_PORTABLE_VERSION,
+  WINDOWS_WILDFLY_PORTABLE_VERSION
 } from '../project/windowsSetupInstall.js';
-import { filterInstallMethods, getInstallMethodsForKey, installCliLine } from './installMatrix.js';
+import {
+  commandPreviewForInstallMethod,
+  filterInstallMethods,
+  getInstallMethodsForKey,
+  JAVA_WINDOWS_INTERNAL_INSTALLER_ID
+} from './installMatrix.js';
 
 export const CANCEL_STEP = '__JWEBGEN_CANCEL_STEP__';
 export const SKIP_ACTION = '__JWEBGEN_SKIP_ACTION__';
-
-const FAILURE_HINTS = {
-  java: {
-    win32:
-      'Retry with winget as Administrator if needed, then open a new session and run javac -version or jwebgen --setup --dry-run.',
-    darwin: 'Retry with Homebrew, then open a new terminal and re-run jwebgen --setup --dry-run.',
-    default: 'Retry with your package manager command, then re-run jwebgen --setup --dry-run.'
-  },
-  maven: {
-    win32:
-      'If installation failed, check the output above. Then open a new session and run mvn -version or jwebgen --setup --dry-run.',
-    darwin: 'Retry with Homebrew, then open a new terminal and re-run jwebgen --setup --dry-run.',
-    default: 'Retry with your package manager command, then re-run jwebgen --setup --dry-run.'
-  },
-  tomcat: {
-    win32:
-      'Retry with the guided installer, then open a new session and re-run jwebgen --setup --dry-run.',
-    darwin: 'Retry with Homebrew, then open a new terminal and re-run jwebgen --setup --dry-run.',
-    default: 'Retry with your package manager command, then re-run jwebgen --setup --dry-run.'
-  },
-  wildfly: {
-    win32:
-      'Retry with the guided installer, then open a new session and re-run jwebgen --setup --dry-run.',
-    darwin: 'Retry with Homebrew, then open a new terminal and re-run jwebgen --setup --dry-run.',
-    default: 'Retry with your package manager command, then re-run jwebgen --setup --dry-run.'
-  }
-};
 
 const SESSION_HINT = `Some installed tools may require a new shell/session before becoming available.
 Reopen your terminal or app session, then run:
@@ -192,12 +173,6 @@ function detectNpmGlobalBin() {
   };
 }
 
-export function buildInstallFailureHint(requirementKey, platform = process.platform) {
-  const row = FAILURE_HINTS[requirementKey];
-  if (!row) return 'Retry with your package manager command, then re-run jwebgen --setup --dry-run.';
-  return row[platform] || row.default;
-}
-
 function pathSnippets(npmGlobalBin, platform = process.platform) {
   if (!npmGlobalBin) return [];
   if (platform === 'win32') {
@@ -290,10 +265,10 @@ function printDryRunInstallPreviews(actions) {
   for (const action of installActions) {
     console.log(pc.cyan(`- Install ${action.key}`));
     for (const m of action.installMethods) {
-      if (m.label) console.log(`  Method: ${m.label}`);
-      if (m.previewLine) console.log(`  ${m.previewLine}`);
+      if (m.label) console.log(`  - ${m.label}`);
+      const command = commandPreviewForInstallMethod(m, action.key);
+      if (command) console.log(`    ${command}`);
     }
-    console.log(`  ${installCliLine(action.key)}`);
   }
 }
 
@@ -361,7 +336,11 @@ export async function runCommand(command, { timeoutMs = 10 * 60 * 1000 } = {}) {
     const killTimer = setTimeout(() => {
       timedOut = true;
       try {
-        child.kill('SIGTERM');
+        if (process.platform === 'win32') {
+          spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+        } else {
+          child.kill('SIGTERM');
+        }
       } catch {
         /* ignore */
       }
@@ -372,7 +351,11 @@ export async function runCommand(command, { timeoutMs = 10 * 60 * 1000 } = {}) {
     const onSigint = () => {
       interrupted = true;
       try {
-        child.kill('SIGINT');
+        if (process.platform === 'win32') {
+          spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+        } else {
+          child.kill('SIGINT');
+        }
       } catch {
         /* ignore */
       }
@@ -380,7 +363,7 @@ export async function runCommand(command, { timeoutMs = 10 * 60 * 1000 } = {}) {
     process.once('SIGINT', onSigint);
 
     const { code, signal } = await new Promise((resolve) => {
-      child.on('exit', (code, signal) => resolve({ code, signal }));
+      child.on('close', (code, signal) => resolve({ code, signal }));
       child.on('error', () => resolve({ code: 1, signal: null }));
     });
     process.off('SIGINT', onSigint);
@@ -406,7 +389,76 @@ export async function runCommand(command, { timeoutMs = 10 * 60 * 1000 } = {}) {
   }
 }
 
-async function executeInstallMethod(method, runCommandImpl) {
+function isWingetNoOpSuccess(result, method) {
+  if (!method?.shellCommand || !/\bwinget\b/i.test(method.shellCommand)) return false;
+  if (!result || result.status === 0) return false;
+  const output = `${result.stdout || ''}\n${result.stderr || ''}`;
+  return (
+    /found an existing package already installed/i.test(output)
+    || /no available upgrade found/i.test(output)
+    || /no newer package versions are available/i.test(output)
+  );
+}
+
+function normalizeInstallResult(result, method) {
+  if (isWingetNoOpSuccess(result, method)) {
+    return { ...result, status: 0, signal: null, error: null, timedOut: false };
+  }
+  return result;
+}
+
+function getInstallLocationForTool(tool) {
+  if (process.platform !== 'win32') return '';
+  const root = process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'Programs') : '';
+  if (!root) return '';
+  if (tool === 'maven') return path.join(root, `apache-maven-${WINDOWS_MAVEN_PORTABLE_VERSION}`);
+  if (tool === 'tomcat') return path.join(root, `apache-tomcat-${WINDOWS_TOMCAT_PORTABLE_VERSION}`);
+  if (tool === 'wildfly') return path.join(root, `wildfly-${WINDOWS_WILDFLY_PORTABLE_VERSION}`);
+  if (tool === 'java') {
+    const whereProbe = spawnSync('where', ['javac'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    const javacPath = String(whereProbe.stdout || '')
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find(Boolean);
+    if (!javacPath) return '';
+    return path.dirname(path.dirname(javacPath));
+  }
+  return '';
+}
+
+function printInstallDone(tool) {
+  console.log(pc.green('Done'));
+  const location = getInstallLocationForTool(tool);
+  if (location) {
+    console.log('Installed to:');
+    console.log(location);
+  }
+}
+
+function resolvePrimaryInstallMethod(tool, platform, runCommandImpl) {
+  const methods = resolveInstallMethods(tool, platform, hasCommand);
+  const resolved = methods.find((method) => method.internalId !== JAVA_WINDOWS_INTERNAL_INSTALLER_ID) || null;
+  if (!resolved) {
+    return null;
+  }
+  return { method: resolved, runCommandImpl };
+}
+
+async function executeInstallMethod(tool, method, runCommandImpl) {
+  if (method.internalId === JAVA_WINDOWS_INTERNAL_INSTALLER_ID) {
+    const primary = resolvePrimaryInstallMethod(tool, process.platform, runCommandImpl);
+    if (!primary) {
+      return {
+        status: 1,
+        timedOut: false,
+        error: new Error('No install method'),
+        signal: null,
+        stdout: '',
+        stderr: ''
+      };
+    }
+    return executeInstallMethod(tool, primary.method, primary.runCommandImpl);
+  }
   if (method.internalId === 'maven-windows-portable') {
     return runWindowsMavenPortableInstall();
   }
@@ -417,7 +469,8 @@ async function executeInstallMethod(method, runCommandImpl) {
     return runWindowsWildflyPortableInstall();
   }
   if (method.shellCommand) {
-    return runCommandImpl(method.shellCommand);
+    const result = await runCommandImpl(method.shellCommand);
+    return normalizeInstallResult(result, method);
   }
   return { status: 1, timedOut: false, error: new Error('No install method'), signal: null, stdout: '', stderr: '' };
 }
@@ -442,13 +495,12 @@ export async function runInstallTool(tool, { runCommandImpl = runCommand } = {})
       return 1;
     }
   }
-  const methods = resolveInstallMethods(tool, platform, hasCommand);
-  if (methods.length === 0) {
+  const primary = resolvePrimaryInstallMethod(tool, platform, runCommandImpl);
+  if (!primary?.method) {
     console.error(pc.red(`No install method is available for ${tool} on this system.`));
     return 1;
   }
-  const method = methods[0];
-  const result = await executeInstallMethod(method, runCommandImpl);
+  const result = await executeInstallMethod(tool, primary.method, runCommandImpl);
   if (result?.signal === 'SIGINT') return 130;
   if (result.status !== 0) {
     console.error(pc.red(`Install failed for ${tool}.`));
@@ -458,10 +510,9 @@ export async function runInstallTool(tool, { runCommandImpl = runCommand } = {})
       const tail = tailLines(cleaned);
       if (tail) console.error(tail);
     }
-    console.error(pc.yellow(buildInstallFailureHint(tool, platform)));
     return 1;
   }
-  console.log(pc.green(`${tool} installed.`));
+  printInstallDone(tool);
   return 0;
 }
 
@@ -559,7 +610,7 @@ export async function runSetupAssistant({
     }
     let result;
     try {
-      result = await executeInstallMethod(method, runCommandImpl);
+      result = await executeInstallMethod(action.key, method, runCommandImpl);
     } catch (error) {
       result = { status: 1, timedOut: error?.code === 'ETIMEDOUT', error, signal: null };
     }
@@ -592,9 +643,9 @@ export async function runSetupAssistant({
         const combined = sanitizeInstallOutputLog([result.stdout, result.stderr].filter(Boolean).join('\n').trim());
         if (combined) console.log(combined);
       }
-      console.log(pc.yellow(`Remediation: ${buildInstallFailureHint(action.key)}`));
     } else {
       anyInstallExitOk = true;
+      printInstallDone(action.key);
     }
   }
 

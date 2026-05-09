@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  buildInstallFailureHint,
   computeSuggestedActions,
   resolveInstallMethods,
   runSetupAssistant
@@ -139,6 +138,31 @@ test('computeSuggestedActions on win32 suggests embedded Maven when maven is mis
   assert.equal(maven.installMethods[0].shellCommand, null);
 });
 
+test('computeSuggestedActions on win32 includes jwebgen internal Java installer option', () => {
+  const state = {
+    checks: [
+      { key: 'java', ok: false },
+      { key: 'maven', ok: true },
+      { key: 'tomcat', ok: true },
+      { key: 'wildfly', ok: true }
+    ],
+    optional: [],
+    npmPath: {
+      hasBin: true,
+      inPath: true,
+      jwebgenReachable: true,
+      hasShimButNotOnPath: false,
+      bin: '/tmp/npm-global/bin'
+    }
+  };
+  const actions = computeSuggestedActions(state, 'win32', {
+    hasCommandImpl: (bin) => bin === 'powershell' || bin === 'powershell.exe' || bin === 'winget'
+  });
+  const java = actions.find((a) => a.type === 'install' && a.key === 'java');
+  assert.ok(java);
+  assert.equal(java.installMethods.some((m) => m.internalId === 'java-win-jwebgen-internal'), true);
+});
+
 test('computeSuggestedActions on win32 suggests embedded Tomcat and WildFly installers', () => {
   const state = {
     checks: [
@@ -180,19 +204,6 @@ test('resolveInstallMethods returns same Windows methods as setup actions', () =
   assert.deepEqual(direct, fromActions);
 });
 
-test('buildInstallFailureHint gives Windows-specific remediation for maven', () => {
-  const hint = buildInstallFailureHint('maven', 'win32');
-  assert.match(hint, /new session/i);
-  assert.match(hint, /mvn -version/);
-  assert.match(hint, /--setup --dry-run/);
-});
-
-test('buildInstallFailureHint gives generic Linux remediation for wildfly', () => {
-  const hint = buildInstallFailureHint('wildfly', 'linux');
-  assert.match(hint, /package manager/i);
-  assert.match(hint, /--setup --dry-run/);
-});
-
 const mockNpm = { hasShimButNotOnPath: false, hasShimInBin: false, inPath: false, resolvedOutsideBin: false };
 
 function singleInstallAction(key, shellCommand = 'echo ok') {
@@ -214,7 +225,7 @@ function singleInstallAction(key, shellCommand = 'echo ok') {
   ];
 }
 
-test('runSetupAssistant classifies timeout failures and prints remediation hint', async () => {
+test('runSetupAssistant classifies timeout failures without remediation block', async () => {
   const logs = [];
   const originalLog = console.log;
   console.log = (...args) => logs.push(args.join(' '));
@@ -234,11 +245,10 @@ test('runSetupAssistant classifies timeout failures and prints remediation hint'
   }
   const output = logs.join('\n');
   assert.match(output, /timed out for tomcat/i);
-  assert.match(output, /Remediation:/);
-  assert.match(output, /--setup --dry-run/);
+  assert.doesNotMatch(output, /Remediation:/);
 });
 
-test('runSetupAssistant classifies execution errors and prints remediation hint', async () => {
+test('runSetupAssistant classifies execution errors without remediation block', async () => {
   const logs = [];
   const originalLog = console.log;
   console.log = (...args) => logs.push(args.join(' '));
@@ -260,11 +270,10 @@ test('runSetupAssistant classifies execution errors and prints remediation hint'
   }
   const output = logs.join('\n');
   assert.match(output, /execution error for maven/i);
-  assert.match(output, /Remediation:/);
-  assert.match(output, new RegExp(buildInstallFailureHint('maven').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.doesNotMatch(output, /Remediation:/);
 });
 
-test('runSetupAssistant classifies non-zero exit failures and prints remediation hint', async () => {
+test('runSetupAssistant classifies non-zero exit failures without remediation block', async () => {
   const logs = [];
   const originalLog = console.log;
   console.log = (...args) => logs.push(args.join(' '));
@@ -284,8 +293,7 @@ test('runSetupAssistant classifies non-zero exit failures and prints remediation
   }
   const output = logs.join('\n');
   assert.match(output, /failed for java \(exit 2\)/i);
-  assert.match(output, /Remediation:/);
-  assert.match(output, new RegExp(buildInstallFailureHint('java').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.doesNotMatch(output, /Remediation:/);
 });
 
 test('runSetupAssistant supports skipping a multi-method install action (None/skip)', async () => {
@@ -336,7 +344,7 @@ test('runSetupAssistant treats cancel-step at first action as cancellation (exit
   );
 });
 
-test('runSetupAssistant dry-run prints jwebgen --install line without EncodedCommand', async () => {
+test('runSetupAssistant dry-run keeps method/command association without EncodedCommand', async () => {
   const logs = [];
   const originalLog = console.log;
   console.log = (...args) => logs.push(args.join(' '));
@@ -357,7 +365,8 @@ test('runSetupAssistant dry-run prints jwebgen --install line without EncodedCom
     console.log = originalLog;
   }
   const output = logs.join('\n');
-  assert.match(output, /jwebgen --install java/);
+  assert.match(output, /- Test method/);
+  assert.match(output, /winget install EclipseAdoptium\.Temurin\.21\.JDK/);
   assert.doesNotMatch(output, /EncodedCommand/i);
 });
 
@@ -389,8 +398,68 @@ test('runSetupAssistant dry-run prints method labels for install options', async
     console.log = originalLog;
   }
   const output = logs.join('\n');
-  assert.match(output, /Method: Tomcat from apache\.org/);
+  assert.match(output, /- Tomcat from apache\.org/);
   assert.match(output, /jwebgen --install tomcat/);
+});
+
+test('runSetupAssistant setup mode offers all Java methods including jwebgen internal installer', async () => {
+  const seenOptions = [];
+  await runSetupAssistant({
+    confirmPrompt: async () => false,
+    selectPrompt: async ({ options }) => {
+      seenOptions.push(...options.map((opt) => String(opt.label)));
+      return SKIP_ACTION;
+    },
+    collectSetupStateImpl: () => ({
+      checks: [{ key: 'java', ok: false, display: 'javac not found', hint: '' }],
+      optional: [],
+      npmPath: mockNpm
+    }),
+    computeSuggestedActionsImpl: () => computeSuggestedActions({
+      checks: [{ key: 'java', ok: false }],
+      optional: [],
+      npmPath: mockNpm
+    }, 'win32', {
+      hasCommandImpl: (bin) => (
+        bin === 'powershell'
+        || bin === 'powershell.exe'
+        || bin === 'winget'
+      )
+    })
+  });
+  assert.equal(seenOptions.includes('None'), true);
+  assert.equal(seenOptions.includes('winget (Eclipse Temurin 21 JDK)'), true);
+  assert.equal(seenOptions.includes('winget (Microsoft OpenJDK 21)'), true);
+  assert.equal(seenOptions.includes('jwebgen internal installer'), true);
+});
+
+test('runSetupAssistant treats winget already-installed/no-upgrade as success', async () => {
+  const logs = [];
+  const originalLog = console.log;
+  console.log = (...args) => logs.push(args.join(' '));
+  try {
+    const ok = await runSetupAssistant({
+      confirmPrompt: async () => true,
+      collectSetupStateImpl: () => ({
+        checks: [{ key: 'java', ok: false, display: 'missing java', hint: '' }],
+        optional: [],
+        npmPath: mockNpm
+      }),
+      computeSuggestedActionsImpl: () => singleInstallAction('java', 'winget install EclipseAdoptium.Temurin.21.JDK'),
+      runCommandImpl: async () => ({
+        status: 1,
+        timedOut: false,
+        error: null,
+        signal: null,
+        stdout: 'Found an existing package already installed. Trying to upgrade the installed package...\nNo available upgrade found.',
+        stderr: 'No newer package versions are available from the configured sources.'
+      })
+    });
+    assert.equal(ok, false);
+  } finally {
+    console.log = originalLog;
+  }
+  assert.match(logs.join('\n'), /Done/);
 });
 
 test('runSetupAssistant shows only tail on failure when not verbose', async () => {
