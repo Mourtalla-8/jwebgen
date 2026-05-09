@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import {
   computeSuggestedActions,
   resolveInstallMethods,
-  runInstallTool,
   runSetupAssistant
 } from '../../src/cli/preflight.js';
 
