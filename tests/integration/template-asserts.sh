@@ -117,6 +117,7 @@ assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'async function redeployOnly', 'worke
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'function stopSelectedServer', 'worker stops server started from dev UI');
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'spawnSync', 'worker uses sync spawn for shutdown on exit');
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, "payload.cmd === 'refresh'", 'worker handles dashboard refresh command');
+assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'healthCycleRunning', 'worker serializes server health cycles');
 assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, "cmd: 'refresh'", 'dashboard queues worker refresh on key f');
 
 assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, 'function serverDownHint', 'dashboard embeds OS-aware server hints');

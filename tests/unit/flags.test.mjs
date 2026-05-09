@@ -43,6 +43,7 @@ test('parseFlags maps --install with tool argument', () => {
 test('parseFlags maps install before setup when both appear', () => {
   const parsed = parseFlags(['--install', 'maven', '--setup']);
   assert.equal(parsed.actionCount, 2);
+  assert.equal(parsed.action, 'install');
   assert.equal(parsed.flags.installTool, 'maven');
 });
 

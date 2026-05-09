@@ -7,94 +7,91 @@ $version = '3.9.15'
 $base = "apache-maven-$version"
 $zipName = "$base-bin.zip"
 
-# URLs
 $primaryUrl = "https://downloads.apache.org/maven/maven-3/$version/binaries/$zipName"
 $fallbackUrl = "https://archive.apache.org/dist/maven/maven-3/$version/binaries/$zipName"
 
-# Installation directory:
-# C:\jwebgen\apache-maven-3.9.15
+$primaryChecksumUrl = "$primaryUrl.sha512"
+$fallbackChecksumUrl = "$fallbackUrl.sha512"
+
 $installRoot = Join-Path $env:SystemDrive 'jwebgen'
 $mavenDir = Join-Path $installRoot $base
 $binDir = Join-Path $mavenDir 'bin'
 
-# Download location:
-# C:\Users\<User>\Downloads
 $downloadsDir = Join-Path $env:USERPROFILE 'Downloads'
 $zipPath = Join-Path $downloadsDir $zipName
+$checksumPath = Join-Path $downloadsDir "$zipName.sha512"
 
 # ================================
 # HELPERS
 # ================================
 function Download-File {
-    param(
-        [Parameter(Mandatory)][string]$Url,
-        [Parameter(Mandatory)][string]$OutFile
-    )
+    param([string]$Url,[string]$OutFile)
 
-    if (Test-Path -LiteralPath $OutFile) {
-        Remove-Item -LiteralPath $OutFile -Force -ErrorAction SilentlyContinue
+    if (Test-Path $OutFile) {
+        Remove-Item $OutFile -Force -ErrorAction SilentlyContinue
     }
 
     Invoke-WebRequest -Uri $Url -OutFile $OutFile -ErrorAction Stop
 
-    if (-not (Test-Path -LiteralPath $OutFile)) {
+    if (-not (Test-Path $OutFile)) {
         throw "Download failed"
+    }
+
+    # sanity check size
+    if ((Get-Item $OutFile).Length -lt 10000) {
+        throw "Downloaded file too small (corrupted)"
     }
 }
 
-function Set-UserEnvironment {
-    param(
-        [Parameter(Mandatory)][string]$MavenDir,
-        [Parameter(Mandatory)][string]$BinDir,
-        [Parameter(Mandatory)][string]$InstallRoot
-    )
+function Get-Sha512FromFile {
+    param([string]$Path)
 
-    # Environment variable
-    [Environment]::SetEnvironmentVariable('MAVEN_HOME', $MavenDir, 'User')
+    $text = Get-Content $Path -Raw
+    $text = $text.Trim()
 
-    # Normalize helper
-    $Normalize = {
-        param([string]$p)
+    $line = ($text -split "`n")[0].Trim()
+    $hash = $line -replace '\s+.*',''
 
-        if ([string]::IsNullOrWhiteSpace($p)) {
-            return $null
-        }
-
-        try {
-            return [IO.Path]::GetFullPath($p).TrimEnd('\')
-        }
-        catch {
-            return $p.TrimEnd('\')
-        }
+    if ($hash.Length -ne 128) {
+        throw "Checksum invalid"
     }
 
-    $normalizedBin = & $Normalize $BinDir
-    $normalizedInstallRoot = (& $Normalize $InstallRoot).ToLowerInvariant()
+    return $hash.ToLower()
+}
 
-    $currentUserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+function Normalize-Path([string]$p) {
+    if (-not $p) { return $null }
+    try { return [IO.Path]::GetFullPath($p).TrimEnd('\') }
+    catch { return $p.TrimEnd('\') }
+}
+
+function Set-UserEnvironment {
+
+    [Environment]::SetEnvironmentVariable('MAVEN_HOME', $mavenDir, 'User')
+
+    $binN = Normalize-Path $binDir
+    $rootN = (Normalize-Path $installRoot).ToLower()
+
+    $current = [Environment]::GetEnvironmentVariable('Path','User')
+
     $entries = @()
 
-    if (-not [string]::IsNullOrWhiteSpace($currentUserPath)) {
-        $entries = $currentUserPath -split ';' |
-            Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
-            ForEach-Object { & $Normalize $_ } |
+    if ($current) {
+        $entries = $current -split ';' |
+            Where-Object { $_ } |
+            ForEach-Object { Normalize-Path $_ } |
             Where-Object {
-                $entryLower = $_.ToLowerInvariant()
-
-                # Remove any previous C:\jwebgen\apache-maven-*\bin entry
-                -not (
-                    $entryLower.StartsWith($normalizedInstallRoot) -and
-                    $entryLower -match 'apache-maven-[^\\]+\\bin$'
+                $_ -and -not (
+                    $_.ToLower().StartsWith($rootN) -and $_ -match 'maven-[^\\]+\\bin$'
                 )
             }
     }
 
-    if ($entries -notcontains $normalizedBin) {
-        $entries += $BinDir
+    if ($entries -notcontains $binN) {
+        $entries += $binN
     }
 
-    $newPath = ($entries -join ';').Trim(';')
-    [Environment]::SetEnvironmentVariable('Path', $newPath, 'User')
+    [Environment]::SetEnvironmentVariable('Path', ($entries -join ';'), 'User')
 }
 
 # ================================
@@ -104,50 +101,50 @@ New-Item -ItemType Directory -Force -Path $installRoot | Out-Null
 New-Item -ItemType Directory -Force -Path $downloadsDir | Out-Null
 
 try {
-    # Optional Java check (silent)
-    try {
-        java -version *> $null
-    }
-    catch {
-        # Ignore if Java is not installed
+
+    # download
+    try { Download-File $primaryUrl $zipPath }
+    catch { Download-File $fallbackUrl $zipPath }
+
+    try { Download-File $primaryChecksumUrl $checksumPath }
+    catch { Download-File $fallbackChecksumUrl $checksumPath }
+
+    # verify
+    $expected = Get-Sha512FromFile $checksumPath
+    $actual = (Get-FileHash $zipPath -Algorithm SHA512).Hash.ToLower()
+
+    if ($expected -ne $actual) {
+        throw "Checksum failed"
     }
 
-    # Download with fallback
-    try {
-        Download-File -Url $primaryUrl -OutFile $zipPath
-    }
-    catch {
-        Download-File -Url $fallbackUrl -OutFile $zipPath
+    # CLEAN INSTALL DIR (important fix)
+    if (Test-Path $mavenDir) {
+        Remove-Item $mavenDir -Recurse -Force -ErrorAction Stop
     }
 
-    # Remove previous installation
-    if (Test-Path -LiteralPath $mavenDir) {
-        Remove-Item -LiteralPath $mavenDir -Recurse -Force -ErrorAction Stop
-    }
-
-    # Extract ZIP
+    # extract SAFE
     Expand-Archive -LiteralPath $zipPath -DestinationPath $installRoot -Force
 
-    # Verify installation
-    if (-not (Test-Path -LiteralPath $mavenDir)) {
-        throw "Maven directory not found after extraction"
+    # FIX nested folder detection (important)
+    $possible = Get-ChildItem $installRoot -Directory |
+        Where-Object { $_.Name -like "apache-maven-$version*" } |
+        Select-Object -First 1
+
+    if (-not $possible) {
+        throw "Maven folder not found after extraction"
     }
 
-    if (-not (Test-Path -LiteralPath $binDir)) {
-        throw "Invalid Maven structure"
+    if ($possible.FullName -ne $mavenDir) {
+        Move-Item $possible.FullName $mavenDir -Force
     }
 
-    if (-not (Test-Path -LiteralPath (Join-Path $binDir 'mvn.cmd'))) {
-        throw "Maven installation incomplete"
+    if (-not (Test-Path "$mavenDir\bin\mvn.cmd")) {
+        throw "Invalid Maven installation"
     }
 
-    # Configure environment variables
-    Set-UserEnvironment `
-        -MavenDir $mavenDir `
-        -BinDir $binDir `
-        -InstallRoot $installRoot
+    Set-UserEnvironment
 }
 finally {
-    # Cleanup downloaded archive
-    Remove-Item -LiteralPath $zipPath -Force -ErrorAction SilentlyContinue
+    Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
+    Remove-Item $checksumPath -Force -ErrorAction SilentlyContinue
 }

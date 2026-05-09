@@ -507,6 +507,7 @@ if (parentPid > 1) {
     try {
       process.kill(parentPid, 0);
     } catch {
+      stopSelectedServer();
       process.exit(0);
     }
   }, 1500).unref();
@@ -581,6 +582,10 @@ async function redeployOnly() {
     saveState();
   } finally {
     deployOnlyBusy = false;
+    if (queued) {
+      queued = false;
+      void rebuild();
+    }
   }
 }
 function queueRebuild() {
@@ -725,46 +730,53 @@ function nextAppState(status) {
   return 'unknown';
 }
 let lastStatus = '';
+let healthCycleRunning = false;
 async function runServerHealthCycle() {
-  const prevS = state.server;
-  const prevA = state.app;
-  const check = await serverUp();
-  const nextServer = check.status === 'starting' ? 'checking' : (check.ok ? 'up' : 'down');
-  const nextApp = nextAppState(check.status);
-  let changed = false;
-  if (state.server !== nextServer) { state.server = nextServer; changed = true; }
-  if (state.app !== nextApp) { state.app = nextApp; changed = true; }
-  if (changed) saveState();
-  const serverRecovered =
-    (prevS === 'down' || prevS === 'checking') && nextServer === 'up';
-  const appRecovered =
-    nextServer === 'up'
-    && (prevA === 'down' || prevA === 'checking')
-    && nextApp === 'up';
-  if (
-    state.deploy === 'error'
-    && (serverRecovered || appRecovered)
-    && !running
-    && !deployOnlyBusy
-    && !redeployRetryScheduled
-  ) {
-    redeployRetryScheduled = true;
-    void (async () => {
-      try {
-        if (state.build === 'ok') await redeployOnly();
-        else queueRebuild();
-      } finally {
-        redeployRetryScheduled = false;
-      }
-    })();
-  }
-  if (check.status !== lastStatus) {
-    lastStatus = check.status;
-    if (check.status === 'port_conflict') emit('http_port_conflict', { port: httpPort, owner: check.owner || '' });
-    else if (check.status === 'down') emit('server_down', { reason: check.status, port: httpPort });
-    else if (check.status === 'app_down' || check.status === 'app_down_000') {
-      emit('app_unreachable', { port: httpPort, app: appName, httpStatus: check.httpStatus || 0 });
+  if (healthCycleRunning) return;
+  healthCycleRunning = true;
+  try {
+    const prevS = state.server;
+    const prevA = state.app;
+    const check = await serverUp();
+    const nextServer = check.status === 'starting' ? 'checking' : (check.ok ? 'up' : 'down');
+    const nextApp = nextAppState(check.status);
+    let changed = false;
+    if (state.server !== nextServer) { state.server = nextServer; changed = true; }
+    if (state.app !== nextApp) { state.app = nextApp; changed = true; }
+    if (changed) saveState();
+    const serverRecovered =
+      (prevS === 'down' || prevS === 'checking') && nextServer === 'up';
+    const appRecovered =
+      nextServer === 'up'
+      && (prevA === 'down' || prevA === 'checking')
+      && nextApp === 'up';
+    if (
+      state.deploy === 'error'
+      && (serverRecovered || appRecovered)
+      && !running
+      && !deployOnlyBusy
+      && !redeployRetryScheduled
+    ) {
+      redeployRetryScheduled = true;
+      void (async () => {
+        try {
+          if (state.build === 'ok') await redeployOnly();
+          else queueRebuild();
+        } finally {
+          redeployRetryScheduled = false;
+        }
+      })();
     }
+    if (check.status !== lastStatus) {
+      lastStatus = check.status;
+      if (check.status === 'port_conflict') emit('http_port_conflict', { port: httpPort, owner: check.owner || '' });
+      else if (check.status === 'down') emit('server_down', { reason: check.status, port: httpPort });
+      else if (check.status === 'app_down' || check.status === 'app_down_000') {
+        emit('app_unreachable', { port: httpPort, app: appName, httpStatus: check.httpStatus || 0 });
+      }
+    }
+  } finally {
+    healthCycleRunning = false;
   }
 }
 setInterval(() => { void runServerHealthCycle(); }, 1200).unref();
