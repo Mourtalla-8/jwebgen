@@ -66,6 +66,7 @@ DEV_HTTP_PORT="\${JWEBGEN_HTTP_PORT:-8080}"
 STATE_FILE="$ROOT_DIR/.jwebgen/.jwebgen-dev-state.json"
 EVENTS_FILE="$ROOT_DIR/.jwebgen/.jwebgen-dev-events.jsonl"
 UI_PAUSE_FILE="$ROOT_DIR/.jwebgen/.jwebgen-ui-pause"
+COMMAND_FILE="$ROOT_DIR/.jwebgen/.jwebgen-dev-command.json"
 WORKER_SCRIPT="$ROOT_DIR/.jwebgen/.jwebgen-worker.mjs"
 DASHBOARD_SCRIPT="$ROOT_DIR/.jwebgen/.jwebgen-dashboard.mjs"
 DEV_PID_FILE="$ROOT_DIR/.jwebgen/.jwebgen-dev.pid"
@@ -114,6 +115,7 @@ fi
 ${WATCH_RUNTIME_SECTION}
 
 cleanup_orphan_dev_session
+rm -f "$COMMAND_FILE" 2>/dev/null || true
 
 cat > "$WORKER_SCRIPT" <<'EOF'
 ${DEV_WORKER_SCRIPT_TEMPLATE}
