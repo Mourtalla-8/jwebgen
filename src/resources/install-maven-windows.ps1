@@ -106,24 +106,39 @@ function Set-UserEnvironment {
     [Environment]::SetEnvironmentVariable('MAVEN_HOME', $mavenDir, 'User')
 
     $canonicalBinPath = Resolve-NormalizedPath $binDir
+    $canonicalBinPathLower = if ($canonicalBinPath) { $canonicalBinPath.ToLowerInvariant() } else { '' }
     $normalizedInstallRoot = (Resolve-NormalizedPath $installRoot).ToLowerInvariant()
 
     $currentUserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-    $entries = @()
+    $entryObjects = @()
 
     if (-not [string]::IsNullOrWhiteSpace($currentUserPath)) {
-        $entries = $currentUserPath -split ';' |
-            Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
-            ForEach-Object { Resolve-NormalizedPath $_ } |
+        $entryObjects = $currentUserPath -split ';' |
+            ForEach-Object {
+                $original = [string]$_
+                if ([string]::IsNullOrWhiteSpace($original)) { return $null }
+                $normalized = Resolve-NormalizedPath $original
+                [PSCustomObject]@{
+                    Original = $original
+                    Normalized = $normalized
+                }
+            } |
+            Where-Object { $_ -and $_.Normalized } |
             Where-Object {
-                $_ -and -not (
-                    $_.ToLowerInvariant().StartsWith($normalizedInstallRoot) -and
-                    $_ -match 'apache-maven-[^\\]+\\bin$'
+                $normalizedLower = $_.Normalized.ToLowerInvariant()
+                -not (
+                    $normalizedLower.StartsWith($normalizedInstallRoot) -and
+                    $_.Normalized -match 'apache-maven-[^\\]+\\bin$'
                 )
             }
     }
 
-    if ($entries -notcontains $canonicalBinPath) {
+    $hasCanonicalBin = $entryObjects |
+        Where-Object { $_.Normalized.ToLowerInvariant() -eq $canonicalBinPathLower } |
+        Select-Object -First 1
+
+    $entries = @($entryObjects | ForEach-Object { $_.Original })
+    if (-not $hasCanonicalBin) {
         $entries += $canonicalBinPath
     }
 
