@@ -66,6 +66,7 @@ import { runProjectScript as runProjectScriptImpl } from '../src/cli/projectRunn
 import { CANCEL_STEP, SetupCancelledError, enforceActionPreflight, runSetupAssistant, runSetupCheck } from '../src/cli/preflight.js';
 import { runInstallCli } from '../src/cli/installCommand.js';
 import { runCreateCommand } from '../src/cli/createCommand.js';
+import { runGlobalServerCommand } from '../src/cli/serverControl.js';
 import { writeFileSafe, makeExecutable } from '../src/cli/fileUtils.js';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
@@ -244,6 +245,13 @@ function showVersion() {
   console.log(`${APP_NAME} ${APP_VERSION}`);
 }
 
+function showServerCommandHelp() {
+  console.log(pc.cyan('Usage:'));
+  console.log('  jwebgen server start <tomcat|wildfly>');
+  console.log('  jwebgen server stop <tomcat|wildfly>');
+  console.log('  jwebgen server status <tomcat|wildfly>');
+}
+
 function showUpdateGuidance() {
   console.log(pc.cyan('Safe update flow (global install):'));
   console.log('  npm i -g jwebgen@latest');
@@ -266,6 +274,17 @@ async function runCli() {
   if (argv.length === 0) {
     showHelp();
     return;
+  }
+
+  if (argv[0] === 'server') {
+    const action = String(argv[1] || '').trim().toLowerCase();
+    const target = String(argv[2] || '').trim().toLowerCase();
+    if (!['start', 'stop', 'status'].includes(action) || !['tomcat', 'wildfly'].includes(target)) {
+      showServerCommandHelp();
+      process.exit(1);
+    }
+    const code = await runGlobalServerCommand(action, target);
+    process.exit(code);
   }
 
   if (isLikelyLegacySubcommand(argv[0])) {
