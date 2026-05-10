@@ -5,7 +5,7 @@ import { rm, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { execa } from 'execa';
 import { jwebgenConfigPath, jwebgenMetaDir, jwebgenScriptsDir } from '../project/jwebgenLayout.js';
 import { readJwebgenExports } from '../project/jwebgenRc.js';
-import { resolveTomcatHome, resolveWildflyPaths } from '../project/serverPaths.js';
+import { probeApacheTomcatHome, resolveWildflyPaths } from '../project/serverPaths.js';
 
 /** Effective HTTP app port for status URLs (matches deploy/dev tooling). */
 export function resolveStatusHttpPort(cfg = {}) {
@@ -170,11 +170,18 @@ export async function showStatus({ findProjectRoot }) {
   const appName = await readAppNameFromPom(projectRoot, path.basename(projectRoot));
   const statusPort = resolveStatusHttpPort(cfg);
   if (serverTarget === 'tomcat') {
-    const home = resolveTomcatHome({ cfg });
-    if (!home) {
-      console.log(pc.yellow('Deployment: unknown (configure TOMCAT_HOME, TOMCAT10, or CATALINA_HOME in env or .jwebgen/.jwebgenrc)'));
+    const probe = probeApacheTomcatHome({ cfg });
+    if (!probe.ok || !probe.home) {
+      console.log(
+        pc.yellow(
+          probe.home
+            ? `Deployment: unknown (Tomcat path is not a usable install: ${probe.home}; set TOMCAT_HOME or CATALINA_HOME to the real Tomcat directory)`
+            : 'Deployment: unknown (configure TOMCAT_HOME, TOMCAT10, or CATALINA_HOME in env or .jwebgen/.jwebgenrc)'
+        )
+      );
       return;
     }
+    const home = probe.home;
     const warPath = path.join(home, 'webapps', `${appName}.war`);
     const explodedPath = path.join(home, 'webapps', appName);
     if (existsSync(warPath) || existsSync(explodedPath)) {
