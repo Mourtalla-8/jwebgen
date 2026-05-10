@@ -4,6 +4,7 @@ import { execa } from 'execa';
 import { resolveTomcatHome, resolveWildflyPaths } from '../project/serverPaths.js';
 
 const TOMCAT_SERVICE_CANDIDATES = ['Tomcat10', 'tomcat10', 'Tomcat', 'tomcat'];
+const SPAWN_CONFIRM_TIMEOUT_MS = 2000;
 
 async function commandExists(bin, platform = process.platform) {
   const cmd = platform === 'win32' ? 'where' : 'which';
@@ -74,6 +75,35 @@ async function trySystemctl(action, unit) {
   return result.exitCode === 0;
 }
 
+function spawnDetachedAndConfirm(command, args, options = {}) {
+  return new Promise((resolve) => {
+    let settled = false;
+    let timer = null;
+    try {
+      const p = spawn(command, args, options);
+      const finish = (ok) => {
+        if (settled) return;
+        settled = true;
+        if (timer) clearTimeout(timer);
+        resolve(ok);
+      };
+      p.once('spawn', () => {
+        try {
+          p.unref();
+        } catch {
+          /* ignore unref failures */
+        }
+        finish(true);
+      });
+      p.once('error', () => finish(false));
+      timer = setTimeout(() => finish(false), SPAWN_CONFIRM_TIMEOUT_MS);
+      timer.unref?.();
+    } catch {
+      resolve(false);
+    }
+  });
+}
+
 async function runTomcatWindows(action, env = process.env) {
   for (const serviceName of TOMCAT_SERVICE_CANDIDATES) {
     const service = await execa('sc.exe', [action === 'start' ? 'start' : 'stop', serviceName], { reject: false });
@@ -82,48 +112,39 @@ async function runTomcatWindows(action, env = process.env) {
   const home = resolveTomcatHome({ env, platform: 'win32' });
   if (!home) return false;
   const script = action === 'start' ? 'bin\\startup.bat' : 'bin\\shutdown.bat';
-  try {
-    spawnSync('cmd.exe', ['/d', '/c', 'call', script], {
-      cwd: home,
-      stdio: 'ignore',
-      windowsHide: true,
-      timeout: 30000
-    });
-    return true;
-  } catch {
-    return false;
-  }
+  const res = spawnSync('cmd.exe', ['/d', '/c', 'call', script], {
+    cwd: home,
+    stdio: 'ignore',
+    windowsHide: true,
+    timeout: 30000
+  });
+  if (res.error) return false;
+  return res.status === 0;
 }
 
 async function runWildflyWindows(action, env = process.env) {
   const { wildflyHome } = resolveWildflyPaths({ env, platform: 'win32' });
   if (!wildflyHome) return false;
   if (action === 'stop') {
-    try {
-      spawnSync('cmd.exe', ['/d', '/c', 'call', 'bin\\jboss-cli.bat', '--connect', '--command=:shutdown'], {
-        cwd: wildflyHome,
-        stdio: 'ignore',
-        windowsHide: true,
-        timeout: 30000
-      });
-      return true;
-    } catch {
-      return false;
-    }
+    const res = spawnSync('cmd.exe', ['/d', '/c', 'call', 'bin\\jboss-cli.bat', '--connect', '--command=:shutdown'], {
+      cwd: wildflyHome,
+      stdio: 'ignore',
+      windowsHide: true,
+      timeout: 30000
+    });
+    if (res.error) return false;
+    return res.status === 0;
   }
-  try {
-    const p = spawn('cmd.exe', ['/d', '/c', 'start', '/B', '""', 'cmd.exe', '/d', '/c', 'call', 'bin\\standalone.bat'], {
+  return spawnDetachedAndConfirm(
+    'cmd.exe',
+    ['/d', '/c', 'start', '/B', '""', 'cmd.exe', '/d', '/c', 'call', 'bin\\standalone.bat'],
+    {
       cwd: wildflyHome,
       detached: true,
       stdio: 'ignore',
       windowsHide: true
-    });
-    p.on('error', () => {});
-    p.unref();
-    return true;
-  } catch {
-    return false;
-  }
+    }
+  );
 }
 
 async function runTomcatUnix(action, env = process.env, platform = process.platform) {
@@ -134,8 +155,12 @@ async function runTomcatUnix(action, env = process.env, platform = process.platf
   const home = resolveTomcatHome({ env, platform });
   if (!home) return false;
   const script = action === 'start' ? path.join(home, 'bin', 'startup.sh') : path.join(home, 'bin', 'shutdown.sh');
-  const result = await execa(script, [], { reject: false, timeout: 30000 });
-  return result.exitCode === 0;
+  try {
+    const result = await execa(script, [], { reject: false, timeout: 30000 });
+    return result.exitCode === 0;
+  } catch {
+    return false;
+  }
 }
 
 async function runWildflyUnix(action, env = process.env, platform = process.platform) {
@@ -147,18 +172,11 @@ async function runWildflyUnix(action, env = process.env, platform = process.plat
     const stop = await execa(cliSh, ['--connect', '--command=:shutdown'], { reject: false, timeout: 30000 });
     return stop.exitCode === 0;
   }
-  try {
-    const p = spawn(path.join(wildflyHome, 'bin', 'standalone.sh'), [], {
+  return spawnDetachedAndConfirm(path.join(wildflyHome, 'bin', 'standalone.sh'), [], {
       cwd: wildflyHome,
       detached: true,
       stdio: 'ignore'
     });
-    p.on('error', () => {});
-    p.unref();
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 export async function runGlobalServerCommand(action, target, { platform = process.platform, env = process.env, out = console.log } = {}) {

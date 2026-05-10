@@ -85,7 +85,7 @@ function Get-Sha512FromFile {
     return $match.Value.ToLowerInvariant()
 }
 
-function Normalize-Path {
+function Resolve-NormalizedPath {
     param(
         [string]$Path
     )
@@ -105,8 +105,8 @@ function Normalize-Path {
 function Set-UserEnvironment {
     [Environment]::SetEnvironmentVariable('MAVEN_HOME', $mavenDir, 'User')
 
-    $normalizedBin = Normalize-Path $binDir
-    $normalizedInstallRoot = (Normalize-Path $installRoot).ToLowerInvariant()
+    $canonicalBinPath = Resolve-NormalizedPath $binDir
+    $normalizedInstallRoot = (Resolve-NormalizedPath $installRoot).ToLowerInvariant()
 
     $currentUserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
     $entries = @()
@@ -114,7 +114,7 @@ function Set-UserEnvironment {
     if (-not [string]::IsNullOrWhiteSpace($currentUserPath)) {
         $entries = $currentUserPath -split ';' |
             Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
-            ForEach-Object { Normalize-Path $_ } |
+            ForEach-Object { Resolve-NormalizedPath $_ } |
             Where-Object {
                 $_ -and -not (
                     $_.ToLowerInvariant().StartsWith($normalizedInstallRoot) -and
@@ -123,8 +123,8 @@ function Set-UserEnvironment {
             }
     }
 
-    if ($entries -notcontains $normalizedBin) {
-        $entries += $binDir
+    if ($entries -notcontains $canonicalBinPath) {
+        $entries += $canonicalBinPath
     }
 
     $newPath = ($entries -join ';').Trim(';')
@@ -174,7 +174,7 @@ try {
     }
 
     # Normalize extracted directory name if needed.
-    if ((Normalize-Path $possible.FullName) -ne (Normalize-Path $mavenDir)) {
+    if ((Resolve-NormalizedPath $possible.FullName) -ne (Resolve-NormalizedPath $mavenDir)) {
         Move-Item -LiteralPath $possible.FullName -Destination $mavenDir -Force -ErrorAction Stop
     }
 
