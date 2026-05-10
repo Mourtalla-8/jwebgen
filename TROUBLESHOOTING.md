@@ -37,7 +37,7 @@ No global setup alternative:
 
 - Check:
   - `javac -version`
-  - `mvn -version`
+  - `mvn --version` (setup expects a real **Apache Maven** install; a different `mvn` on `PATH` will fail the check)
 - Install missing tool and rerun.
 - Quick diagnostics:
   - `jwebgen --setup`
@@ -53,10 +53,19 @@ No global setup alternative:
 ## Deploy/dev scripts fail on non-Linux
 
 - jwebgen uses generated Node entrypoints first (`*.mjs`) when present.
-- On macOS/Windows, configure server paths explicitly:
-  - Tomcat: `TOMCAT_HOME` / `TOMCAT10` / `CATALINA_HOME`
-  - WildFly: `WILDFLY_HOME` or `WILDFLY_DEPLOYMENTS`
+- Configure server paths when not using defaults:
+  - Tomcat: `TOMCAT_HOME` / `TOMCAT10` / `CATALINA_HOME` must point at the **real** install (directory with `lib/catalina.jar`, runnable `bin/catalina.*`).
+  - WildFly: `WILDFLY_HOME` or `WILDFLY_DEPLOYMENTS` (must include `jboss-modules.jar` at the product root when using `WILDFLY_HOME`).
+- **macOS:** if you install **Tomcat** / **WildFly** via Homebrew (`tomcat@10`, `wildfly-as`), jwebgen may auto-detect typical `libexec` paths when env vars are unset.
+- **Windows:** align env vars with what you use for `jwebgen server` and deploy scripts; portable installs are supported via `--install` where documented.
 - Use `jwebgen --status` to confirm target resolution and app URL.
+
+## Setup reports Tomcat/WildFly missing but “something” is installed
+
+- Empty directories (e.g. only `webapps/`) are **not** treated as installs.
+- Tomcat must pass a `catalina version`-style check from the resolved `CATALINA_HOME` (needs working Java).
+- WildFly must expose `jboss-modules.jar` and a working `jboss-cli` for version probing.
+- Packaged servers often keep `webapps` or `standalone/deployments` **not writable** by your user; setup prints a hint when that happens (you may need `sudo` or ACL changes for deploy).
 
 ## Permission denied during deploy
 

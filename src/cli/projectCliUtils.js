@@ -2,6 +2,7 @@ import pc from 'picocolors';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { jwebgenConfigPath, jwebgenScriptsDir } from '../project/jwebgenLayout.js';
+import { formatFlagsHelp } from './flags.js';
 
 export function findProjectRoot(startDir = process.cwd()) {
   let dir = path.resolve(startDir);
@@ -61,52 +62,9 @@ export function detectServerTargetFromProject(projectRoot) {
   }
 }
 
+/** Same output as `jwebgen --help` / empty argv (see `formatFlagsHelp`). */
 export function showHelp() {
-  console.log(`
-Usage: jwebgen [option]
-
-Options:
-
---help, -h
-  Show this help message.
-
---status
-  Show project status.
-
---dev
-  Start dev loop in the current project.
-
---watch
-  Alias for --dev.
-
---build
-  Run the project build script.
-
---deploy
-  Run the project deploy script.
-
---clean
-  Remove target/ in the current project.
-
---clean --deploy
-  Clean deployed app on the selected server for this project only.
-
---migrate, -m
-  Upgrade a legacy jwebgen project.
-
---servlet <Name>
-  Create a servlet (class name is auto-normalized).
-
---new, -n <projectName>
---create, -c <projectName>
-  Create a new project (interactive by default).
-
---yes, -y
-  Non-interactive project creation mode (requires <projectName>).
-
---tomcat, -t / --wildfly, -w
-  Choose the server target.
-`);
+  console.log(formatFlagsHelp({ appName: 'jwebgen' }));
 }
 
 export function printUnknownCommandAndExit(command) {

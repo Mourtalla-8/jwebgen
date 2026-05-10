@@ -99,5 +99,8 @@ test('formatFlagsHelp includes lifecycle commands for setup/update/uninstall', (
   assert.match(help, /--uninstall/);
   assert.match(help, /--version, -V, -v/);
   assert.match(help, /--verbose/);
+  assert.match(help, /Java: use --setup/);
+  assert.match(help, /Server paths \(all OS\)/);
+  assert.match(help, /WILDFLY_DEPLOYMENTS/);
 });
 

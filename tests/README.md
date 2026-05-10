@@ -36,7 +36,7 @@ For Windows-specific regressions, also verify on Windows native shell:
 - `jwebgen --servlet HelloServlet`
 - `jwebgen --jsp home`
 - `jwebgen --setup --dry-run`
-- `jwebgen --status` with fake `TOMCAT_HOME`
+- `jwebgen --status` with a minimal fake `TOMCAT_HOME` (enough for hint checks; full Tomcat layout needed for deployment lines)
 
 Mapping with automated checks:
 

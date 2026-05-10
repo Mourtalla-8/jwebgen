@@ -76,7 +76,9 @@ jwebgen --clean --deploy
 - Lifecycle:
   - `jwebgen --help`
   - `jwebgen --version`
-  - `jwebgen --setup`
+  - `jwebgen --setup` / `jwebgen --setup --dry-run`
+  - `jwebgen --install <maven|tomcat|wildfly>` (non-interactive; **not** for Java — use `--setup`)
+  - `jwebgen server <start|stop|status> <tomcat|wildfly>` (global control, no project required)
   - `jwebgen --update` (prints safe update guidance)
   - `jwebgen --uninstall` (prints safe uninstall guidance)
   - local fallback when global shim is unavailable: `npx jwebgen --update` (or `node bin/jwebgen.js --update` from checkout)
@@ -94,6 +96,8 @@ jwebgen --clean --deploy
 `--servlet` and `--jsp` are Node-first on all tier-1 OS when generated `.mjs` scripts are present.
 
 ## Setup assistant behavior
+
+Diagnostics go beyond “folder exists”: they run **real probes** where possible (e.g. `javac`, `mvn --version` with an **Apache Maven** banner, Tomcat `catalina version`, WildFly `jboss-cli` version), check **writable** deploy directories, optional **HTTP** hints on `8080` / `9990`, and **service** state when applicable (**systemd** on Linux, **Windows services** via `sc`).
 
 - `jwebgen --setup` in interactive terminals (TTY):
   - runs diagnostics,
@@ -146,18 +150,23 @@ If Tomcat, WildFly, or another HTTP service is active on port `8080` at the same
 ## Machine compatibility
 
 - **Tier-1:** Linux, macOS, and Windows for CLI + generated Node entrypoints.
-- Set Tomcat/WildFly paths yourself when not using Linux distro defaults (`jwebgen --status` reflects configured paths and `JWEBGEN_HTTP_PORT` for URLs).
+- **Tomcat / WildFly paths**
+  - Always set `TOMCAT_HOME` / `CATALINA_HOME` and `WILDFLY_HOME` (or `WILDFLY_DEPLOYMENTS`) when installs are non-standard.
+  - **Linux:** common package layouts under `/usr/share/tomcat*` are auto-probed before distro stub dirs like `/var/lib/tomcat10`.
+  - **macOS:** typical **Homebrew** locations (`tomcat@10`, `wildfly-as` under `/opt/homebrew` or `/usr/local`) are probed when env vars are unset.
+  - **Windows:** portable installs and env-based resolution match `--status`, `server`, and deploy scripts; prefer setting the same variables everywhere.
+- `jwebgen --status` reflects resolved paths and `JWEBGEN_HTTP_PORT` for URLs (Tomcat home must look like a real install, not an empty `webapps` tree).
 - Minimum toolchain:
   - Node.js 20.12+ for CLI and dev/watch
   - Java JDK 11+
-  - Maven
+  - Maven (`mvn --version` should report **Apache Maven**)
 
 ## New machine checklist
 
 ```bash
 node -v
 javac -version
-mvn -version
+mvn --version
 npm ci
 npm i -g .
 jwebgen --setup

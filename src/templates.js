@@ -200,7 +200,7 @@ ${deployHelp}
 ## Dev mode
 - \`jwebgen --dev\` / \`./.jwebgen/scripts/dev.mjs\` run the dev proxy + LiveReload WebSocket (HTML injection via the proxy, not servlet code under \`src/\`).
 - If the target server is down, the dashboard shows hints; use \`[f] refresh\` after starting Tomcat/WildFly.
-- On Windows/macOS, install and start the app server yourself; adjust \`TOMCAT_HOME\` / \`WILDFLY_HOME\` in env or \`.jwebgen/.jwebgenrc\`.
+- Install and start Tomcat/WildFly yourself; set \`TOMCAT_HOME\`/\`CATALINA_HOME\` and \`WILDFLY_HOME\` (or \`WILDFLY_DEPLOYMENTS\`) in env or \`.jwebgen/.jwebgenrc\` when paths are non-standard (Linux package and macOS Homebrew layouts are often auto-detected).
 - To drop jwebgen from the project, remove the \`.jwebgen/\` directory at the repository root (tooling is kept there only).
 `;
 }
