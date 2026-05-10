@@ -54,9 +54,13 @@ CFG="$TMP_ROOT/smokeapp/.jwebgen/.jwebgenrc"
 printf '%s\n' 'export JWEBGEN_SERVER_TARGET="tomcat"' 'export JWEBGEN_HTTP_PORT="8099"' >"$CFG"
 
 # --status only prints the app URL when a deployment path exists; use a fake TOMCAT_HOME under tmp.
+# Minimal tree must satisfy probeApacheTomcatHome (lib/catalina.jar, bin/bootstrap.jar, catalina launcher).
 FAKE_TOMCAT="$TMP_ROOT/fake-tomcat"
-mkdir -p "$FAKE_TOMCAT/webapps/smokeapp"
+mkdir -p "$FAKE_TOMCAT/webapps/smokeapp" "$FAKE_TOMCAT/lib" "$FAKE_TOMCAT/bin"
 touch "$FAKE_TOMCAT/webapps/smokeapp/.jwebgen-smoke"
+touch "$FAKE_TOMCAT/lib/catalina.jar" "$FAKE_TOMCAT/bin/bootstrap.jar"
+printf '%s\n' '#!/bin/sh' 'exit 0' >"$FAKE_TOMCAT/bin/catalina.sh"
+chmod +x "$FAKE_TOMCAT/bin/catalina.sh"
 
 echo "[smoke] jwebgen --status (expect configured target + port in URL)"
 set +e

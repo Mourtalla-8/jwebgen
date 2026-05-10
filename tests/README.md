@@ -36,7 +36,7 @@ For Windows-specific regressions, also verify on Windows native shell:
 - `jwebgen --servlet HelloServlet`
 - `jwebgen --jsp home`
 - `jwebgen --setup --dry-run`
-- `jwebgen --status` with a minimal fake `TOMCAT_HOME` (enough for hint checks; full Tomcat layout needed for deployment lines)
+- `jwebgen --status` with a fake `TOMCAT_HOME` that includes a **minimal** Tomcat layout (`lib/catalina.jar`, `bin/bootstrap.jar`, `bin/catalina.sh`) so `probeApacheTomcatHome` and deployment URL assertions in `smoke-generated-project.sh` stay valid
 
 Mapping with automated checks:
 
