@@ -2,96 +2,55 @@
 
 ## `jwebgen: command not found`
 
-- Ensure global install succeeded:
-  - `npm i -g .`
-- Check npm global prefix and bin:
-  - `npm config get prefix`
-  - `ls "$(npm config get prefix)/bin" | grep jwebgen`
+Install: `npm i -g .` from the repo (or your global package).
 
-If `jwebgen` exists there, add this bin directory to your shell `PATH`:
+Find the binary: `npm config get prefix` → look in `bin/` (or the Windows equivalent). Add that folder to `PATH`, or for a quick try:
 
-- Session-only (safe preview):
-  - `export PATH="$(npm config get prefix)/bin:$PATH"`
-  - PowerShell: `$env:Path = "$(npm config get prefix);$env:Path"`
-- Persistent:
-  - add the same line manually in your shell startup file (`~/.zshrc`, `~/.bashrc`, etc.),
-  - PowerShell profile option: add the same `$env:Path = ...` line to your PowerShell profile,
-  - Windows persistent (PowerShell/.NET): `[Environment]::SetEnvironmentVariable("Path", "$(npm config get prefix);" + [Environment]::GetEnvironmentVariable("Path","User"), "User")`,
-  - then open a new terminal session.
-- `jwebgen --setup` can also print PATH guidance snippets (non-destructive, no shell file edits).
-- Rollback:
-  - session changes: close/reopen terminal (or restore previous PATH value),
-  - persistent changes: remove the PATH line you added manually in shell config.
+```bash
+export PATH="$(npm config get prefix)/bin:$PATH"
+```
 
-No global setup alternative:
-- `npx jwebgen --help`
+PowerShell: `$env:Path = "$(npm config get prefix);$env:Path"`
 
-## Node version error
+No global install: `npx jwebgen …` from the checkout.
 
-- `jwebgen` requires Node 20.12+ (matches the current `@clack` UI stack).
-- Check:
-  - `node -v`
-- Upgrade and retry.
+`jwebgen --setup` can print PATH hints; it never edits your shell files for you.
 
-## Java or Maven missing
+## Node too old
 
-- Check:
-  - `javac -version`
-  - `mvn -version`
-- Install missing tool and rerun.
-- Quick diagnostics:
-  - `jwebgen --setup`
-- Interactive setup assistant:
-  - In TTY mode, `jwebgen --setup` can propose and run safe install commands only after explicit confirmation.
-- Dry-run preview:
-  - `jwebgen --setup --dry-run` previews actions without running install commands.
-- Non-interactive mode (CI/scripts):
-  - `jwebgen --setup` remains diagnostics-only.
-- Full disposable global-install validation:
-  - `npm run smoke:global-install`
+Need Node **20.12+**. Check with `node -v`.
 
-## Deploy/dev scripts fail on non-Linux
+## Java / Maven
 
-- jwebgen uses generated Node entrypoints first (`*.mjs`) when present.
-- On macOS/Windows, configure server paths explicitly:
-  - Tomcat: `TOMCAT_HOME` / `TOMCAT10` / `CATALINA_HOME`
-  - WildFly: `WILDFLY_HOME` or `WILDFLY_DEPLOYMENTS`
-- Use `jwebgen --status` to confirm target resolution and app URL.
+`javac -version` and `mvn --version` should work. Setup looks for a real **Apache Maven** on `PATH`, not a random `mvn` shim.
 
-## Permission denied during deploy
+`jwebgen --setup` for a full check; `--setup --dry-run` to preview. In CI/non-interactive mode, setup stays diagnostics-only.
 
-- Some deploy operations require writing to system paths.
-- Refresh sudo session:
-  - `sudo -v`
-- Retry deployment.
+## Deploy / dev on macOS or Windows
 
-## Need to remove deployed app for current project
+Prefer the generated `*.mjs` scripts. Point env at real installs:
 
-- Manual cleanup from project root:
-  - `jwebgen --clean --deploy`
-- Auto cleanup also runs when leaving `jwebgen --dev` (best effort).
+- Tomcat: directory with `lib/catalina.jar` and a working `catalina` script.
+- WildFly: root with `jboss-modules.jar`, or set `WILDFLY_DEPLOYMENTS` to `…/standalone/deployments`.
 
-## Update or uninstall jwebgen safely
+`jwebgen --status` shows what path it resolved.
 
-- Update guidance:
-  - `jwebgen --update`
-- Uninstall guidance:
-  - `jwebgen --uninstall`
-- If global `jwebgen` is not on PATH but the local checkout exists:
-  - `npx jwebgen --update`
-  - `node bin/jwebgen.js --update`
+## “Server missing” but something is installed
 
-## Port already in use (`8080`, `9990`, live reload ports)
+Empty `webapps/` trees don’t count. Tomcat must answer a version probe; WildFly needs CLI + layout checks. Packaged servers often need sudo or ACL tweaks to let your user write `webapps` or `standalone/deployments`.
 
-- Typical case:
-  - Tomcat + WildFly + another local HTTP service are active on the same machine.
-  - More than one service tries to bind `:8080`.
-- Check process owners:
-  - `ss -lntp`
-- Keep only one HTTP server active on `8080` for the current project.
-- In `jwebgen --dev`, remediation now supports:
-  - stopping the respawning systemd service that reclaims the port
-  - validated HTTP port fallback (auto tries 8081..8090 and keeps it only if server/app become reachable)
-- You can still force ports manually with:
-  - `JWEBGEN_HTTP_PORT=8081 jwebgen --dev`
-  - `JWEBGEN_LIVE_PORT=35731 jwebgen --dev`
+## Permission errors on deploy
+
+Try `sudo -v`, then deploy again. Some paths are root-owned by design.
+
+## Remove deployed app for this project
+
+`jwebgen --clean --deploy`. Leaving `--dev` also tries to clean up (best effort).
+
+## Update / uninstall CLI
+
+`jwebgen --update` and `jwebgen --uninstall` print safe steps. From a clone without PATH: `node bin/jwebgen.js --update`.
+
+## Port busy (8080, 9990, LiveReload)
+
+See what listens: `ss -lntp` (Linux) or your OS equivalent. Run one HTTP server for the app port, or set `JWEBGEN_HTTP_PORT`. LiveReload defaults to `35729`; override with `JWEBGEN_LIVE_PORT` if needed.

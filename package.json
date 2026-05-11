@@ -1,7 +1,7 @@
 {
   "name": "jwebgen",
   "version": "2.2.1",
-  "description": "CLI generator for Java web projects (Servlet/JSP).",
+  "description": "CLI to scaffold Jakarta Servlet/JSP apps with build, deploy, and dev scripts.",
   "type": "module",
   "bin": {
     "jwebgen": "bin/jwebgen.js"
@@ -9,7 +9,6 @@
   "files": [
     "bin",
     "src",
-    "tests",
     "README.md",
     "TROUBLESHOOTING.md",
     "CHANGELOG.md",

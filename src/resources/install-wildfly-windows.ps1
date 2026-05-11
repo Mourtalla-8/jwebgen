@@ -77,6 +77,40 @@ function Get-Sha1FromFile {
     return $match.Value.ToLowerInvariant()
 }
 
+function Get-FileDigest {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][ValidateSet('SHA1', 'SHA256', 'SHA384', 'SHA512')][string]$Algorithm
+    )
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        throw "File not found for hashing"
+    }
+
+    $getFileHashCmd = Get-Command -Name Get-FileHash -ErrorAction SilentlyContinue
+    if ($getFileHashCmd) {
+        return (Get-FileHash -LiteralPath $Path -Algorithm $Algorithm).Hash.ToLowerInvariant()
+    }
+
+    $stream = [IO.File]::OpenRead($Path)
+    try {
+        $hasher = [Security.Cryptography.HashAlgorithm]::Create($Algorithm)
+        if (-not $hasher) {
+            throw "Hash algorithm not available: $Algorithm"
+        }
+        try {
+            $bytes = $hasher.ComputeHash($stream)
+        }
+        finally {
+            $hasher.Dispose()
+        }
+        return ([BitConverter]::ToString($bytes) -replace '-', '').ToLowerInvariant()
+    }
+    finally {
+        $stream.Dispose()
+    }
+}
+
 function Set-UserEnvironment {
     param(
         [Parameter(Mandatory)][string]$WildFlyDir,
@@ -162,7 +196,7 @@ try {
 
     # Verify checksum
     $expected = Get-Sha1FromFile -Path $checksumPath
-    $actual = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA1).Hash.ToLowerInvariant()
+    $actual = Get-FileDigest -Path $zipPath -Algorithm SHA1
 
     if ($expected -ne $actual) {
         throw "Checksum failed"

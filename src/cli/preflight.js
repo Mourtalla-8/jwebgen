@@ -3,7 +3,16 @@ import { spawn, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { detectJavaCompiler, evaluateJavaCompatibility, installHint, which } from '../project/inputUtils.js';
-import { resolveTomcatHome, resolveWildflyPaths, validateWildflyDeploymentsPath } from '../project/serverPaths.js';
+import { looksLikeWildflyHome, probeApacheTomcatHome, resolveWildflyPaths, validateWildflyDeploymentsPath } from '../project/serverPaths.js';
+import {
+  curlHttpProbe,
+  describeFirstResolvedSystemdUnit,
+  describeWindowsTomcatService,
+  describeWindowsWildflyService,
+  isDirWritableByProcess,
+  runTomcatCatalinaVersion,
+  runWildflyCliVersion
+} from '../project/serverRuntimeProbe.js';
 import {
   runWindowsMavenPortableInstall,
   runWindowsTomcatPortableInstall,
@@ -24,7 +33,7 @@ export const SKIP_ACTION = '__JWEBGEN_SKIP_ACTION__';
 const SESSION_HINT = `Some installed tools may require a new shell/session before becoming available.
 Reopen your terminal or app session, then run:
 - java -version
-- mvn -version
+- mvn --version
 or:
 - jwebgen --setup --dry-run`;
 
@@ -43,6 +52,25 @@ function hasCommand(binary) {
   return probe.status === 0;
 }
 
+function verifyMavenCli(binName) {
+  if (!binName) return false;
+  const useShell = process.platform === 'win32' && /\.cmd$/i.test(binName);
+  const result = spawnSync(binName, ['--version'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], shell: useShell });
+  const text = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+  return !result.error && result.status === 0 && /\bApache\s+Maven\b/i.test(text);
+}
+
+function mavenVersionPreview(binName) {
+  if (!binName) return '';
+  const useShell = process.platform === 'win32' && /\.cmd$/i.test(binName);
+  const result = spawnSync(binName, ['--version'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], shell: useShell });
+  const text = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+  if (result.error || result.status !== 0 || !/\bApache\s+Maven\b/i.test(text)) return '';
+  const lines = text.split(/\r?\n/).filter(Boolean);
+  const hit = lines.find((l) => /\bApache\s+Maven\b/i.test(l));
+  return String(hit ?? lines[0] ?? '').trim();
+}
+
 function getActionRequirements(action) {
   if (action === 'create') return ['java', 'maven'];
   if (action === 'build') return ['java', 'maven'];
@@ -51,15 +79,58 @@ function getActionRequirements(action) {
 }
 
 function checkTomcatRequirement(platform = process.platform) {
-  const home = resolveTomcatHome({ platform });
-  const ok = Boolean(
-    home && existsSync(home) && existsSync(path.join(home, 'webapps'))
-  );
+  const probe = probeApacheTomcatHome({ platform });
+  const detailLines = [];
+  if (!probe.ok || !probe.home) {
+    let display = 'not installed';
+    if (!probe.ok && probe.probe === 'env' && probe.home) {
+      display = `not usable at ${probe.home} (needs Apache Tomcat: lib/catalina.jar + bin/bootstrap.jar + catalina launcher)`;
+    }
+    return {
+      key: 'tomcat',
+      ok: false,
+      display,
+      hint: installHint('tomcat'),
+      detailLines
+    };
+  }
+  const home = probe.home;
+  const webapps = path.join(home, 'webapps');
+  if (existsSync(webapps) && !isDirWritableByProcess(webapps)) {
+    detailLines.push('webapps dir is not writable by this user (packaged Tomcat often needs sudo or ACL changes to deploy)');
+  }
+  if (platform === 'linux') {
+    const svc = describeFirstResolvedSystemdUnit(['tomcat10', 'tomcat']);
+    if (svc) detailLines.push(`systemd ${svc.unit}: ${svc.state}`);
+  } else if (platform === 'win32') {
+    const ws = describeWindowsTomcatService();
+    if (ws) detailLines.push(`Windows service "${ws.name}": ${ws.state}`);
+  }
+  const http8080 = curlHttpProbe('http://127.0.0.1:8080/');
+  if (http8080 === 'up') detailLines.push('HTTP 127.0.0.1:8080 responds');
+  else if (http8080 === 'down') detailLines.push('HTTP 127.0.0.1:8080 not responding (Tomcat likely stopped or another app uses the port)');
+
+  const ver = runTomcatCatalinaVersion(home, platform);
+  if (!ver.ok) {
+    return {
+      key: 'tomcat',
+      ok: false,
+      display: `not usable at ${home}: ${ver.reason || 'catalina version check failed'}`,
+      hint: installHint('tomcat'),
+      detailLines
+    };
+  }
+  const label =
+    probe.probe === 'detected'
+      ? `Tomcat at ${home} (auto-detected)`
+      : `Tomcat at ${home}`;
+  const display = ver.line ? `${label} · ${ver.line}` : label;
   return {
     key: 'tomcat',
-    ok,
-    display: ok ? 'Tomcat available' : 'not installed',
-    hint: ok ? '' : installHint('tomcat')
+    ok: true,
+    display,
+    hint: '',
+    detailLines
   };
 }
 
@@ -67,14 +138,58 @@ function checkWildflyRequirement(platform = process.platform) {
   const { wildflyHome, deployments } = resolveWildflyPaths({ platform });
   const depValidation = deployments ? validateWildflyDeploymentsPath(deployments) : { ok: false };
   const depPath = depValidation.ok ? depValidation.resolved : '';
-  const depOk = Boolean(depValidation.ok && depPath && existsSync(depPath));
-  const homeOk = !wildflyHome || existsSync(wildflyHome);
-  const ok = depOk && homeOk && Boolean(deployments);
+  const depExists = Boolean(depValidation.ok && depPath && existsSync(depPath));
+  const homeLooks = wildflyHome && looksLikeWildflyHome(wildflyHome);
+  const detailLines = [];
+
+  if (!homeLooks || !depExists || !deployments) {
+    let display = 'not installed';
+    if (wildflyHome && !homeLooks) {
+      display = `not usable at ${wildflyHome} (needs WildFly unzip: jboss-modules.jar under WILDFLY_HOME)`;
+    }
+    return {
+      key: 'wildfly',
+      ok: false,
+      display,
+      hint: installHint('wildfly'),
+      detailLines
+    };
+  }
+
+  if (depPath && !isDirWritableByProcess(depPath)) {
+    detailLines.push('deployments dir is not writable by this user (deploy may need sudo or a writable standalone dir)');
+  }
+  if (platform === 'linux') {
+    const svc = describeFirstResolvedSystemdUnit(['wildfly']);
+    if (svc) detailLines.push(`systemd ${svc.unit}: ${svc.state}`);
+  } else if (platform === 'win32') {
+    const ws = describeWindowsWildflyService();
+    if (ws) detailLines.push(`Windows service "${ws.name}": ${ws.state}`);
+  }
+  const adm = curlHttpProbe('http://127.0.0.1:9990/');
+  if (adm === 'up') detailLines.push('HTTP 127.0.0.1:9990 responds (management interface)');
+  else if (adm === 'down') {
+    detailLines.push('HTTP 127.0.0.1:9990 not responding (WildFly likely stopped or management not bound to loopback)');
+  }
+
+  const cli = runWildflyCliVersion(wildflyHome, platform);
+  if (!cli.ok) {
+    return {
+      key: 'wildfly',
+      ok: false,
+      display: `not usable at ${wildflyHome}: ${cli.reason || 'jboss-cli check failed'}`,
+      hint: installHint('wildfly'),
+      detailLines
+    };
+  }
+  const label = `WildFly at ${wildflyHome}`;
+  const display = cli.line ? `${label} · ${cli.line}` : label;
   return {
     key: 'wildfly',
-    ok,
-    display: ok ? 'WildFly available' : 'not installed',
-    hint: ok ? '' : installHint('wildfly')
+    ok: true,
+    display,
+    hint: '',
+    detailLines
   };
 }
 
@@ -93,13 +208,19 @@ export function checkRequirement(req) {
     };
   }
   if (req === 'maven') {
-    const hasMvnCmd = hasCommand('mvn.cmd');
-    const hasMvn = hasCommand('mvn');
-    const ok = hasMvnCmd || hasMvn;
+    const mavenBin = process.platform === 'win32' ? 'mvn.cmd' : 'mvn';
+    const fallbackBin = mavenBin === 'mvn.cmd' ? 'mvn' : '';
+    let ok = verifyMavenCli(mavenBin);
+    let displayLine = '';
+    if (!ok && fallbackBin) ok = verifyMavenCli(fallbackBin);
+    if (ok) {
+      const line = mavenVersionPreview(mavenBin) || mavenVersionPreview(fallbackBin || mavenBin);
+      displayLine = line || 'Maven available';
+    }
     return {
       key: 'maven',
       ok,
-      display: ok ? 'Maven available' : 'not installed',
+      display: ok ? displayLine : 'not installed',
       hint: ok ? '' : installHint('maven')
     };
   }
@@ -240,11 +361,24 @@ export function printSetupState(state, { includeFixHints = false, includeNpmPath
   for (const item of state.checks) {
     const marker = item.ok ? pc.green('OK') : pc.red('MISSING');
     if (!item.ok) {
-      console.log(`${marker} ${item.key}`);
-    } else if (item.key === 'java' && item.display) {
+      if (item.display && item.display !== 'not installed') {
+        console.log(`${marker} ${item.key}: ${item.display}`);
+      } else {
+        console.log(`${marker} ${item.key}`);
+      }
+    } else if (
+      ['java', 'maven', 'tomcat', 'wildfly'].includes(item.key)
+      && item.display
+      && item.display !== 'not installed'
+    ) {
       console.log(`${marker} ${item.key}: ${item.display}`);
     } else {
       console.log(`${marker} ${item.key}`);
+    }
+    if (item.detailLines?.length) {
+      for (const line of item.detailLines) {
+        if (line) console.log(pc.dim(`    ${line}`));
+      }
     }
     if (includeFixHints && !item.ok && item.hint) console.log(pc.yellow(`  Fix: ${item.hint}`));
   }

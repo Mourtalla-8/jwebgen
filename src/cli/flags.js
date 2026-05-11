@@ -203,9 +203,9 @@ export function formatFlagsHelp({ appName = 'jwebgen' } = {}) {
     section('Main Commands'),
     `  ${cmd('--help, -h')}${desc('Show this help message.')}`,
     `  ${cmd('--version, -V, -v')}${desc('Show jwebgen version.')}`,
-    `  ${cmd('--setup [--dry-run]')}${desc('Run setup diagnostics + guided safe actions; preview only with --dry-run.')}`,
-    `  ${cmd('--install <maven|tomcat|wildfly>')}${desc('Install a missing tool using built-in drivers (non-interactive).')}`,
-    `  ${cmd('server <start|stop|status> <tomcat|wildfly>')}${desc('Global server control (outside project mode).')}`,
+    `  ${cmd('--setup [--dry-run]')}${desc('Run setup diagnostics + guided safe actions; --dry-run previews installs only (no commands run).')}`,
+    `  ${cmd('--install <maven|tomcat|wildfly>')}${desc('Non-interactive install (portable scripts on Windows; package managers on Linux/macOS when detected). Java: use --setup, not --install.')}`,
+    `  ${cmd('server <start|stop|status> <tomcat|wildfly>')}${desc('Global server control (systemd/services on Linux/Windows when present; startup scripts as fallback).')}`,
     `  ${cmd('--update')}${desc('Show safe update guidance for global installs.')}`,
     `  ${cmd('--uninstall')}${desc('Show safe uninstall guidance for global installs.')}`,
     `  ${cmd('--status')}${desc('Show project status.')}`,
@@ -227,7 +227,11 @@ export function formatFlagsHelp({ appName = 'jwebgen' } = {}) {
     section('Dev Note'),
     `  ${desc('If multiple servers/services listen on port 8080 on the same machine,')}`,
     `  ${desc('dev/deploy can fail with port conflicts. Keep only one HTTP server active')}`,
-    `  ${desc('or set another app port with JWEBGEN_HTTP_PORT.')}`
+    `  ${desc('or set another app port with JWEBGEN_HTTP_PORT.')}`,
+    section('Server paths (all OS)'),
+    `  ${desc('Tomcat: set TOMCAT_HOME / CATALINA_HOME to the real install (contains lib/catalina.jar).')}`,
+    `  ${desc('WildFly: set WILDFLY_HOME or WILDFLY_DEPLOYMENTS (…/standalone/deployments).')}`,
+    `  ${desc('Linux: common distro paths are probed; macOS: Homebrew tomcat@10 / wildfly-as libexec when present.')}`
   ].join('\n');
 }
 

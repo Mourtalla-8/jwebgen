@@ -54,8 +54,7 @@ import { detectLegacyProjectIssues as detectLegacyProjectIssuesModule } from '..
 import {
   findProjectRoot as findProjectRootImpl,
   parseCliOptions as parseCliOptionsImpl,
-  detectServerTargetFromProject as detectServerTargetFromProjectImpl,
-  showHelp as showHelpImpl
+  detectServerTargetFromProject as detectServerTargetFromProjectImpl
 } from '../src/cli/projectCliUtils.js';
 import {
   runClean as runCleanImpl,

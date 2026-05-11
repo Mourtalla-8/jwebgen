@@ -1,6 +1,70 @@
 import { DEV_DASHBOARD_SCRIPT_TEMPLATE, DEV_WORKER_SCRIPT_TEMPLATE } from './watchEmbeddedTemplates.js';
 import { LINUX_DEFAULT_TOMCAT_HOME, LINUX_DEFAULT_WILDFLY_HOME } from '../project/serverPaths.js';
 
+/** Embedded in deploy.mjs / dev.mjs; keep aligned with `serverPaths.js` helpers. */
+const EMBEDDED_SERVER_PRESENCE_HELPERS = `
+function looksLikeApacheTomcatHome(homeDir) {
+  const root = String(homeDir || '').trim();
+  if (!root || !existsSync(root)) return false;
+  const catalinaJar = path.join(root, 'lib', 'catalina.jar');
+  const bootstrapJar = path.join(root, 'bin', 'bootstrap.jar');
+  if (!existsSync(catalinaJar) || !existsSync(bootstrapJar)) return false;
+  const sh = path.join(root, 'bin', 'catalina.sh');
+  const bat = path.join(root, 'bin', 'catalina.bat');
+  if (process.platform === 'win32') return existsSync(bat) || existsSync(sh);
+  return existsSync(sh) || existsSync(bat);
+}
+
+function probeTomcatHome(cfg) {
+  const configured = String(
+    process.env.TOMCAT_HOME ||
+      process.env.TOMCAT10 ||
+      process.env.CATALINA_HOME ||
+      cfg.TOMCAT_HOME ||
+      cfg.TOMCAT10 ||
+      cfg.CATALINA_HOME ||
+      ''
+  ).trim();
+  if (configured) {
+    return looksLikeApacheTomcatHome(configured)
+      ? { ok: true, home: configured }
+      : { ok: false, home: configured };
+  }
+  if (process.platform === 'darwin') {
+    const brewCandidates = [
+      '/opt/homebrew/opt/tomcat@10/libexec',
+      '/opt/homebrew/opt/tomcat/libexec',
+      '/usr/local/opt/tomcat@10/libexec',
+      '/usr/local/opt/tomcat/libexec'
+    ];
+    for (const c of brewCandidates) {
+      if (looksLikeApacheTomcatHome(c)) return { ok: true, home: c };
+    }
+    return { ok: false, home: '' };
+  }
+  if (process.platform !== 'linux') return { ok: false, home: '' };
+  const candidates = ['/usr/share/tomcat10', '/usr/share/tomcat', '/usr/local/tomcat', '${LINUX_DEFAULT_TOMCAT_HOME}'];
+  for (const c of candidates) {
+    if (looksLikeApacheTomcatHome(c)) return { ok: true, home: c };
+  }
+  return { ok: false, home: '' };
+}
+
+function inferWildflyHomeFromDeployments(deploymentsDir) {
+  const dep = path.resolve(String(deploymentsDir || '').trim());
+  if (path.basename(dep) !== 'deployments') return '';
+  const standalone = path.dirname(dep);
+  if (path.basename(standalone) !== 'standalone') return '';
+  return path.dirname(standalone);
+}
+
+function looksLikeWildflyHome(homeDir) {
+  const root = String(homeDir || '').trim();
+  if (!root || !existsSync(root)) return false;
+  return existsSync(path.join(root, 'jboss-modules.jar'));
+}
+`.trim();
+
 function nodeShebang() {
   return '#!/usr/bin/env node';
 }
@@ -238,6 +302,8 @@ function serverInstallCommands(target) {
   return commands;
 }
 
+${EMBEDDED_SERVER_PRESENCE_HELPERS}
+
 function resolveTomcatHome(cfg) {
   const tomcatHome = String(
     process.env.TOMCAT_HOME ||
@@ -254,13 +320,30 @@ function resolveTomcatHome(cfg) {
 
 function resolveWildflyPaths(cfg) {
   const explicitDeployments = String(process.env.WILDFLY_DEPLOYMENTS || cfg.WILDFLY_DEPLOYMENTS || '').trim();
-  if (explicitDeployments) {
-    return { wildflyHome: String(process.env.WILDFLY_HOME || cfg.WILDFLY_HOME || '').trim(), deployments: explicitDeployments };
+  let wildflyHome = String(process.env.WILDFLY_HOME || cfg.WILDFLY_HOME || '').trim();
+  if (!wildflyHome && explicitDeployments) {
+    wildflyHome = inferWildflyHomeFromDeployments(explicitDeployments);
   }
   const defaultWildflyHome = process.platform === 'linux' ? '${LINUX_DEFAULT_WILDFLY_HOME}' : '';
-  const wildflyHome = String(process.env.WILDFLY_HOME || cfg.WILDFLY_HOME || defaultWildflyHome).trim();
-  const deployments = String(wildflyHome ? path.join(wildflyHome, 'standalone', 'deployments') : '').trim();
-  return { wildflyHome, deployments };
+  let deployments = explicitDeployments;
+  if (!deployments && wildflyHome) {
+    deployments = path.join(wildflyHome, 'standalone', 'deployments');
+  }
+  if (!wildflyHome && process.platform === 'darwin' && !explicitDeployments) {
+    const brewWildfly = ['/opt/homebrew/opt/wildfly-as/libexec', '/usr/local/opt/wildfly-as/libexec'];
+    for (const c of brewWildfly) {
+      if (looksLikeWildflyHome(c)) {
+        wildflyHome = c;
+        deployments = path.join(c, 'standalone', 'deployments');
+        break;
+      }
+    }
+  }
+  if (!wildflyHome && process.platform === 'linux' && !explicitDeployments) {
+    wildflyHome = defaultWildflyHome;
+    deployments = path.join(wildflyHome, 'standalone', 'deployments');
+  }
+  return { wildflyHome, deployments: String(deployments || '').trim() };
 }
 
 function validateTomcatHome(home) {
@@ -281,19 +364,31 @@ function validateWildflyDeployments(deployments) {
 
 function detectServerInstalled(target, cfg) {
   if (target === 'tomcat') {
-    const home = resolveTomcatHome(cfg);
-    const validated = validateTomcatHome(home);
-    if (!validated.ok) return { ok: false, reason: validated.reason };
-    if (!existsSync(home)) return { ok: false, reason: 'Tomcat home path was not found: ' + home };
-    if (!existsSync(path.join(home, 'webapps'))) return { ok: false, reason: 'Tomcat webapps directory was not found under: ' + home };
+    const probe = probeTomcatHome(cfg);
+    if (!probe.ok || !probe.home) {
+      const reason = probe.home
+        ? ('Tomcat is not usable at ' + probe.home + ' (needs Apache Tomcat with lib/catalina.jar under CATALINA_HOME).')
+        : 'Tomcat is not installed or not usable. Set TOMCAT_HOME/CATALINA_HOME or install Tomcat.';
+      return { ok: false, reason };
+    }
+    const home = probe.home;
+    if (!existsSync(path.join(home, 'webapps'))) {
+      return { ok: false, reason: 'Tomcat webapps directory was not found under: ' + home };
+    }
     return { ok: true };
   }
   const { wildflyHome, deployments } = resolveWildflyPaths(cfg);
   const validatedDeployments = validateWildflyDeployments(deployments);
   if (!validatedDeployments.ok) return { ok: false, reason: validatedDeployments.reason };
-  if (!wildflyHome && !deployments) return { ok: false, reason: 'WildFly path is not configured.' };
-  if ((wildflyHome && !existsSync(wildflyHome)) || (deployments && !existsSync(deployments))) {
-    return { ok: false, reason: 'WildFly paths were not found.' };
+  if (!deployments) return { ok: false, reason: 'WildFly path is not configured.' };
+  if (!wildflyHome || !existsSync(wildflyHome)) {
+    return { ok: false, reason: wildflyHome ? 'WildFly home was not found: ' + wildflyHome : 'WildFly path is not configured.' };
+  }
+  if (!looksLikeWildflyHome(wildflyHome)) {
+    return { ok: false, reason: 'WildFly is not usable at ' + wildflyHome + ' (missing jboss-modules.jar).' };
+  }
+  if (!existsSync(validatedDeployments.resolved)) {
+    return { ok: false, reason: 'WildFly deployments directory was not found: ' + deployments };
   }
   return { ok: true };
 }
@@ -810,6 +905,8 @@ function serverInstallCommands(target) {
   return commands;
 }
 
+${EMBEDDED_SERVER_PRESENCE_HELPERS}
+
 function resolveTomcatHome(cfg) {
   const tomcatHome = String(
     process.env.TOMCAT_HOME ||
@@ -826,13 +923,30 @@ function resolveTomcatHome(cfg) {
 
 function resolveWildflyPaths(cfg) {
   const explicitDeployments = String(process.env.WILDFLY_DEPLOYMENTS || cfg.WILDFLY_DEPLOYMENTS || '').trim();
-  if (explicitDeployments) {
-    return { wildflyHome: String(process.env.WILDFLY_HOME || cfg.WILDFLY_HOME || '').trim(), deployments: explicitDeployments };
+  let wildflyHome = String(process.env.WILDFLY_HOME || cfg.WILDFLY_HOME || '').trim();
+  if (!wildflyHome && explicitDeployments) {
+    wildflyHome = inferWildflyHomeFromDeployments(explicitDeployments);
   }
   const defaultWildflyHome = process.platform === 'linux' ? '${LINUX_DEFAULT_WILDFLY_HOME}' : '';
-  const wildflyHome = String(process.env.WILDFLY_HOME || cfg.WILDFLY_HOME || defaultWildflyHome).trim();
-  const deployments = String(wildflyHome ? path.join(wildflyHome, 'standalone', 'deployments') : '').trim();
-  return { wildflyHome, deployments };
+  let deployments = explicitDeployments;
+  if (!deployments && wildflyHome) {
+    deployments = path.join(wildflyHome, 'standalone', 'deployments');
+  }
+  if (!wildflyHome && process.platform === 'darwin' && !explicitDeployments) {
+    const brewWildfly = ['/opt/homebrew/opt/wildfly-as/libexec', '/usr/local/opt/wildfly-as/libexec'];
+    for (const c of brewWildfly) {
+      if (looksLikeWildflyHome(c)) {
+        wildflyHome = c;
+        deployments = path.join(c, 'standalone', 'deployments');
+        break;
+      }
+    }
+  }
+  if (!wildflyHome && process.platform === 'linux' && !explicitDeployments) {
+    wildflyHome = defaultWildflyHome;
+    deployments = path.join(wildflyHome, 'standalone', 'deployments');
+  }
+  return { wildflyHome, deployments: String(deployments || '').trim() };
 }
 
 function validateWildflyDeployments(deployments) {
@@ -849,18 +963,31 @@ function validateWildflyDeployments(deployments) {
 
 function detectServerInstalled(target, cfg) {
   if (target === 'tomcat') {
-    const home = resolveTomcatHome(cfg);
-    if (!home) return { ok: false, reason: 'Tomcat home is not configured.' };
-    if (!existsSync(home)) return { ok: false, reason: 'Tomcat home path was not found: ' + home };
-    if (!existsSync(path.join(home, 'webapps'))) return { ok: false, reason: 'Tomcat webapps directory was not found under: ' + home };
+    const probe = probeTomcatHome(cfg);
+    if (!probe.ok || !probe.home) {
+      const reason = probe.home
+        ? ('Tomcat is not usable at ' + probe.home + ' (needs Apache Tomcat with lib/catalina.jar under CATALINA_HOME).')
+        : 'Tomcat is not installed or not usable. Set TOMCAT_HOME/CATALINA_HOME or install Tomcat.';
+      return { ok: false, reason };
+    }
+    const home = probe.home;
+    if (!existsSync(path.join(home, 'webapps'))) {
+      return { ok: false, reason: 'Tomcat webapps directory was not found under: ' + home };
+    }
     return { ok: true };
   }
   const { wildflyHome, deployments } = resolveWildflyPaths(cfg);
   const validatedDeployments = validateWildflyDeployments(deployments);
   if (!validatedDeployments.ok) return { ok: false, reason: validatedDeployments.reason };
-  if (!wildflyHome && !deployments) return { ok: false, reason: 'WildFly path is not configured.' };
-  if ((wildflyHome && !existsSync(wildflyHome)) || (deployments && !existsSync(deployments))) {
-    return { ok: false, reason: 'WildFly paths were not found.' };
+  if (!deployments) return { ok: false, reason: 'WildFly path is not configured.' };
+  if (!wildflyHome || !existsSync(wildflyHome)) {
+    return { ok: false, reason: wildflyHome ? 'WildFly home was not found: ' + wildflyHome : 'WildFly path is not configured.' };
+  }
+  if (!looksLikeWildflyHome(wildflyHome)) {
+    return { ok: false, reason: 'WildFly is not usable at ' + wildflyHome + ' (missing jboss-modules.jar).' };
+  }
+  if (!existsSync(validatedDeployments.resolved)) {
+    return { ok: false, reason: 'WildFly deployments directory was not found: ' + deployments };
   }
   return { ok: true };
 }

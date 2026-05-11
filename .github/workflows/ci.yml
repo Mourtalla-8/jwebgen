@@ -27,7 +27,42 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Smoke generated project (all platforms)
+      - name: CLI install maven (hosted runners)
+        if: runner.os != 'Linux'
+        run: node bin/jwebgen.js --install maven
+
+      - name: Expose Maven PATH for current CI job (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $systemDrive = if ($env:SystemDrive) { $env:SystemDrive } else { 'C:' }
+          $installRoot = Join-Path $systemDrive 'jwebgen'
+          $mavenBin = $null
+          if (Test-Path -LiteralPath $installRoot) {
+            $mavenRoot = Get-ChildItem -Path $installRoot -Directory -Filter 'apache-maven-*' |
+              Sort-Object -Property Name -Descending |
+              Select-Object -First 1
+            if ($mavenRoot) {
+              $mavenBin = Join-Path $mavenRoot.FullName 'bin'
+            }
+          }
+          if (-not $mavenBin) {
+            $mvnCmd = Get-Command mvn -ErrorAction SilentlyContinue
+            if ($mvnCmd) {
+              $mavenBin = Split-Path -Parent $mvnCmd.Source
+            }
+          }
+          if (-not $mavenBin) {
+            throw "Maven binary directory not found under $installRoot and mvn is not available in PATH"
+          }
+          $mavenBin >> $env:GITHUB_PATH
+
+      - name: Verify Maven availability for smoke (macOS/Windows)
+        if: runner.os != 'Linux'
+        run: mvn --version
+
+      - name: Smoke generated project (Linux/macOS)
+        if: runner.os != 'Windows'
         run: bash ./tests/smoke-generated-project.sh
 
       - name: Global install smoke (all platforms)
@@ -56,10 +91,6 @@ jobs:
         if: runner.os != 'Linux'
         run: |
           node -e "const cp=require('node:child_process'); const r=cp.spawnSync(process.execPath,['bin/jwebgen.js','--setup','--dry-run'],{stdio:'inherit'}); const code=typeof r.status==='number'?r.status:1; if (code!==0 && code!==1) process.exit(code);"
-
-      - name: CLI install maven (idempotent when already present)
-        if: runner.os != 'Linux'
-        run: node bin/jwebgen.js --install maven
 
       - name: Golden fixtures (macOS/Windows)
         if: runner.os != 'Linux'

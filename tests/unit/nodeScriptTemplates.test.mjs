@@ -11,6 +11,8 @@ test('makeNodeDeployScript uses Linux-only Tomcat/WildFly path defaults', () => 
   const s = makeNodeDeployScript();
   assert.match(s, /process\.platform === 'linux' \? '\/var\/lib\/tomcat10' : ''/);
   assert.match(s, /process\.platform === 'linux' \? '\/opt\/wildfly' : ''/);
+  assert.match(s, /wildfly-as\/libexec/);
+  assert.match(s, /opt\/tomcat@10\/libexec/);
 });
 
 test('makeNodeDeployScript resolves WildFly paths from resolved deployments dir', () => {

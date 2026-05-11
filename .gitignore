@@ -4,3 +4,24 @@ node_modules/
 npm-debug.log*
 *.log
 .cursor/
+
+# Local-only (never commit)
+.env
+.env.*
+local/
+scratch/
+*.local.md
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Coverage / build artifacts
+coverage/
+.nyc_output/
+dist/
+
+# Optional: put personal experiment trees here (ignored)
+/experiments/

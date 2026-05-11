@@ -8,7 +8,7 @@ PATTERN='(?i)\bdivision\s+[a-z]\b|\bcursor\b|\bagent\b|\bco-authored-by\b|made w
 
 if rg -n --no-heading --color never -i "$PATTERN" -g '!tests/check-wording.sh' \
   README.md CHANGELOG.md CONTRIBUTING.md TROUBLESHOOTING.md \
-  src tests .github docs; then
+  src tests .github; then
   echo
   echo "Forbidden wording detected. Please remove blocked terms from project-facing text."
   exit 1

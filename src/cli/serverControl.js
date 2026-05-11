@@ -1,7 +1,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { execa } from 'execa';
-import { resolveTomcatHome, resolveWildflyPaths } from '../project/serverPaths.js';
+import { probeApacheTomcatHome, resolveWildflyPaths } from '../project/serverPaths.js';
 
 const TOMCAT_SERVICE_CANDIDATES = ['Tomcat10', 'tomcat10', 'Tomcat', 'tomcat'];
 const SPAWN_CONFIRM_TIMEOUT_MS = 2000;
@@ -109,7 +109,8 @@ async function runTomcatWindows(action, env = process.env) {
     const service = await execa('sc.exe', [action === 'start' ? 'start' : 'stop', serviceName], { reject: false });
     if (service.exitCode === 0) return true;
   }
-  const home = resolveTomcatHome({ env, platform: 'win32' });
+  const probe = probeApacheTomcatHome({ env, cfg: {}, platform: 'win32' });
+  const home = probe.ok ? probe.home : '';
   if (!home) return false;
   const script = action === 'start' ? 'bin\\startup.bat' : 'bin\\shutdown.bat';
   const res = spawnSync('cmd.exe', ['/d', '/c', 'call', script], {
@@ -152,7 +153,8 @@ async function runTomcatUnix(action, env = process.env, platform = process.platf
     if (await trySystemctl(action, 'tomcat10')) return true;
     if (await trySystemctl(action, 'tomcat')) return true;
   }
-  const home = resolveTomcatHome({ env, platform });
+  const probe = probeApacheTomcatHome({ env, cfg: {}, platform });
+  const home = probe.ok ? probe.home : '';
   if (!home) return false;
   const script = action === 'start' ? path.join(home, 'bin', 'startup.sh') : path.join(home, 'bin', 'shutdown.sh');
   try {

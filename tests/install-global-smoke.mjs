@@ -1,9 +1,9 @@
-import { existsSync, mkdtempSync } from 'node:fs';
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { WINDOWS_MAVEN_PORTABLE_VERSION } from '../src/project/windowsSetupInstall.js';
 
 function run(command, args, options = {}) {
   const useShell = process.platform === 'win32' && command.toLowerCase().endsWith('.cmd');
@@ -61,6 +61,10 @@ const shouldRunHostInstall = process.env.CI === 'true' || process.env.RUN_GLOBAL
 if (shouldRunHostInstall) {
   console.log('[global-smoke] jwebgen --install maven');
   run(jwebgenCommand, ['--install', 'maven'], { cwd: workDir, env });
+  if (process.platform === 'win32') {
+    const mavenBin = path.join(`${process.env.SystemDrive || 'C:'}${path.sep}`, 'jwebgen', `apache-maven-${WINDOWS_MAVEN_PORTABLE_VERSION}`, 'bin');
+    env.PATH = `${mavenBin}${path.delimiter}${env.PATH}`;
+  }
 } else {
   console.log('[global-smoke] skipped jwebgen --install maven (set RUN_GLOBAL_SMOKE=1 to enable locally)');
 }
@@ -88,11 +92,23 @@ if (!existsSync(path.join(appDir, 'src', 'main', 'webapp', 'WEB-INF', 'jsp', 'ho
 console.log('[global-smoke] jwebgen --status with fake TOMCAT_HOME');
 const fakeTomcat = path.join(tmpRoot, 'fake-tomcat');
 mkdirSync(path.join(fakeTomcat, 'webapps', 'globalapp'), { recursive: true });
+mkdirSync(path.join(fakeTomcat, 'lib'), { recursive: true });
+mkdirSync(path.join(fakeTomcat, 'bin'), { recursive: true });
+writeFileSync(path.join(fakeTomcat, 'lib', 'catalina.jar'), '');
+writeFileSync(path.join(fakeTomcat, 'bin', 'bootstrap.jar'), '');
+writeFileSync(path.join(fakeTomcat, 'bin', 'catalina.sh'), '#!/bin/sh\nexit 0\n');
+writeFileSync(path.join(fakeTomcat, 'bin', 'catalina.bat'), '@echo off\r\nexit /b 0\r\n');
 const statusOut = runCapture(jwebgenCommand, ['--status'], {
   cwd: appDir,
   env: { ...env, TOMCAT_HOME: fakeTomcat, JWEBGEN_SERVER_TARGET: 'tomcat' }
 });
 if (!statusOut.includes('Server: tomcat')) {
   throw new Error('status output missing tomcat server marker');
+}
+if (!statusOut.includes('Deployment: present')) {
+  throw new Error('status output missing deployment marker');
+}
+if (!statusOut.includes('http://localhost:8080/globalapp/')) {
+  throw new Error('status output missing app URL');
 }
 console.log('[global-smoke] completed');
