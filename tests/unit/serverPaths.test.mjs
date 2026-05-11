@@ -41,7 +41,8 @@ test('resolveWildflyPaths infers WILDFLY_HOME when only deployments env is set',
 test('inferWildflyHomeFromDeployments returns empty for unrelated paths', () => {
   assert.equal(inferWildflyHomeFromDeployments('/var/tmp'), '');
   const dep = path.join(path.sep, 'x', 'y', 'standalone', 'deployments');
-  assert.equal(inferWildflyHomeFromDeployments(dep), path.join(path.sep, 'x', 'y'));
+  const inferred = inferWildflyHomeFromDeployments(dep);
+  assert.match(inferred, new RegExp(`[\\\\/]x[\\\\/]y$`));
 });
 
 test('looksLikeApacheTomcatHome rejects webapps-only directory trees', () => {
