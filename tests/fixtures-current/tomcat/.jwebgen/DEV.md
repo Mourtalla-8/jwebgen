@@ -1,4 +1,3 @@
-# Fixture tomcat
+# Tomcat golden fixture
 
-Internal fixture for harness non-regression tests.
-
+Reference tree for regression checks.

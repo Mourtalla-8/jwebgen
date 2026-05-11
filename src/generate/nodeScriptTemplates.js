@@ -1,7 +1,7 @@
 import { DEV_DASHBOARD_SCRIPT_TEMPLATE, DEV_WORKER_SCRIPT_TEMPLATE } from './watchEmbeddedTemplates.js';
 import { LINUX_DEFAULT_TOMCAT_HOME, LINUX_DEFAULT_WILDFLY_HOME } from '../project/serverPaths.js';
 
-/** Verbatim snippets embedded in deploy.mjs / dev.mjs (standalone; must stay synced with probe logic in serverPaths + preflight). */
+/** Embedded in deploy.mjs / dev.mjs; keep aligned with `serverPaths.js` helpers. */
 const EMBEDDED_SERVER_PRESENCE_HELPERS = `
 function looksLikeApacheTomcatHome(homeDir) {
   const root = String(homeDir || '').trim();

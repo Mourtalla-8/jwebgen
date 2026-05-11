@@ -109,7 +109,8 @@ async function runTomcatWindows(action, env = process.env) {
     const service = await execa('sc.exe', [action === 'start' ? 'start' : 'stop', serviceName], { reject: false });
     if (service.exitCode === 0) return true;
   }
-  const home = resolveTomcatHome({ env, platform: 'win32' });
+  const probe = probeApacheTomcatHome({ env, cfg: {}, platform: 'win32' });
+  const home = probe.ok ? probe.home : '';
   if (!home) return false;
   const script = action === 'start' ? 'bin\\startup.bat' : 'bin\\shutdown.bat';
   const res = spawnSync('cmd.exe', ['/d', '/c', 'call', script], {
