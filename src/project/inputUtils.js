@@ -103,8 +103,32 @@ function javacPresentResult(parsed) {
   };
 }
 
+const JRE_ONLY_DISPLAY =
+  'JRE or incomplete JDK: javac not found (install a JDK or add JAVA_HOME/bin to PATH)';
+
+/** @returns {{ present: false, rawVersion: string|null, majorRelease: number|null, display: string, jreOnly: true } | null} */
+function jreOnlyFromJavaProbe(javaExecutable) {
+  const jr = spawnSync(javaExecutable, ['-version'], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+  const jout = `${jr.stdout ?? ''}${jr.stderr ?? ''}`.trim();
+  if (jr.error || jr.status !== 0 || !jout) return null;
+  const vm = jout.match(/version "([^"]+)"/i);
+  const rawVersion = vm ? vm[1] : null;
+  const majorRelease = rawVersion ? parseJavaMajorRelease(rawVersion) : null;
+  return {
+    present: false,
+    rawVersion,
+    majorRelease,
+    display: JRE_ONLY_DISPLAY,
+    jreOnly: true
+  };
+}
+
 /**
- * Detects a JDK via `javac`, then `JAVA_HOME/bin/javac` when PATH is stale.
+ * Detects a JDK via `javac`, then `JAVA_HOME/bin/javac` when PATH is stale,
+ * then `java -version` on PATH when there is a JRE but no `javac`.
  * @param {NodeJS.ProcessEnv} [env]
  */
 export function detectJavaCompiler(env = process.env) {
@@ -136,24 +160,13 @@ export function detectJavaCompiler(env = process.env) {
     for (const name of javaNames) {
       const javaPath = path.join(binDir, name);
       if (!existsSync(javaPath)) continue;
-      const jr = spawnSync(javaPath, ['-version'], {
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'pipe']
-      });
-      const jout = `${jr.stdout ?? ''}${jr.stderr ?? ''}`.trim();
-      if (jr.error || jr.status !== 0 || !jout) continue;
-      const vm = jout.match(/version "([^"]+)"/i);
-      const rawVersion = vm ? vm[1] : null;
-      const majorRelease = rawVersion ? parseJavaMajorRelease(rawVersion) : null;
-      return {
-        present: false,
-        rawVersion,
-        majorRelease,
-        display: 'JRE or incomplete JDK: javac not found (install a JDK or add JAVA_HOME/bin to PATH)',
-        jreOnly: true
-      };
+      const jre = jreOnlyFromJavaProbe(javaPath);
+      if (jre) return jre;
     }
   }
+
+  const pathJre = jreOnlyFromJavaProbe('java');
+  if (pathJre) return pathJre;
 
   return { present: false, rawVersion: null, majorRelease: null, display: null, jreOnly: false };
 }
