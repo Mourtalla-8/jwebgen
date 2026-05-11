@@ -28,5 +28,6 @@ test('printUnknownCommandAndExit prints help and exits with code 1', () => {
 
   const combined = logs.join('\n');
   assert.match(combined, /Unknown command/);
-  assert.match(combined, /Usage: jwebgen/);
+  // Help uses picocolors (bold "Usage:" etc.) when stderr is a TTY — allow ANSI between tokens.
+  assert.match(combined, /Usage:[^\n]*jwebgen/);
 });
