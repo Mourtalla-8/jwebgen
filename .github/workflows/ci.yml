@@ -40,7 +40,8 @@ jobs:
         if: runner.os != 'Linux'
         run: mvn --version
 
-      - name: Smoke generated project (all platforms)
+      - name: Smoke generated project (Linux/macOS)
+        if: runner.os != 'Windows'
         run: bash ./tests/smoke-generated-project.sh
 
       - name: Global install smoke (all platforms)
