@@ -162,6 +162,7 @@ test('computeSuggestedActions on win32 offers winget Java installers only (no jw
   assert.ok(java);
   assert.equal(java.installMethods.some((m) => m.internalId != null), false);
   assert.equal(java.installMethods.some((m) => /\bwinget\b/i.test(String(m.shellCommand || ''))), true);
+  assert.equal(java.installMethods.some((m) => /--source\s+winget/i.test(String(m.shellCommand || ''))), true);
 });
 
 test('computeSuggestedActions on win32 suggests embedded Tomcat and WildFly installers', () => {
@@ -358,7 +359,7 @@ test('runSetupAssistant dry-run keeps method/command association without Encoded
         optional: [],
         npmPath: mockNpm
       }),
-      computeSuggestedActionsImpl: () => singleInstallAction('java', 'winget install EclipseAdoptium.Temurin.21.JDK'),
+      computeSuggestedActionsImpl: () => singleInstallAction('java', 'winget install --source winget --id EclipseAdoptium.Temurin.21.JDK'),
       runCommandImpl: () => ({ status: 0, timedOut: false, error: null, signal: null })
     });
     assert.equal(ok, true);
@@ -367,7 +368,7 @@ test('runSetupAssistant dry-run keeps method/command association without Encoded
   }
   const output = logs.join('\n');
   assert.match(output, /- Test method/);
-  assert.match(output, /winget install EclipseAdoptium\.Temurin\.21\.JDK/);
+  assert.match(output, /winget install --source winget --id EclipseAdoptium\.Temurin\.21\.JDK/);
   assert.doesNotMatch(output, /EncodedCommand/i);
 });
 
@@ -446,7 +447,7 @@ test('runSetupAssistant treats winget already-installed/no-upgrade as success', 
         optional: [],
         npmPath: mockNpm
       }),
-      computeSuggestedActionsImpl: () => singleInstallAction('java', 'winget install EclipseAdoptium.Temurin.21.JDK'),
+      computeSuggestedActionsImpl: () => singleInstallAction('java', 'winget install --source winget --id EclipseAdoptium.Temurin.21.JDK'),
       runCommandImpl: async () => ({
         status: 1,
         timedOut: false,

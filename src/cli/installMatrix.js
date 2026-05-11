@@ -65,8 +65,8 @@ export function getInstallMethodsForKey(key, platform) {
 
   if (key === 'java') {
     if (platform === 'win32') {
-      const t1 = 'winget install EclipseAdoptium.Temurin.21.JDK';
-      const t2 = 'winget install Microsoft.OpenJDK.21';
+      const t1 = 'winget install --source winget --id EclipseAdoptium.Temurin.21.JDK';
+      const t2 = 'winget install --source winget --id Microsoft.OpenJDK.21';
       out.push({
         id: 'java-win-temurin',
         label: 'winget (Eclipse Temurin 21 JDK)',

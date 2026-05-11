@@ -5,14 +5,19 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { WINDOWS_MAVEN_PORTABLE_VERSION } from '../src/project/windowsSetupInstall.js';
 
+function execFileOrWinCmd(command, args, execOptions) {
+  if (process.platform === 'win32' && command.toLowerCase().endsWith('.cmd')) {
+    return execFileSync('cmd.exe', ['/d', '/c', command, ...args], execOptions);
+  }
+  return execFileSync(command, args, execOptions);
+}
+
 function run(command, args, options = {}) {
-  const useShell = process.platform === 'win32' && command.toLowerCase().endsWith('.cmd');
-  execFileSync(command, args, { stdio: 'inherit', shell: useShell, ...options });
+  execFileOrWinCmd(command, args, { stdio: 'inherit', ...options });
 }
 
 function runCapture(command, args, options = {}) {
-  const useShell = process.platform === 'win32' && command.toLowerCase().endsWith('.cmd');
-  return execFileSync(command, args, { encoding: 'utf8', shell: useShell, ...options });
+  return execFileOrWinCmd(command, args, { encoding: 'utf8', ...options });
 }
 
 function runCaptureAllowNonZero(command, args, options = {}) {

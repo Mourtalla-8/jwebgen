@@ -52,18 +52,28 @@ function hasCommand(binary) {
   return probe.status === 0;
 }
 
+/** Avoid Node DEP0190 (spawn + shell:true + args): run .cmd via cmd.exe /c without shell option. */
+function spawnMavenVersionProbe(binName) {
+  if (process.platform === 'win32' && /\.cmd$/i.test(binName)) {
+    return spawnSync('cmd.exe', ['/d', '/c', binName, '--version'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true
+    });
+  }
+  return spawnSync(binName, ['--version'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+}
+
 function verifyMavenCli(binName) {
   if (!binName) return false;
-  const useShell = process.platform === 'win32' && /\.cmd$/i.test(binName);
-  const result = spawnSync(binName, ['--version'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], shell: useShell });
+  const result = spawnMavenVersionProbe(binName);
   const text = `${result.stdout ?? ''}${result.stderr ?? ''}`;
   return !result.error && result.status === 0 && /\bApache\s+Maven\b/i.test(text);
 }
 
 function mavenVersionPreview(binName) {
   if (!binName) return '';
-  const useShell = process.platform === 'win32' && /\.cmd$/i.test(binName);
-  const result = spawnSync(binName, ['--version'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], shell: useShell });
+  const result = spawnMavenVersionProbe(binName);
   const text = `${result.stdout ?? ''}${result.stderr ?? ''}`;
   if (result.error || result.status !== 0 || !/\bApache\s+Maven\b/i.test(text)) return '';
   const lines = text.split(/\r?\n/).filter(Boolean);
@@ -197,6 +207,14 @@ export function checkRequirement(req) {
   if (req === 'java') {
     const java = detectJavaCompiler();
     if (!java.present) {
+      if (java.jreOnly) {
+        return {
+          key: 'java',
+          ok: false,
+          display: java.display || 'JRE without javac',
+          hint: `Install a JDK (includes javac). ${installHint('java')}`
+        };
+      }
       return { key: 'java', ok: false, display: 'not installed', hint: installHint('java') };
     }
     const compatibility = evaluateJavaCompatibility(java.majorRelease, 11);
