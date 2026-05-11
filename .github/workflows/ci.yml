@@ -37,16 +37,25 @@ jobs:
         run: |
           $systemDrive = if ($env:SystemDrive) { $env:SystemDrive } else { 'C:' }
           $installRoot = Join-Path $systemDrive 'jwebgen'
-          if (-not (Test-Path -LiteralPath $installRoot)) {
-            throw "Maven install root not found: $installRoot"
+          $mavenBin = $null
+          if (Test-Path -LiteralPath $installRoot) {
+            $mavenRoot = Get-ChildItem -Path $installRoot -Directory -Filter 'apache-maven-*' |
+              Sort-Object -Property Name -Descending |
+              Select-Object -First 1
+            if ($mavenRoot) {
+              $mavenBin = Join-Path $mavenRoot.FullName 'bin'
+            }
           }
-          $mavenRoot = Get-ChildItem -Path $installRoot -Directory -Filter 'apache-maven-*' |
-            Sort-Object -Property Name -Descending |
-            Select-Object -First 1
-          if (-not $mavenRoot) {
-            throw "Maven installation directory not found under $installRoot"
+          if (-not $mavenBin) {
+            $mvnCmd = Get-Command mvn -ErrorAction SilentlyContinue
+            if ($mvnCmd) {
+              $mavenBin = Split-Path -Parent $mvnCmd.Source
+            }
           }
-          (Join-Path $mavenRoot.FullName 'bin') >> $env:GITHUB_PATH
+          if (-not $mavenBin) {
+            throw "Maven binary directory not found under $installRoot and mvn is not available in PATH"
+          }
+          $mavenBin >> $env:GITHUB_PATH
 
       - name: Verify Maven availability for smoke (macOS/Windows)
         if: runner.os != 'Linux'
