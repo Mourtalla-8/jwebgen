@@ -31,6 +31,15 @@ jobs:
         if: runner.os != 'Linux'
         run: node bin/jwebgen.js --install maven
 
+      - name: Expose Maven PATH for current CI job (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          echo "C:\jwebgen\apache-maven-3.9.15\bin" >> $env:GITHUB_PATH
+
+      - name: Verify Maven availability for smoke (macOS/Windows)
+        if: runner.os != 'Linux'
+        run: mvn --version
+
       - name: Smoke generated project (all platforms)
         run: bash ./tests/smoke-generated-project.sh
 
