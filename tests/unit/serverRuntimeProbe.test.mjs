@@ -39,6 +39,6 @@ test('runTomcatCatalinaVersion fails when catalina.sh is not executable', { skip
   }
 });
 
-test('windowsScQueryState returns null for bogus service when sc is missing', () => {
+test('windowsScQueryState returns null for non-existent service or when sc.exe is missing', () => {
   assert.equal(windowsScQueryState('__jwebgen_no_such_service__'), null);
 });

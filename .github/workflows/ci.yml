@@ -33,8 +33,15 @@ jobs:
 
       - name: Expose Maven PATH for current CI job (Windows)
         if: runner.os == 'Windows'
+        shell: pwsh
         run: |
-          echo "C:\jwebgen\apache-maven-3.9.15\bin" >> $env:GITHUB_PATH
+          $mavenRoot = Get-ChildItem -Path 'C:\jwebgen' -Directory -Filter 'apache-maven-*' |
+            Sort-Object -Property Name -Descending |
+            Select-Object -First 1
+          if (-not $mavenRoot) {
+            throw 'Maven installation directory not found under C:\jwebgen'
+          }
+          (Join-Path $mavenRoot.FullName 'bin') >> $env:GITHUB_PATH
 
       - name: Verify Maven availability for smoke (macOS/Windows)
         if: runner.os != 'Linux'
