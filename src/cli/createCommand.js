@@ -146,7 +146,11 @@ export async function runCreateCommand(deps) {
   const javaDetection = detectJavaCompiler();
 
   if (!javaDetection.present) {
-    console.log(pc.red('Java (JDK) is missing or `javac` cannot be found.'));
+    if (javaDetection.jreOnly) {
+      console.log(pc.red(javaDetection.display || 'JRE without javac'));
+    } else {
+      console.log(pc.red('Java (JDK) is missing or `javac` cannot be found.'));
+    }
     console.log(pc.yellow(`Required install: ${installHint('java')}`));
     console.log(pc.yellow('Creation is stopped until a compatible JDK is available.'));
     process.exit(1);

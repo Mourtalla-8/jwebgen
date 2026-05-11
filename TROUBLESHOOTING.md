@@ -26,6 +26,16 @@ Need Node **20.12+**. Check with `node -v`.
 
 `jwebgen --setup` for a full check; `--setup --dry-run` to preview. In CI/non-interactive mode, setup stays diagnostics-only.
 
+## Windows (PATH, JDK, winget)
+
+Setup runs inside **Node** and only sees the environment of that process. After you change **user or system** `PATH`, `JAVA_HOME`, or `CATALINA_HOME`, fully **restart** the terminal, your IDE, or any parent app, then run `javac -version` in the same place you run `jwebgen`.
+
+A **JDK** is required (`javac` must work), not a JRE-only install. If `JAVA_HOME` points at a JDK but `javac` is not on `PATH`, set `JAVA_HOME` anyway: diagnostics also look under `%JAVA_HOME%\bin\javac.exe`.
+
+Tomcat and WildFly checks run `catalina.bat` / `jboss-cli.bat`, which need **Java** available the same way your manual installs do (typically `JAVA_HOME` and/or JDK `bin` on `PATH`).
+
+If `winget install …` fails on the **msstore** source with a certificate error (`0x8a15005e`), install from the **winget** source only, for example: `winget install --source winget --id EclipseAdoptium.Temurin.21.JDK`. The guided setup suggests commands in that form.
+
 ## Deploy / dev on macOS or Windows
 
 Prefer the generated `*.mjs` scripts. Point env at real installs:
