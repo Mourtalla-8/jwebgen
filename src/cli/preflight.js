@@ -54,14 +54,16 @@ function hasCommand(binary) {
 
 function verifyMavenCli(binName) {
   if (!binName) return false;
-  const result = spawnSync(binName, ['--version'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  const useShell = process.platform === 'win32' && /\.cmd$/i.test(binName);
+  const result = spawnSync(binName, ['--version'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], shell: useShell });
   const text = `${result.stdout ?? ''}${result.stderr ?? ''}`;
   return !result.error && result.status === 0 && /\bApache\s+Maven\b/i.test(text);
 }
 
 function mavenVersionPreview(binName) {
   if (!binName) return '';
-  const result = spawnSync(binName, ['--version'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  const useShell = process.platform === 'win32' && /\.cmd$/i.test(binName);
+  const result = spawnSync(binName, ['--version'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], shell: useShell });
   const text = `${result.stdout ?? ''}${result.stderr ?? ''}`;
   if (result.error || result.status !== 0 || !/\bApache\s+Maven\b/i.test(text)) return '';
   const lines = text.split(/\r?\n/).filter(Boolean);
