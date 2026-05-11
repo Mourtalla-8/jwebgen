@@ -18,7 +18,7 @@ test('isDirWritableByProcess is true for writable temp dir', () => {
   }
 });
 
-test('runTomcatCatalinaVersion fails when catalina.sh is not executable', () => {
+test('runTomcatCatalinaVersion fails when catalina.sh is not executable', { skip: process.platform === 'win32' }, () => {
   const tmp = mkdtempSync(path.join(os.tmpdir(), 'jwebgen-tcatver-'));
   try {
     const bin = path.join(tmp, 'bin');
