@@ -405,84 +405,23 @@ console.log('  jwebgen --dev');
 }
 
 export function makeDevMd({ appName, serverTarget }) {
-  const prereqServer =
+  const serverBlurb =
     serverTarget === 'tomcat'
-      ? `## Prerequisites (Tomcat)
-
-- Tomcat installed + started
-- Optional variable: \`TOMCAT10\` (default: \`/var/lib/tomcat10\`)
-
-Commands (depending on your distro):
-
-\`\`\`bash
-# Debian/Ubuntu
-sudo apt install tomcat10
-sudo systemctl start tomcat10
-\`\`\`
-
-Sur Arch :
-
-\`\`\`bash
-sudo pacman -S tomcat10
-sudo systemctl start tomcat10
-\`\`\``
+      ? 'Run Tomcat; set `TOMCAT_HOME` / `CATALINA_HOME` if detection misses it. Dev mode uses exploded sync + reloadable context when the template sets it.'
       : serverTarget === 'wildfly'
-        ? `## Prerequisites (WildFly)
+        ? 'Run WildFly; set `WILDFLY_HOME` or `WILDFLY_DEPLOYMENTS` if needed. Dev drops the WAR and touches `.dodeploy`.'
+        : 'First `jwebgen --dev` or `--deploy` will ask Tomcat vs WildFly and write `.jwebgen/.jwebgenrc`.';
 
-- WildFly installed and started
-- Useful variables:
-  - \`WILDFLY_HOME\` (default: \`/opt/wildfly\`)
-  - \`WILDFLY_DEPLOYMENTS\` (default: \`$WILDFLY_HOME/standalone/deployments\`)`
-        : `## Prerequisites (server to choose)
+  return `# Dev — ${appName}
 
-- No server was selected during quick project creation.
-- On first \`jwebgen --dev\` or \`jwebgen --deploy\`, jwebgen will ask for Tomcat or WildFly and save the choice.`;
+App URL: \`http://localhost:8080/${appName}/\` (change with \`JWEBGEN_HTTP_PORT\`).
 
-  const devNotes =
-    serverTarget === 'tomcat'
-      ? `- In dev mode, deployment is **exploded** + incremental sync (rsync when available), without restarting Tomcat.
-- \`src/main/webapp/META-INF/context.xml\` enables \`reloadable="true"\` to help Tomcat reload context changes.`
-        : serverTarget === 'wildfly'
-        ? `- In dev mode, the script deploys the WAR to the deployments directory and triggers \`.dodeploy\`.`
-        : `- In dev mode, target server is selected at first run and stored in \`.jwebgen/.jwebgenrc\`.`;
+${serverBlurb}
 
-  return `# Quick Development
+Need JDK 11+, Maven, and Node (scripts + LiveReload). Entrypoints: \`.jwebgen/scripts/build\`, \`deploy\`, \`dev\`, \`watch\` — prefer \`*.mjs\` when present. Add code with \`jwebgen --servlet\` / \`jwebgen --jsp\`.
 
-URL de dev stable :
+State files and stubs under \`.jwebgen/\` are recreated by dev/watch; root \`.gitignore\` already ignores most of them.
 
-\`\`\`
-http://localhost:8080/${appName}/
-\`\`\`
-
-${prereqServer}
-
-Ce template est Jakarta-only (Servlet API 6+).
-
-## Required tools
-
-- Java (JDK) 11+
-- Maven (\`mvn\`)
-- Node.js (**uniquement** pour \`./.jwebgen/scripts/dev.sh\` et le reload navigateur)
-
-Generated scripts:
-
-- \`./.jwebgen/scripts/build.sh\` : compile le WAR
-- \`./.jwebgen/scripts/deploy.sh\` : deploys to the target server
-- \`./.jwebgen/scripts/dev.sh\` : mode dev continu (watch + rebuild + deploy + reload navigateur)
-- \`./.jwebgen/scripts/watch.sh\` : rebuild + redeploy automatique
-- \`jwebgen --servlet [ClassName]\` : creates a servlet
-
-Contexte du projet :
-
-- stack : modern jakarta
-- target server: ${serverTarget}
-
-Notes :
-
-- ${devNotes}
-- Under \`.jwebgen/\`, **ephemeral** files (e.g. \`.jwebgen-dev-state.json\`, events \`.jsonl\`, embedded \`.mjs\` stubs, \`.pid\`) are recreated by \`--dev\`/\`watch\`; you can ignore them in Git via the patterns in the project root \`.gitignore\`. Keep \`scripts/\` and README as needed.
-- If the target server is unavailable, dev mode shows OS-aware hints on the dashboard; use \`[f] refresh\` after starting Tomcat/WildFly.
-- LiveReload in dev mode uses a local WebSocket server (auto-fallback on port conflict, starts at \`35729\`, configurable via \`JWEBGEN_LIVE_PORT\`).
-- The \`target/\` directory can be removed/recreated at any time
+If the engine is down, the dashboard nudges you; start the server and hit \`[f]\` refresh. LiveReload WebSocket defaults to \`35729\` (\`JWEBGEN_LIVE_PORT\` overrides). \`target/\` is safe to delete.
 `;
 }
