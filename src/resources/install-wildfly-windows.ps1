@@ -77,6 +77,31 @@ function Get-Sha1FromFile {
     return $match.Value.ToLowerInvariant()
 }
 
+# .NET hash avoids reliance on Get-FileHash (missing on some constrained / CI hosts).
+function Get-FileDigestHex {
+    param(
+        [Parameter(Mandatory)][string]$LiteralPath,
+        [Parameter(Mandatory)][ValidateSet('SHA512', 'SHA1')][string]$Algorithm
+    )
+
+    $hashAlgo = switch ($Algorithm) {
+        'SHA512' { [System.Security.Cryptography.SHA512]::Create() }
+        'SHA1' { [System.Security.Cryptography.SHA1]::Create() }
+    }
+    try {
+        $fullPath = Convert-Path -LiteralPath $LiteralPath
+        $fs = [System.IO.File]::OpenRead($fullPath)
+        try {
+            $hashBytes = $hashAlgo.ComputeHash($fs)
+            return ([BitConverter]::ToString($hashBytes) -replace '-', '').ToLowerInvariant()
+        } finally {
+            $fs.Dispose()
+        }
+    } finally {
+        $hashAlgo.Dispose()
+    }
+}
+
 function Set-UserEnvironment {
     param(
         [Parameter(Mandatory)][string]$WildFlyDir,
@@ -162,7 +187,7 @@ try {
 
     # Verify checksum
     $expected = Get-Sha1FromFile -Path $checksumPath
-    $actual = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA1).Hash.ToLowerInvariant()
+    $actual = Get-FileDigestHex -LiteralPath $zipPath -Algorithm SHA1
 
     if ($expected -ne $actual) {
         throw "Checksum failed"
