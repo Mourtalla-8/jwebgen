@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { WINDOWS_MAVEN_PORTABLE_VERSION } from '../src/project/windowsSetupInstall.js';
 
 function run(command, args, options = {}) {
   const useShell = process.platform === 'win32' && command.toLowerCase().endsWith('.cmd');
@@ -60,6 +61,10 @@ const shouldRunHostInstall = process.env.CI === 'true' || process.env.RUN_GLOBAL
 if (shouldRunHostInstall) {
   console.log('[global-smoke] jwebgen --install maven');
   run(jwebgenCommand, ['--install', 'maven'], { cwd: workDir, env });
+  if (process.platform === 'win32') {
+    const mavenBin = path.join(`${process.env.SystemDrive || 'C:'}${path.sep}`, 'jwebgen', `apache-maven-${WINDOWS_MAVEN_PORTABLE_VERSION}`, 'bin');
+    env.PATH = `${mavenBin}${path.delimiter}${env.PATH}`;
+  }
 } else {
   console.log('[global-smoke] skipped jwebgen --install maven (set RUN_GLOBAL_SMOKE=1 to enable locally)');
 }
