@@ -61,6 +61,7 @@ touch "$FAKE_TOMCAT/webapps/smokeapp/.jwebgen-smoke"
 touch "$FAKE_TOMCAT/lib/catalina.jar" "$FAKE_TOMCAT/bin/bootstrap.jar"
 printf '%s\n' '#!/bin/sh' 'exit 0' >"$FAKE_TOMCAT/bin/catalina.sh"
 chmod +x "$FAKE_TOMCAT/bin/catalina.sh"
+printf '%s\n' '@echo off' 'exit /b 0' >"$FAKE_TOMCAT/bin/catalina.bat"
 
 echo "[smoke] jwebgen --status (expect configured target + port in URL)"
 set +e

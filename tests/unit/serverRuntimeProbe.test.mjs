@@ -18,7 +18,8 @@ test('isDirWritableByProcess is true for writable temp dir', () => {
   }
 });
 
-test('runTomcatCatalinaVersion fails when catalina.sh is not executable', () => {
+test('runTomcatCatalinaVersion fails when catalina.sh is not executable', { skip: process.platform === 'win32' }, () => {
+  // Windows ignores POSIX X_OK for fs.access; chmod bits are not observable the same way as on Unix.
   const tmp = mkdtempSync(path.join(os.tmpdir(), 'jwebgen-tcatver-'));
   try {
     const bin = path.join(tmp, 'bin');
@@ -39,6 +40,6 @@ test('runTomcatCatalinaVersion fails when catalina.sh is not executable', () => 
   }
 });
 
-test('windowsScQueryState returns null for bogus service when sc is missing', () => {
+test('windowsScQueryState returns null for bogus service or missing sc.exe', () => {
   assert.equal(windowsScQueryState('__jwebgen_no_such_service__'), null);
 });
