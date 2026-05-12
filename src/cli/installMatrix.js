@@ -188,8 +188,7 @@ export function getInstallMethodsForKey(key, platform) {
     } else {
       const rows = [
         { id: 'wildfly-linux-apt', label: 'apt (wildfly)', shellCommand: 'sudo apt install -y wildfly' },
-        { id: 'wildfly-linux-dnf', label: 'dnf (wildfly)', shellCommand: 'sudo dnf install -y wildfly' },
-        { id: 'wildfly-linux-pacman', label: 'pacman (wildfly)', shellCommand: 'sudo pacman -S --noconfirm wildfly' }
+        { id: 'wildfly-linux-dnf', label: 'dnf (wildfly)', shellCommand: 'sudo dnf install -y wildfly' }
       ];
       for (const r of rows) {
         out.push({ ...r, previewLine: previewForShell(r.shellCommand), internalId: null });
