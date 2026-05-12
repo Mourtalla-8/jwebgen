@@ -75,6 +75,17 @@ export async function runProjectScript(scriptName, args = [], options = {}, deps
       error.jwebgenHandled = true;
       throw error;
     }
+    const serverDownChunks = [msg, error?.stderr, error?.stdout, error?.all].filter(Boolean).map(String);
+    const serverDown = [scriptName, candidateNode]
+      .filter(Boolean)
+      .some((n) => /deploy/i.test(String(n)))
+      && serverDownChunks.some(
+        (c) => c.includes('__JWEBGEN_EVENT__ server_down') || c.includes('Selected server is installed but currently down.')
+      );
+    if (serverDown) {
+      error.jwebgenHandled = true;
+      throw error;
+    }
     console.error(pc.red(`${scriptName} failed: ${msg}`));
     const rawOut = [error?.stderr, error?.stdout, error?.all]
       .filter((chunk) => chunk != null && String(chunk).trim() !== '')
