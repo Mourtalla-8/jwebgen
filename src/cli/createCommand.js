@@ -313,7 +313,7 @@ export async function runCreateCommand(deps) {
     await rm(tempRoot, { recursive: true, force: true });
   }
 
-  console.log(pc.green(`\n✅ Project created: ${targetDir}`));
+  console.log(pc.green(`\nProject created: ${targetDir}`));
   if (buildNow) {
     const { javaOk, mavenOk } = await ensureBuildTools();
     if (!javaOk) console.log(pc.yellow(`Java not found. ${installHint('java')}`));
