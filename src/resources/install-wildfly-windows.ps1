@@ -1,5 +1,12 @@
 $ErrorActionPreference = 'Stop'
 
+# TLS 1.2 for older Windows PowerShell (GitHub / CDN require it)
+try {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+} catch {
+    # Ignore if not applicable
+}
+
 # ================================
 # CONFIGURATION
 # ================================
@@ -7,12 +14,12 @@ $version = '39.0.1.Final'
 $base = "wildfly-$version"
 $zipName = "$base.zip"
 
-# URLs
-$primaryUrl = "https://github.com/wildfly/wildfly/releases/download/$version/$zipName"
-$fallbackUrl = "https://download.jboss.org/wildfly/$version/$zipName"
+# Prefer official distribution host first (stable asset URLs), then GitHub releases
+$zipUrlOfficial = "https://download.jboss.org/wildfly/$version/$zipName"
+$zipUrlGitHub = "https://github.com/wildfly/wildfly/releases/download/$version/$zipName"
 
-$primaryChecksumUrl = "$primaryUrl.sha1"
-$fallbackChecksumUrl = "$fallbackUrl.sha1"
+$checksumUrlOfficial = "$zipUrlOfficial.sha1"
+$checksumUrlGitHub = "$zipUrlGitHub.sha1"
 
 # Installation directory:
 # C:\jwebgen\wildfly-39.0.1.Final
@@ -29,6 +36,10 @@ $checksumPath = Join-Path $downloadsDir "$zipName.sha1"
 # ================================
 # HELPERS
 # ================================
+function Test-CurlAvailable {
+    return $null -ne (Get-Command -Name curl.exe -ErrorAction SilentlyContinue)
+}
+
 function Download-File {
     param(
         [Parameter(Mandatory)][string]$Url,
@@ -39,7 +50,31 @@ function Download-File {
         Remove-Item -LiteralPath $OutFile -Force -ErrorAction SilentlyContinue
     }
 
-    Invoke-WebRequest -Uri $Url -OutFile $OutFile -ErrorAction Stop
+    $ua = 'jwebgen-installer/1 (Windows; PowerShell)'
+    $iwrArgs = @{
+        Uri             = $Url
+        OutFile         = $OutFile
+        ErrorAction     = 'Stop'
+        UseBasicParsing = $true
+        MaximumRedirection = 10
+        UserAgent       = $ua
+    }
+
+    try {
+        Invoke-WebRequest @iwrArgs
+    }
+    catch {
+        if (Test-CurlAvailable) {
+            $curl = (Get-Command -Name curl.exe).Source
+            & $curl '-fSL' '-o' $OutFile '-A' $ua $Url
+            if ($LASTEXITCODE -ne 0) {
+                throw "Download failed (curl exit $LASTEXITCODE): $Url"
+            }
+        }
+        else {
+            throw
+        }
+    }
 
     if (-not (Test-Path -LiteralPath $OutFile)) {
         throw "Download failed"
@@ -178,20 +213,20 @@ try {
         # Ignore if Java is not installed
     }
 
-    # Download ZIP with fallback
+    # Download ZIP: official first, then GitHub
     try {
-        Download-File -Url $primaryUrl -OutFile $zipPath
+        Download-File -Url $zipUrlOfficial -OutFile $zipPath
     }
     catch {
-        Download-File -Url $fallbackUrl -OutFile $zipPath
+        Download-File -Url $zipUrlGitHub -OutFile $zipPath
     }
 
-    # Download checksum with fallback
+    # Download checksum: same order
     try {
-        Download-File -Url $primaryChecksumUrl -OutFile $checksumPath
+        Download-File -Url $checksumUrlOfficial -OutFile $checksumPath
     }
     catch {
-        Download-File -Url $fallbackChecksumUrl -OutFile $checksumPath
+        Download-File -Url $checksumUrlGitHub -OutFile $checksumPath
     }
 
     # Verify checksum
