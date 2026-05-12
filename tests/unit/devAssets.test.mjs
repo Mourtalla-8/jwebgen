@@ -8,6 +8,8 @@ test('makeAddServletNodeScript is standalone node entrypoint', () => {
   assert.match(script, /fileURLToPath/);
   assert.match(script, /Invalid class name/);
   assert.match(script, /Servlet created:/);
+  assert.match(script, /urlPatterns = \{\"/);
+  assert.match(script, /String\.format\("<head><meta charset=UTF-8><title>%s<\/title><\/head>"/);
 });
 
 test('makeAddJspNodeScript validates jsp names and writes file', () => {

@@ -33,6 +33,8 @@ test('makeNodeDevScript spawns worker without stdin and dashboard with inherited
   assert.match(s, /JWEBGEN_APP_NAME: appName/);
   assert.match(s, /\.jwebgen-dev-command\.json/);
   assert.match(s, /maybeRunServerInstallAssistant/);
+  assert.match(s, /shutdownOnce/);
+  assert.match(s, /dash\.on\('exit'/);
 });
 
 test('makeNodeDevScript embeds dashboard renderer with ANSI-aware padding', () => {
@@ -61,6 +63,8 @@ test('makeNodeDeployScript wraps deploy IO with guardedAcl for permission errors
   assert.match(deploy, /canAutoSudo/);
   assert.match(deploy, /spawnSync\('sudo'/);
   assert.match(deploy, /spawn\('sudo'/);
+  assert.match(deploy, /sudoStderrMentionsNoNewPrivileges/);
+  assert.match(deploy, /err\.sudoStderr/);
   assert.match(deploy, /WILDFLY_DEPLOYMENTS/);
   assert.match(deploy, /TOMCAT_HOME\/TOMCAT10\/CATALINA_HOME/);
   assert.match(deploy, /validateTomcatHome/);
