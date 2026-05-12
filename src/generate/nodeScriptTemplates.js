@@ -1071,7 +1071,13 @@ const DEV_DASHBOARD_SCRIPT_TEMPLATE = ${JSON.stringify(DEV_DASHBOARD_SCRIPT_TEMP
 await writeFile(workerScript, DEV_WORKER_SCRIPT_TEMPLATE, 'utf8');
 await writeFile(dashboardScript, DEV_DASHBOARD_SCRIPT_TEMPLATE, 'utf8');
 
-const env = { ...process.env, ...projectEnvFromCfg(cfg), JWEBGEN_DEV: '1', JWEBGEN_SERVER_TARGET: target, JWEBGEN_APP_NAME: appName };
+const env = {
+  ...projectEnvFromCfg(cfg),
+  ...process.env,
+  JWEBGEN_DEV: '1',
+  JWEBGEN_SERVER_TARGET: target,
+  JWEBGEN_APP_NAME: appName
+};
 const worker = spawn(process.execPath, [workerScript, stateFile, eventsFile, pauseFile, String(process.pid), commandFile], { cwd: workDir, env, stdio: ['ignore', 'inherit', 'inherit'] });
 const dash = spawn(process.execPath, [dashboardScript, stateFile, pauseFile, commandFile, String(process.pid)], { cwd: workDir, env, stdio: 'inherit' });
 

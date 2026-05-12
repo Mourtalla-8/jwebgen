@@ -51,7 +51,18 @@ export async function runProjectScript(scriptName, args = [], options = {}, deps
 
   try {
     if (scriptPath.endsWith('.mjs')) {
-      await execa(process.execPath, [scriptPath, ...args], { cwd: projectRoot, stdio: 'inherit', env });
+      const isDeployMjs = scriptName === canonicalDeployScript && candidateNode === 'deploy.mjs';
+      if (isDeployMjs) {
+        const subprocess = execa(process.execPath, [scriptPath, ...args], {
+          cwd: projectRoot,
+          stdio: ['inherit', 'inherit', 'pipe'],
+          env
+        });
+        subprocess.stderr.pipe(process.stderr);
+        await subprocess;
+      } else {
+        await execa(process.execPath, [scriptPath, ...args], { cwd: projectRoot, stdio: 'inherit', env });
+      }
     } else {
       await execa(scriptPath, args, { cwd: projectRoot, stdio, env });
     }
