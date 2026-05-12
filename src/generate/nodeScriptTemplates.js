@@ -298,7 +298,6 @@ function serverInstallCommands(target) {
   const commands = [];
   if (pm.apt) commands.push('sudo apt install -y wildfly');
   if (pm.dnf) commands.push('sudo dnf install -y wildfly');
-  if (pm.pacman) commands.push('sudo pacman -S --noconfirm wildfly');
   return commands;
 }
 
@@ -771,6 +770,7 @@ if (!cleanupOnly) {
   const runningQuick = isServerRunningQuick(target);
   if (runningQuick === false) {
     console.error('Selected server is installed but currently down.');
+    console.error('Run: jwebgen server start ' + target);
     console.error('__JWEBGEN_EVENT__ server_down');
     process.exit(1);
   }
@@ -901,7 +901,6 @@ function serverInstallCommands(target) {
   const commands = [];
   if (pm.apt) commands.push('sudo apt install -y wildfly');
   if (pm.dnf) commands.push('sudo dnf install -y wildfly');
-  if (pm.pacman) commands.push('sudo pacman -S --noconfirm wildfly');
   return commands;
 }
 
@@ -1041,6 +1040,16 @@ async function readMavenAppName() {
   return path.basename(rootDir);
 }
 
+function projectEnvFromCfg(cfg) {
+  const out = {};
+  const keys = ['WILDFLY_HOME', 'WILDFLY_DEPLOYMENTS', 'TOMCAT_HOME', 'CATALINA_HOME', 'TOMCAT10', 'JWEBGEN_HTTP_PORT', 'JAVA_HOME'];
+  for (const k of keys) {
+    const v = cfg[k];
+    if (v !== undefined && v !== null && String(v).trim() !== '') out[k] = String(v).trim();
+  }
+  return out;
+}
+
 const cfg = await loadProjectConfig();
 let target = resolveServerTarget({ cfg });
 if (!target) { target = await chooseServerTargetInteractively(); await persistServerTarget(target); }
@@ -1062,9 +1071,9 @@ const DEV_DASHBOARD_SCRIPT_TEMPLATE = ${JSON.stringify(DEV_DASHBOARD_SCRIPT_TEMP
 await writeFile(workerScript, DEV_WORKER_SCRIPT_TEMPLATE, 'utf8');
 await writeFile(dashboardScript, DEV_DASHBOARD_SCRIPT_TEMPLATE, 'utf8');
 
-const env = { ...process.env, JWEBGEN_DEV: '1', JWEBGEN_SERVER_TARGET: target, JWEBGEN_APP_NAME: appName };
-const worker = spawn(process.execPath, [workerScript, stateFile, eventsFile, pauseFile, String(process.pid), commandFile], { cwd: workDir, env, stdio: 'inherit' });
-const dash = spawn(process.execPath, [dashboardScript, stateFile, pauseFile, commandFile, String(process.pid)], { cwd: workDir, env, stdio: ['ignore', 'inherit', 'inherit'] });
+const env = { ...process.env, ...projectEnvFromCfg(cfg), JWEBGEN_DEV: '1', JWEBGEN_SERVER_TARGET: target, JWEBGEN_APP_NAME: appName };
+const worker = spawn(process.execPath, [workerScript, stateFile, eventsFile, pauseFile, String(process.pid), commandFile], { cwd: workDir, env, stdio: ['ignore', 'inherit', 'inherit'] });
+const dash = spawn(process.execPath, [dashboardScript, stateFile, pauseFile, commandFile, String(process.pid)], { cwd: workDir, env, stdio: 'inherit' });
 
 const shutdown = () => {
   try { worker.kill('SIGTERM'); } catch {}
