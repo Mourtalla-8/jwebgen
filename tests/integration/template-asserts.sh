@@ -84,6 +84,7 @@ assertContains(nodeDeploy, 'persistServerTarget', 'deploy.mjs persists chosen se
 assertContains(nodeDeploy, 'detectServerInstalled', 'deploy.mjs validates selected server installation');
 assertContains(nodeDeploy, 'maybeRunServerInstallAssistant', 'deploy.mjs offers server-focused install guidance');
 assertContains(nodeDeploy, '__JWEBGEN_EVENT__ server_down', 'deploy.mjs emits server_down marker when engine is down');
+assertContains(nodeDeploy, "Run: jwebgen server start ' + target", 'deploy.mjs hints server start CLI when engine is down');
 assertContains(nodeDeploy, 'canAutoSudo', 'deploy.mjs can auto-detect sudo on Linux');
 assertContains(nodeDeploy, "spawnSync('sudo'", 'deploy.mjs probes sudo availability');
 assertContains(nodeDeploy, "spawn('sudo'", 'deploy.mjs can invoke sudo when enabled');

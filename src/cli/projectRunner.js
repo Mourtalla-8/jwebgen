@@ -51,7 +51,18 @@ export async function runProjectScript(scriptName, args = [], options = {}, deps
 
   try {
     if (scriptPath.endsWith('.mjs')) {
-      await execa(process.execPath, [scriptPath, ...args], { cwd: projectRoot, stdio: 'inherit', env });
+      const isDeployMjs = scriptName === canonicalDeployScript && candidateNode === 'deploy.mjs';
+      if (isDeployMjs) {
+        const subprocess = execa(process.execPath, [scriptPath, ...args], {
+          cwd: projectRoot,
+          stdio: ['inherit', 'inherit', 'pipe'],
+          env
+        });
+        subprocess.stderr.pipe(process.stderr);
+        await subprocess;
+      } else {
+        await execa(process.execPath, [scriptPath, ...args], { cwd: projectRoot, stdio: 'inherit', env });
+      }
     } else {
       await execa(scriptPath, args, { cwd: projectRoot, stdio, env });
     }
@@ -72,6 +83,17 @@ export async function runProjectScript(scriptName, args = [], options = {}, deps
     if (isCleanupDeploy && markerPresent) {
       console.error(pc.yellow('Cleanup failed for target server directories.'));
       console.error(pc.yellow('If this is a permission issue, jwebgen will auto-retry with sudo on Linux when available.'));
+      error.jwebgenHandled = true;
+      throw error;
+    }
+    const serverDownChunks = [msg, error?.stderr, error?.stdout, error?.all].filter(Boolean).map(String);
+    const serverDown = [scriptName, candidateNode]
+      .filter(Boolean)
+      .some((n) => /deploy/i.test(String(n)))
+      && serverDownChunks.some(
+        (c) => c.includes('__JWEBGEN_EVENT__ server_down') || c.includes('Selected server is installed but currently down.')
+      );
+    if (serverDown) {
       error.jwebgenHandled = true;
       throw error;
     }

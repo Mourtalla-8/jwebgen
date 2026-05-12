@@ -5,7 +5,6 @@ import path from 'node:path';
 import { detectJavaCompiler, evaluateJavaCompatibility, installHint, which } from '../project/inputUtils.js';
 import { looksLikeWildflyHome, probeApacheTomcatHome, resolveWildflyPaths, validateWildflyDeploymentsPath } from '../project/serverPaths.js';
 import {
-  curlHttpProbe,
   describeFirstResolvedSystemdUnit,
   describeWindowsTomcatService,
   describeWindowsWildflyService,
@@ -71,14 +70,19 @@ function verifyMavenCli(binName) {
   return !result.error && result.status === 0 && /\bApache\s+Maven\b/i.test(text);
 }
 
-function mavenVersionPreview(binName) {
-  if (!binName) return '';
+/** @returns {{ line: string, home: string }} */
+function mavenSetupDisplay(binName) {
+  if (!binName) return { line: '', home: '' };
   const result = spawnMavenVersionProbe(binName);
   const text = `${result.stdout ?? ''}${result.stderr ?? ''}`;
-  if (result.error || result.status !== 0 || !/\bApache\s+Maven\b/i.test(text)) return '';
+  if (result.error || result.status !== 0 || !/\bApache\s+Maven\b/i.test(text)) return { line: '', home: '' };
   const lines = text.split(/\r?\n/).filter(Boolean);
   const hit = lines.find((l) => /\bApache\s+Maven\b/i.test(l));
-  return String(hit ?? lines[0] ?? '').trim();
+  let line = String(hit ?? lines[0] ?? '').trim();
+  line = line.replace(/\s*\([0-9a-f]{7,40}\)/i, '');
+  const hm = text.match(/Maven home:\s*(\S[^\r\n]*)/i);
+  const home = hm ? hm[1].trim() : '';
+  return { line, home };
 }
 
 function getActionRequirements(action) {
@@ -116,10 +120,6 @@ function checkTomcatRequirement(platform = process.platform) {
     const ws = describeWindowsTomcatService();
     if (ws) detailLines.push(`Windows service "${ws.name}": ${ws.state}`);
   }
-  const http8080 = curlHttpProbe('http://127.0.0.1:8080/');
-  if (http8080 === 'up') detailLines.push('HTTP 127.0.0.1:8080 responds');
-  else if (http8080 === 'down') detailLines.push('HTTP 127.0.0.1:8080 not responding (Tomcat likely stopped or another app uses the port)');
-
   const ver = runTomcatCatalinaVersion(home, platform);
   if (!ver.ok) {
     return {
@@ -176,12 +176,6 @@ function checkWildflyRequirement(platform = process.platform) {
     const ws = describeWindowsWildflyService();
     if (ws) detailLines.push(`Windows service "${ws.name}": ${ws.state}`);
   }
-  const adm = curlHttpProbe('http://127.0.0.1:9990/');
-  if (adm === 'up') detailLines.push('HTTP 127.0.0.1:9990 responds (management interface)');
-  else if (adm === 'down') {
-    detailLines.push('HTTP 127.0.0.1:9990 not responding (WildFly likely stopped or management not bound to loopback)');
-  }
-
   const cli = runWildflyCliVersion(wildflyHome, platform);
   if (!cli.ok) {
     return {
@@ -232,8 +226,12 @@ export function checkRequirement(req) {
     let displayLine = '';
     if (!ok && fallbackBin) ok = verifyMavenCli(fallbackBin);
     if (ok) {
-      const line = mavenVersionPreview(mavenBin) || mavenVersionPreview(fallbackBin || mavenBin);
-      displayLine = line || 'Maven available';
+      let parts = mavenSetupDisplay(mavenBin);
+      if (!parts.line && fallbackBin) parts = mavenSetupDisplay(fallbackBin);
+      displayLine =
+        parts.line
+          ? (parts.home ? `${parts.line} · ${parts.home}` : parts.line)
+          : 'Maven available';
     }
     return {
       key: 'maven',
@@ -469,8 +467,15 @@ function sanitizeInstallOutputLog(text) {
 export async function runCommand(command, { timeoutMs = 10 * 60 * 1000 } = {}) {
   const shell = process.platform === 'win32' ? 'cmd.exe' : 'sh';
   const shellArgs = process.platform === 'win32' ? ['/c', command] : ['-lc', command];
+  const useInheritStdio =
+    process.platform !== 'win32'
+    && /(^|[\s;|&])sudo(\s|$)/.test(command)
+    && process.stdin.isTTY
+    && process.stdout.isTTY
+    && process.stderr.isTTY;
+  const stdio = useInheritStdio ? 'inherit' : (/** @type {const} */ (['ignore', 'pipe', 'pipe']));
   try {
-    const child = spawn(shell, shellArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(shell, shellArgs, { stdio });
     let stdout = '';
     let stderr = '';
     let timedOut = false;

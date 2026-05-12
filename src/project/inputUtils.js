@@ -203,7 +203,7 @@ export function installHint(tool) {
   if (tool === 'wildfly') {
     if (platform === 'darwin') return 'brew install wildfly-as, or: jwebgen --install wildfly';
     if (platform === 'win32') return 'jwebgen --install wildfly';
-    return 'jwebgen --install wildfly (or your distro WildFly package)';
+    return 'apt or dnf install wildfly where packaged; otherwise install from wildfly.org and set WILDFLY_HOME — Windows: jwebgen --install wildfly';
   }
   return 'Install it from the official source.';
 }

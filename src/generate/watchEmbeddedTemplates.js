@@ -260,6 +260,14 @@ async function startSelectedServer() {
     }
     if (!started) {
       emit('server_start_failed', { target: serverTarget, reason: 'no_supported_start_method' });
+      if (process.platform === 'linux') {
+        console.error(
+          '[jwebgen dev] Could not start ' +
+            serverTarget +
+            ' (needs systemctl permissions, or set WILDFLY_HOME / TOMCAT_HOME / CATALINA_HOME). Try: jwebgen server start ' +
+            serverTarget
+        );
+      }
       return;
     }
     if (markStartedByUs) serverStartedByDev = true;
@@ -882,8 +890,9 @@ if (process.stdin.isTTY) {
   process.stdin.setRawMode(true);
   process.stdin.resume();
   process.stdin.on('data', (buf) => {
-    const key = String(buf || '').toLowerCase();
-    if (key === 'f') {
+    const b = Buffer.isBuffer(buf) ? buf : Buffer.from(String(buf || ''), 'utf8');
+    const ch = b.length ? String.fromCharCode(b[0]).toLowerCase() : '';
+    if (ch === 'f') {
       if (commandFile) {
         try {
           writeFileSync(commandFile, JSON.stringify({ cmd: 'refresh', ts: Date.now() }), 'utf8');
@@ -892,7 +901,7 @@ if (process.stdin.isTTY) {
       render();
       return;
     }
-    if (key === 's' && commandFile) {
+    if (ch === 's' && commandFile) {
       const cur = loadState();
       if (cur && cur.server === 'down') {
         try {

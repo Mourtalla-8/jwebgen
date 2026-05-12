@@ -21,11 +21,14 @@ test('makeNodeDeployScript resolves WildFly paths from resolved deployments dir'
   assert.match(s, /detectServerInstalled/);
   assert.match(s, /maybeRunServerInstallAssistant/);
   assert.match(s, /__JWEBGEN_EVENT__ server_down/);
+  assert.match(s, /Run: jwebgen server start /);
 });
 
-test('makeNodeDevScript spawns dashboard with inherited TTY streams', () => {
+test('makeNodeDevScript spawns worker without stdin and dashboard with inherited stdio', () => {
   const s = makeNodeDevScript();
-  assert.match(s, /\['ignore', 'inherit', 'inherit'\]/);
+  assert.match(s, /stdio: \['ignore', 'inherit', 'inherit'\]/);
+  assert.match(s, /stdio: 'inherit'/);
+  assert.match(s, /projectEnvFromCfg/);
   assert.match(s, /readMavenAppName/);
   assert.match(s, /JWEBGEN_APP_NAME: appName/);
   assert.match(s, /\.jwebgen-dev-command\.json/);
