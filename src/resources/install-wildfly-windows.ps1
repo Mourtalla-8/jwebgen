@@ -18,8 +18,6 @@ $zipName = "$base.zip"
 $zipUrlOfficial = "https://download.jboss.org/wildfly/$version/$zipName"
 $zipUrlGitHub = "https://github.com/wildfly/wildfly/releases/download/$version/$zipName"
 
-$checksumUrlOfficial = "$zipUrlOfficial.sha1"
-$checksumUrlGitHub = "$zipUrlGitHub.sha1"
 $checksum256UrlOfficial = "$zipUrlOfficial.sha256"
 $checksum256UrlGitHub = "$zipUrlGitHub.sha256"
 
@@ -36,7 +34,6 @@ $binDir = Join-Path $wildflyDir 'bin'
 # C:\Users\<User>\Downloads
 $downloadsDir = Join-Path $env:USERPROFILE 'Downloads'
 $zipPath = Join-Path $downloadsDir $zipName
-$checksumPath = Join-Path $downloadsDir "$zipName.sha1"
 $checksum256Path = Join-Path $downloadsDir "$zipName.sha256"
 
 # ================================
@@ -87,37 +84,6 @@ function Download-File {
     }
 }
 
-function Get-Sha1FromFile {
-    param(
-        [Parameter(Mandatory)][string]$Path
-    )
-
-    if (-not (Test-Path -LiteralPath $Path)) {
-        throw "Checksum file not found"
-    }
-
-    $text = Get-Content -LiteralPath $Path -Raw
-    if ($null -eq $text) {
-        throw "Checksum file is empty"
-    }
-
-    $text = [string]$text
-
-    # Remove BOM if present
-    if ($text.Length -gt 0 -and $text[0] -eq [char]0xFEFF) {
-        $text = $text.Substring(1)
-    }
-
-    $text = $text.Trim()
-
-    $match = [regex]::Match($text, '[0-9a-fA-F]{40}')
-    if (-not $match.Success) {
-        throw "Checksum parse error"
-    }
-
-    return $match.Value.ToLowerInvariant()
-}
-
 function Get-Sha256FromFile {
     param([Parameter(Mandatory)][string]$Path)
 
@@ -161,7 +127,7 @@ function Test-WildFlyZipLayout {
 function Get-FileDigest {
     param(
         [Parameter(Mandatory)][string]$Path,
-        [Parameter(Mandatory)][ValidateSet('SHA1', 'SHA256', 'SHA384', 'SHA512')][string]$Algorithm
+        [Parameter(Mandatory)][ValidateSet('SHA256', 'SHA384', 'SHA512')][string]$Algorithm
     )
 
     if (-not (Test-Path -LiteralPath $Path)) {
@@ -278,49 +244,23 @@ try {
     }
 
     $verified = $false
-    $expectedSha1 = $null
     $expectedSha256 = $null
 
     try {
-        Download-File -Url $checksumUrlOfficial -OutFile $checksumPath
-        $expectedSha1 = Get-Sha1FromFile -Path $checksumPath
+        Download-File -Url $checksum256UrlOfficial -OutFile $checksum256Path
+        $expectedSha256 = Get-Sha256FromFile -Path $checksum256Path
     }
     catch {
         try {
-            Download-File -Url $checksumUrlGitHub -OutFile $checksumPath
-            $expectedSha1 = Get-Sha1FromFile -Path $checksumPath
-        }
-        catch {
-            $expectedSha1 = $null
-        }
-    }
-
-    if ($null -ne $expectedSha1) {
-        $actualSha1 = Get-FileDigest -Path $zipPath -Algorithm SHA1
-        if ($expectedSha1 -ne $actualSha1) {
-            throw "SHA1 checksum mismatch for WildFly zip"
-        }
-        $verified = $true
-        Write-Host 'WildFly zip verified (SHA1 from distribution checksum file)'
-    }
-
-    if (-not $verified) {
-        try {
-            Download-File -Url $checksum256UrlOfficial -OutFile $checksum256Path
+            Download-File -Url $checksum256UrlGitHub -OutFile $checksum256Path
             $expectedSha256 = Get-Sha256FromFile -Path $checksum256Path
         }
         catch {
-            try {
-                Download-File -Url $checksum256UrlGitHub -OutFile $checksum256Path
-                $expectedSha256 = Get-Sha256FromFile -Path $checksum256Path
-            }
-            catch {
-                $expectedSha256 = $null
-            }
+            $expectedSha256 = $null
         }
     }
 
-    if (-not $verified -and $null -ne $expectedSha256) {
+    if ($null -ne $expectedSha256) {
         $actualSha256 = Get-FileDigest -Path $zipPath -Algorithm SHA256
         if ($expectedSha256 -ne $actualSha256) {
             throw "SHA256 checksum mismatch for WildFly zip"
@@ -381,6 +321,5 @@ try {
 finally {
     # Cleanup downloaded files
     Remove-Item -LiteralPath $zipPath -Force -ErrorAction SilentlyContinue
-    Remove-Item -LiteralPath $checksumPath -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $checksum256Path -Force -ErrorAction SilentlyContinue
 }

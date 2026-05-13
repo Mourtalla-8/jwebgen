@@ -252,10 +252,8 @@ async function startSelectedServer() {
         serverTarget +
         ' (needs systemctl permissions, or set WILDFLY_HOME / TOMCAT_HOME / CATALINA_HOME). Try: jwebgen server start ' +
         serverTarget;
-      if (process.platform === 'linux') {
-        console.error(hint);
-      } else if (process.platform === 'win32') {
-        console.error(hint);
+      console.error(hint);
+      if (process.platform === 'win32') {
         console.error(
           '[jwebgen dev] On Windows, ensure JAVA_HOME points to a JDK and run standalone.bat or startup.bat from the server bin folder once to verify.'
         );

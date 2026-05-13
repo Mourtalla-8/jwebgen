@@ -3,7 +3,10 @@
  * Preview lines are short and user-facing; shell commands may be longer and are never logged in setup UX.
  */
 
-import { WINDOWS_WILDFLY_PORTABLE_VERSION } from '../project/windowsSetupInstall.js';
+import {
+  WINDOWS_WILDFLY_PORTABLE_VERSION,
+  WINDOWS_WILDFLY_PORTABLE_ZIP_SHA256
+} from '../project/windowsSetupInstall.js';
 import { sortLinuxInstallMethods } from './linuxOs.js';
 
 export const PREVIEW_MAX_LEN = 120;
@@ -46,6 +49,7 @@ function shellInstallAllowed(shellCommand, platform, hasCommandImpl) {
     if (!curlOk) return false;
   }
   if (/\bunzip\b/.test(lower) && !hasCommandImpl('unzip')) return false;
+  if (/\bsha256sum\b/.test(lower) && !hasCommandImpl('sha256sum')) return false;
   if (lower.includes('|') && lower.includes('bash')) {
     if (!bashOk) return false;
   }
@@ -64,6 +68,34 @@ function previewForShell(cmd) {
   if (!s) return null;
   if (s.length <= PREVIEW_MAX_LEN) return s;
   return null;
+}
+
+/**
+ * One-line-friendly shell: download WildFly zip, verify SHA-256 (mirror .sha256 or embedded), unzip, print WILDFLY_HOME hint.
+ * @param {string} version
+ * @param {string} zipName
+ * @param {string} embeddedSha256
+ */
+function wildflyLinuxOfficialZipCommand(version, zipName, embeddedSha256) {
+  return [
+    'set -euo pipefail',
+    'mkdir -p "$HOME/opt"',
+    `ZIP="$HOME/opt/${zipName}"`,
+    `URL="https://download.jboss.org/wildfly/${version}/${zipName}"`,
+    'curl -fSL -o "$ZIP" "$URL"',
+    'SUM="$ZIP.sha256"',
+    'if curl -fSL -o "$SUM" "$URL.sha256" 2>/dev/null; then',
+    'EXP=$(grep -oE \'[0-9a-fA-F]{64}\' "$SUM" | head -n1 | tr \'[:upper:]\' \'[:lower:]\')',
+    'ACT=$(sha256sum "$ZIP" | awk \'{print tolower($1)}\')',
+    'test -n "$EXP" && test "$EXP" = "$ACT" || { echo "jwebgen: WildFly SHA256 mismatch (.sha256 from mirror)" >&2; rm -f "$ZIP"; exit 1; }',
+    'else',
+    `EXP='${embeddedSha256}'`,
+    'ACT=$(sha256sum "$ZIP" | awk \'{print tolower($1)}\')',
+    'test "$EXP" = "$ACT" || { echo "jwebgen: WildFly SHA256 mismatch (embedded checksum)" >&2; rm -f "$ZIP"; exit 1; }',
+    'fi',
+    'unzip -oq "$ZIP" -d "$HOME/opt"',
+    `echo "export WILDFLY_HOME=\\$HOME/opt/wildfly-${version}"`
+  ].join('; ');
 }
 
 function finalizeLinuxRows(rows) {
@@ -207,13 +239,13 @@ export function getInstallMethodsForKey(key, platform) {
     } else {
       const v = WINDOWS_WILDFLY_PORTABLE_VERSION;
       const zipName = `wildfly-${v}.zip`;
-      const customZip = `mkdir -p "$HOME/opt" && curl -fSL -o "$HOME/opt/${zipName}" "https://download.jboss.org/wildfly/${v}/${zipName}" && unzip -oq "$HOME/opt/${zipName}" -d "$HOME/opt" && echo "export WILDFLY_HOME=$HOME/opt/wildfly-${v}"`;
+      const customZip = wildflyLinuxOfficialZipCommand(v, zipName, WINDOWS_WILDFLY_PORTABLE_ZIP_SHA256);
       return finalizeLinuxRows([
         { id: 'wildfly-linux-apt', label: 'apt (wildfly)', shellCommand: 'sudo apt install -y wildfly' },
         { id: 'wildfly-linux-dnf', label: 'dnf (wildfly)', shellCommand: 'sudo dnf install -y wildfly' },
         {
           id: 'wildfly-linux-official-zip',
-          label: `Official zip to ~/opt (${v}, curl+unzip)`,
+          label: `Official zip to ~/opt (${v}, curl+unzip+SHA256)`,
           shellCommand: customZip
         }
       ]);

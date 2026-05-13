@@ -43,17 +43,18 @@ test('computeSuggestedActions filters Linux install methods to detected package 
   assert.equal(shellCmds.every((c) => /\bpacman\b/i.test(c)), true);
 });
 
-test('computeSuggestedActions offers WildFly official zip when only curl and unzip exist on Linux', () => {
+test('computeSuggestedActions offers WildFly official zip when only curl, unzip, and sha256sum exist on Linux', () => {
   const state = {
     checks: [{ key: 'wildfly', ok: false }],
     optional: [],
     npmPath: { hasBin: true, inPath: true, jwebgenReachable: true, hasShimButNotOnPath: false }
   };
-  const hasCommandImpl = (bin) => bin === 'curl' || bin === 'unzip';
+  const hasCommandImpl = (bin) => bin === 'curl' || bin === 'unzip' || bin === 'sha256sum';
   const actions = computeSuggestedActions(state, 'linux', { hasCommandImpl });
   assert.equal(actions.some((a) => a.type === 'install' && a.key === 'wildfly'), true);
   const wildfly = actions.find((a) => a.type === 'install' && a.key === 'wildfly');
   assert.ok(wildfly?.installMethods?.some((m) => m.shellCommand && m.shellCommand.includes('download.jboss.org')));
+  assert.ok(wildfly?.installMethods?.some((m) => m.shellCommand && m.shellCommand.includes('sha256sum')));
 });
 
 test('computeSuggestedActions returns no install actions when no package manager is detected', () => {

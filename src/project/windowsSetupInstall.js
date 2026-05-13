@@ -1,10 +1,13 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-/** Pinned releases used by embedded PowerShell installers (keep in sync with src/resources/install-*-windows.ps1). When bumping WildFly, also update `$embeddedZipSha256` in install-wildfly-windows.ps1. When bumping Tomcat, also update `$embeddedZipSha512` in install-tomcat-windows.ps1. */
+/** Pinned releases used by embedded PowerShell installers (keep in sync with src/resources/install-*-windows.ps1). When bumping WildFly, also update `$embeddedZipSha256` in install-wildfly-windows.ps1 and `WINDOWS_WILDFLY_PORTABLE_ZIP_SHA256` (Linux curl path in installMatrix). When bumping Tomcat, also update `$embeddedZipSha512` in install-tomcat-windows.ps1. */
 export const WINDOWS_MAVEN_PORTABLE_VERSION = '3.9.15';
 export const WINDOWS_TOMCAT_PORTABLE_VERSION = '10.1.55';
 export const WINDOWS_WILDFLY_PORTABLE_VERSION = '39.0.1.Final';
+
+/** SHA-256 of `wildfly-${WINDOWS_WILDFLY_PORTABLE_VERSION}.zip` (same as `$embeddedZipSha256` in install-wildfly-windows.ps1). */
+export const WINDOWS_WILDFLY_PORTABLE_ZIP_SHA256 = '2f2f24e786a4a3d0e3fb348aa45f70d7278be00844bc8593a2a50d4d8714f97a';
 
 const MAVEN_SCRIPT_URL = new URL('../resources/install-maven-windows.ps1', import.meta.url);
 const TOMCAT_SCRIPT_URL = new URL('../resources/install-tomcat-windows.ps1', import.meta.url);

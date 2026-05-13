@@ -1123,10 +1123,11 @@ const shutdown = (exitCode) => {
   try { dash.kill('SIGTERM'); } catch {}
   process.exit(exitCode);
 };
-/** Map child exit to parent code: signal-only exits from SIGINT/SIGTERM are user stop (130), not failure (1). */
+/** Map child signal-only exit: SIGINT -> 130, SIGTERM -> 143, else treat as failure (1). */
 function childExitToParentCode(code, signal) {
   if (code != null) return code;
-  if (signal === 'SIGINT' || signal === 'SIGTERM') return 130;
+  if (signal === 'SIGINT') return 130;
+  if (signal === 'SIGTERM') return 143;
   return 1;
 }
 process.on('SIGINT', () => shutdown(130));
