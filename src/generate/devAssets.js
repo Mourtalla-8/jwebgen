@@ -174,6 +174,11 @@ TARGET_FILE="$PACKAGE_DIR/$CLASS_NAME.java"
 
 mkdir -p "$PACKAGE_DIR"
 
+if [[ -e "$TARGET_FILE" ]]; then
+  echo "Servlet already exists: $TARGET_FILE" >&2
+  exit 1
+fi
+
 cat > "$TARGET_FILE" <<EOF
 package ${defaultWebPackage};
 
@@ -192,7 +197,7 @@ public class $CLASS_NAME extends HttpServlet {
     resp.setContentType("text/html; charset=UTF-8");
     try (PrintWriter out = resp.getWriter()) {
       out.println("<!DOCTYPE html>");
-      out.println("<html lang=fr>");
+      out.println("<html lang=en>");
       out.println("<head><meta charset=UTF-8><title>$CLASS_NAME</title></head>");
       out.println("<body>");
       out.println("<h1>$CLASS_NAME</h1>");
@@ -251,7 +256,7 @@ fi
 cat > "$TARGET_FILE" <<EOF
 <%@ page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" %>
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <title>$BASE_NAME</title>
@@ -277,7 +282,7 @@ export function makeAddServletNodeScript({ basePackage, appName }) {
   return `#!/usr/bin/env node
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile, access } from 'node:fs/promises';
 
 const CLASS_NAME = String(process.argv[2] || 'HelloServlet').trim();
 if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(CLASS_NAME)) {
@@ -318,7 +323,7 @@ const javaSource = [
   '    resp.setContentType("text/html; charset=UTF-8");',
   '    try (PrintWriter out = resp.getWriter()) {',
   '      out.println("<!DOCTYPE html>");',
-  '      out.println("<html lang=fr>");',
+  '      out.println("<html lang=en>");',
   '      out.println(String.format("<head><meta charset=UTF-8><title>%s</title></head>", "' + CLASS_NAME + '"));',
   '      out.println("<body>");',
   '      out.println("<h1>' + CLASS_NAME + '</h1>");',
@@ -333,6 +338,13 @@ const javaSource = [
 ].join('\\n');
 
 await mkdir(PACKAGE_DIR, { recursive: true });
+try {
+  await access(TARGET_FILE);
+  console.error('Servlet already exists: ' + TARGET_FILE);
+  process.exit(1);
+} catch {
+  // target does not exist, continue
+}
 await writeFile(TARGET_FILE, javaSource, 'utf8');
 console.log('Servlet created: ' + TARGET_FILE);
 console.log('Next steps:');
@@ -383,7 +395,7 @@ try {
 const content = [
   '<%@ page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" %>',
   '<!DOCTYPE html>',
-  '<html lang="fr">',
+  '<html lang="en">',
   '<head>',
   '  <meta charset="UTF-8">',
   '  <title>' + BASE_NAME + '</title>',

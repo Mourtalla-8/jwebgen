@@ -90,7 +90,7 @@ public class HelloServlet extends HttpServlet {
         resp.setContentType("text/html; charset=UTF-8");
         try (var out = resp.getWriter()) {
             out.println("<!DOCTYPE html>");
-            out.println("<html lang=\\\"fr\\\">");
+            out.println("<html lang=\\\"en\\\">");
             out.println("<head>");
             out.println("  <meta charset=\\\"UTF-8\\\">");
             out.println("  <title>Hello Servlet</title>");
@@ -112,7 +112,7 @@ export function indexJsp({ projectName, artifactId, hasServlet }) {
 
   return `<%@ page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" %>
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <title>${htmlEscape(artifactId)}</title>

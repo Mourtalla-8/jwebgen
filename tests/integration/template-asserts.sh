@@ -164,7 +164,8 @@ assertContains(addServlet, 'jwebgen --dev', 'add-servlet next steps dev command'
 assertContains(addServlet, 'jakarta.servlet.ServletException', 'add-servlet includes ServletException import');
 assertContains(addServlet, 'throws ServletException, IOException', 'add-servlet doGet throws ServletException and IOException');
 assertContains(addServlet, 'urlPatterns = {"', 'add-servlet WebServlet urlPatterns is String[]');
-assertContains(addServlet, '<html lang=fr>', 'add-servlet bash Java uses unquoted HTML5 attributes');
+assertContains(addServlet, 'Servlet already exists:', 'add-servlet bash fails when file exists');
+assertContains(addServlet, '<html lang=en>', 'add-servlet bash html lang matches English content');
 if (String(addServlet).includes('out.println("<script>")')) {
   throw new Error('unexpected inline script in add-servlet output');
 }
@@ -179,6 +180,7 @@ const addServletNode = makeAddServletNodeScript({ basePackage: 'com.ex', appName
 assertContains(addServletNode, '#!/usr/bin/env node', 'add-servlet.mjs shebang');
 assertContains(addServletNode, 'Servlet created:', 'add-servlet.mjs output message');
 assertContains(addServletNode, 'Invalid class name', 'add-servlet.mjs validation');
+assertContains(addServletNode, 'Servlet already exists:', 'add-servlet.mjs fails when file exists');
 assertContains(addServletNode, 'urlPatterns = {"', 'add-servlet.mjs WebServlet urlPatterns is String[]');
 assertContains(addServletNode, 'String.format("<head><meta charset=UTF-8><title>%s</title></head>"', 'add-servlet.mjs title line uses String.format for valid Java');
 
