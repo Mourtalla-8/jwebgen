@@ -1,9 +1,9 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-/** Pinned releases used by embedded PowerShell installers (keep in sync with src/resources/install-*-windows.ps1). */
+/** Pinned releases used by embedded PowerShell installers (keep in sync with src/resources/install-*-windows.ps1). When bumping WildFly, also update `$embeddedZipSha256` in install-wildfly-windows.ps1. When bumping Tomcat, also update `$embeddedZipSha512` in install-tomcat-windows.ps1. */
 export const WINDOWS_MAVEN_PORTABLE_VERSION = '3.9.15';
-export const WINDOWS_TOMCAT_PORTABLE_VERSION = '10.1.54';
+export const WINDOWS_TOMCAT_PORTABLE_VERSION = '10.1.55';
 export const WINDOWS_WILDFLY_PORTABLE_VERSION = '39.0.1.Final';
 
 const MAVEN_SCRIPT_URL = new URL('../resources/install-maven-windows.ps1', import.meta.url);
@@ -126,6 +126,6 @@ export async function runWindowsTomcatPortableInstall({ timeoutMs = 10 * 60 * 10
  * @param {{ timeoutMs?: number }} [opts]
  * @returns {Promise<{ status: number, timedOut: boolean, error: Error | null, signal: string | null, stdout: string, stderr: string }>}
  */
-export async function runWindowsWildflyPortableInstall({ timeoutMs = 10 * 60 * 1000 } = {}) {
+export async function runWindowsWildflyPortableInstall({ timeoutMs = 32 * 60 * 1000 } = {}) {
   return runPowerShellScript(getWindowsWildflyPortableScriptPath(), { timeoutMs });
 }

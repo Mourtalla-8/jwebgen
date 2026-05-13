@@ -141,7 +141,11 @@ function Set-UserEnvironment {
 
     $canonicalBinPath = Resolve-NormalizedPath $binDir
     $canonicalBinPathLower = if ($canonicalBinPath) { $canonicalBinPath.ToLowerInvariant() } else { '' }
-    $normalizedInstallRoot = (Resolve-NormalizedPath $installRoot).ToLowerInvariant()
+    $normalizedInstallRootRaw = Resolve-NormalizedPath $installRoot
+    if (-not $normalizedInstallRootRaw) {
+        throw "Cannot resolve install root path (check SystemDrive and jwebgen install folder)."
+    }
+    $normalizedInstallRoot = $normalizedInstallRootRaw.ToLowerInvariant()
 
     $currentUserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
     $entryObjects = @()

@@ -20,6 +20,11 @@ $zipUrlGitHub = "https://github.com/wildfly/wildfly/releases/download/$version/$
 
 $checksumUrlOfficial = "$zipUrlOfficial.sha1"
 $checksumUrlGitHub = "$zipUrlGitHub.sha1"
+$checksum256UrlOfficial = "$zipUrlOfficial.sha256"
+$checksum256UrlGitHub = "$zipUrlGitHub.sha256"
+
+# Keep in sync with published wildfly-39.0.1.Final.zip (GitHub release asset). Update when bumping $version.
+$embeddedZipSha256 = '2f2f24e786a4a3d0e3fb348aa45f70d7278be00844bc8593a2a50d4d8714f97a'
 
 # Installation directory:
 # C:\jwebgen\wildfly-39.0.1.Final
@@ -32,6 +37,7 @@ $binDir = Join-Path $wildflyDir 'bin'
 $downloadsDir = Join-Path $env:USERPROFILE 'Downloads'
 $zipPath = Join-Path $downloadsDir $zipName
 $checksumPath = Join-Path $downloadsDir "$zipName.sha1"
+$checksum256Path = Join-Path $downloadsDir "$zipName.sha256"
 
 # ================================
 # HELPERS
@@ -112,6 +118,46 @@ function Get-Sha1FromFile {
     return $match.Value.ToLowerInvariant()
 }
 
+function Get-Sha256FromFile {
+    param([Parameter(Mandatory)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        throw "SHA256 checksum file not found"
+    }
+
+    $text = [string](Get-Content -LiteralPath $Path -Raw)
+    if ($text.Length -gt 0 -and $text[0] -eq [char]0xFEFF) {
+        $text = $text.Substring(1)
+    }
+    $text = $text.Trim()
+    $m = [regex]::Match($text, '[0-9a-fA-F]{64}')
+    if (-not $m.Success) {
+        throw "SHA256 checksum parse error"
+    }
+    return $m.Value.ToLowerInvariant()
+}
+
+function Test-WildFlyZipLayout {
+    param(
+        [Parameter(Mandatory)][string]$ZipPath,
+        [Parameter(Mandatory)][string]$ExpectedRootName
+    )
+
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = [IO.Compression.ZipFile]::OpenRead($ZipPath)
+    try {
+        foreach ($e in $zip.Entries) {
+            if ($e.FullName.Replace('\', '/') -eq ($ExpectedRootName + '/jboss-modules.jar')) {
+                return $true
+            }
+        }
+        return $false
+    }
+    finally {
+        $zip.Dispose()
+    }
+}
+
 function Get-FileDigest {
     param(
         [Parameter(Mandatory)][string]$Path,
@@ -176,6 +222,7 @@ function Set-UserEnvironment {
     $currentUserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
     $entries = @()
 
+    # Drop old jwebgen WildFly bin entries from USER Path; append uses same $normalizedBin as the membership test.
     if (-not [string]::IsNullOrWhiteSpace($currentUserPath)) {
         $entries = $currentUserPath -split ';' |
             Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
@@ -191,7 +238,7 @@ function Set-UserEnvironment {
     }
 
     if ($entries -notcontains $normalizedBin) {
-        $entries += $BinDir
+        $entries += $normalizedBin
     }
 
     $newPath = ($entries -join ';').Trim(';')
@@ -214,27 +261,89 @@ try {
     }
 
     # Download ZIP: official first, then GitHub
+    $zipSource = 'unknown'
     try {
         Download-File -Url $zipUrlOfficial -OutFile $zipPath
+        $zipSource = 'download.jboss.org'
     }
     catch {
         Download-File -Url $zipUrlGitHub -OutFile $zipPath
+        $zipSource = 'github.com'
+    }
+    Write-Host "WildFly zip downloaded from $zipSource"
+
+    $len = (Get-Item -LiteralPath $zipPath).Length
+    if ($len -lt 40MB) {
+        throw "Downloaded zip is unexpectedly small ($len bytes); refusing to extract"
     }
 
-    # Download checksum: same order
+    $verified = $false
+    $expectedSha1 = $null
+    $expectedSha256 = $null
+
     try {
         Download-File -Url $checksumUrlOfficial -OutFile $checksumPath
+        $expectedSha1 = Get-Sha1FromFile -Path $checksumPath
     }
     catch {
-        Download-File -Url $checksumUrlGitHub -OutFile $checksumPath
+        try {
+            Download-File -Url $checksumUrlGitHub -OutFile $checksumPath
+            $expectedSha1 = Get-Sha1FromFile -Path $checksumPath
+        }
+        catch {
+            $expectedSha1 = $null
+        }
     }
 
-    # Verify checksum
-    $expected = Get-Sha1FromFile -Path $checksumPath
-    $actual = Get-FileDigest -Path $zipPath -Algorithm SHA1
+    if ($null -ne $expectedSha1) {
+        $actualSha1 = Get-FileDigest -Path $zipPath -Algorithm SHA1
+        if ($expectedSha1 -ne $actualSha1) {
+            throw "SHA1 checksum mismatch for WildFly zip"
+        }
+        $verified = $true
+        Write-Host 'WildFly zip verified (SHA1 from distribution checksum file)'
+    }
 
-    if ($expected -ne $actual) {
-        throw "Checksum failed"
+    if (-not $verified) {
+        try {
+            Download-File -Url $checksum256UrlOfficial -OutFile $checksum256Path
+            $expectedSha256 = Get-Sha256FromFile -Path $checksum256Path
+        }
+        catch {
+            try {
+                Download-File -Url $checksum256UrlGitHub -OutFile $checksum256Path
+                $expectedSha256 = Get-Sha256FromFile -Path $checksum256Path
+            }
+            catch {
+                $expectedSha256 = $null
+            }
+        }
+    }
+
+    if (-not $verified -and $null -ne $expectedSha256) {
+        $actualSha256 = Get-FileDigest -Path $zipPath -Algorithm SHA256
+        if ($expectedSha256 -ne $actualSha256) {
+            throw "SHA256 checksum mismatch for WildFly zip"
+        }
+        $verified = $true
+        Write-Host 'WildFly zip verified (SHA256 from distribution checksum file)'
+    }
+
+    if (-not $verified -and -not [string]::IsNullOrWhiteSpace($embeddedZipSha256)) {
+        $actualSha256 = Get-FileDigest -Path $zipPath -Algorithm SHA256
+        $want = $embeddedZipSha256.Trim().ToLowerInvariant()
+        if ($want -ne $actualSha256) {
+            throw "SHA256 checksum mismatch for WildFly zip (embedded expected hash for this jwebgen release)"
+        }
+        $verified = $true
+        Write-Host 'WildFly zip verified (embedded SHA256 for this installer version)'
+    }
+
+    if (-not $verified) {
+        if (-not (Test-WildFlyZipLayout -ZipPath $zipPath -ExpectedRootName $base)) {
+            throw "Could not verify WildFly zip (no checksum files; zip does not contain ${base}/jboss-modules.jar)"
+        }
+        Write-Host 'WildFly zip layout OK (checksum files unavailable; verified jboss-modules.jar entry only)'
     }
 
     # Remove previous installation
@@ -273,4 +382,5 @@ finally {
     # Cleanup downloaded files
     Remove-Item -LiteralPath $zipPath -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $checksumPath -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $checksum256Path -Force -ErrorAction SilentlyContinue
 }
