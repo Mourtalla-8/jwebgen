@@ -89,16 +89,13 @@ async function runWildflyWindows(action, env = process.env) {
     if (res.error) return false;
     return res.status === 0;
   }
-  return spawnDetachedAndConfirm(
-    'cmd.exe',
-    ['/d', '/c', 'start', '/B', '""', 'cmd.exe', '/d', '/c', 'call', 'bin\\standalone.bat'],
-    {
-      cwd: wildflyHome,
-      detached: true,
-      stdio: 'ignore',
-      windowsHide: true
-    }
-  );
+  // Prefer hidden detached cmd (same strategy as dev worker): avoid `start`, which opens a blank console on many setups.
+  return spawnDetachedAndConfirm('cmd.exe', ['/d', '/c', 'call', 'bin\\standalone.bat'], {
+    cwd: wildflyHome,
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: true
+  });
 }
 
 async function runTomcatUnix(action, env = process.env, platform = process.platform) {

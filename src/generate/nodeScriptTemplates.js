@@ -279,7 +279,7 @@ function detectPackageManagers() {
   };
   if (process.platform === 'win32') return { winget: has('winget') };
   if (process.platform === 'darwin') return { brew: has('brew') };
-  return { apt: has('apt-get') || has('apt'), dnf: has('dnf'), pacman: has('pacman') };
+  return { apt: has('apt-get') || has('apt'), dnf: has('dnf'), pacman: has('pacman'), zypper: has('zypper'), apk: has('apk') };
 }
 
 function serverInstallCommands(target) {
@@ -291,6 +291,8 @@ function serverInstallCommands(target) {
     if (pm.apt) commands.push('sudo apt install -y tomcat10');
     if (pm.dnf) commands.push('sudo dnf install -y tomcat');
     if (pm.pacman) commands.push('sudo pacman -S --noconfirm tomcat10');
+    if (pm.zypper) commands.push('sudo zypper install -y tomcat');
+    if (pm.apk) commands.push('sudo apk add tomcat10');
     return commands;
   }
   if (process.platform === 'win32') return pm.winget ? ['winget install WildFly.WildFly'] : [];
@@ -298,6 +300,7 @@ function serverInstallCommands(target) {
   const commands = [];
   if (pm.apt) commands.push('sudo apt install -y wildfly');
   if (pm.dnf) commands.push('sudo dnf install -y wildfly');
+  if (pm.zypper) commands.push('sudo zypper install -y wildfly');
   return commands;
 }
 
@@ -905,7 +908,7 @@ function detectPackageManagers() {
   };
   if (process.platform === 'win32') return { winget: has('winget') };
   if (process.platform === 'darwin') return { brew: has('brew') };
-  return { apt: has('apt-get') || has('apt'), dnf: has('dnf'), pacman: has('pacman') };
+  return { apt: has('apt-get') || has('apt'), dnf: has('dnf'), pacman: has('pacman'), zypper: has('zypper'), apk: has('apk') };
 }
 
 function hasCommand(bin) {
@@ -922,6 +925,8 @@ function serverInstallCommands(target) {
     if (pm.apt) commands.push('sudo apt install -y tomcat10');
     if (pm.dnf) commands.push('sudo dnf install -y tomcat');
     if (pm.pacman) commands.push('sudo pacman -S --noconfirm tomcat10');
+    if (pm.zypper) commands.push('sudo zypper install -y tomcat');
+    if (pm.apk) commands.push('sudo apk add tomcat10');
     return commands;
   }
   if (process.platform === 'win32') return pm.winget ? ['winget install WildFly.WildFly'] : [];
@@ -929,6 +934,7 @@ function serverInstallCommands(target) {
   const commands = [];
   if (pm.apt) commands.push('sudo apt install -y wildfly');
   if (pm.dnf) commands.push('sudo dnf install -y wildfly');
+  if (pm.zypper) commands.push('sudo zypper install -y wildfly');
   return commands;
 }
 
@@ -1117,15 +1123,21 @@ const shutdown = (exitCode) => {
   try { dash.kill('SIGTERM'); } catch {}
   process.exit(exitCode);
 };
+/** Map child exit to parent code: signal-only exits from SIGINT/SIGTERM are user stop (130), not failure (1). */
+function childExitToParentCode(code, signal) {
+  if (code != null) return code;
+  if (signal === 'SIGINT' || signal === 'SIGTERM') return 130;
+  return 1;
+}
 process.on('SIGINT', () => shutdown(130));
 process.on('SIGTERM', () => shutdown(143));
-worker.on('exit', (code) => {
+worker.on('exit', (code, signal) => {
   if (shutdownOnce) return;
-  shutdown(code == null ? 1 : code);
+  shutdown(childExitToParentCode(code, signal));
 });
 dash.on('exit', (code, signal) => {
   if (shutdownOnce) return;
-  shutdown(code == null ? (signal ? 1 : 0) : code);
+  shutdown(childExitToParentCode(code, signal));
 });
 `;
 }

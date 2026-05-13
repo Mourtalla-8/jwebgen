@@ -238,19 +238,6 @@ async function startSelectedServer() {
       if (home) {
         if (process.platform === 'win32') {
           started = spawnWinServerBatch(home, 'bin\\\\standalone.bat');
-          if (!started) {
-            try {
-              const p = spawn('cmd.exe', ['/d', '/c', 'start', '/B', '""', 'cmd.exe', '/d', '/c', 'call', 'bin\\\\standalone.bat'], {
-                cwd: home,
-                detached: true,
-                stdio: 'ignore',
-                windowsHide: true
-              });
-              p.on('error', () => {});
-              p.unref();
-              started = true;
-            } catch {}
-          }
           if (started) markStartedByUs = true;
         } else {
           started = runDetached(path.join(home, 'bin', 'standalone.sh'), []);
@@ -260,12 +247,17 @@ async function startSelectedServer() {
     }
     if (!started) {
       emit('server_start_failed', { target: serverTarget, reason: 'no_supported_start_method' });
+      const hint =
+        '[jwebgen dev] Could not start ' +
+        serverTarget +
+        ' (needs systemctl permissions, or set WILDFLY_HOME / TOMCAT_HOME / CATALINA_HOME). Try: jwebgen server start ' +
+        serverTarget;
       if (process.platform === 'linux') {
+        console.error(hint);
+      } else if (process.platform === 'win32') {
+        console.error(hint);
         console.error(
-          '[jwebgen dev] Could not start ' +
-            serverTarget +
-            ' (needs systemctl permissions, or set WILDFLY_HOME / TOMCAT_HOME / CATALINA_HOME). Try: jwebgen server start ' +
-            serverTarget
+          '[jwebgen dev] On Windows, ensure JAVA_HOME points to a JDK and run standalone.bat or startup.bat from the server bin folder once to verify.'
         );
       }
       return;
@@ -845,9 +837,26 @@ function serverDownHint() {
     ? 'Server down: start WildFly (prefer standalone.sh; if configured as a service: sudo systemctl start wildfly) — then [f] refresh.'
     : 'Server down: start Tomcat (e.g. sudo systemctl start tomcat10) — then [f] refresh.';
 }
-function render() {
+let lastStateSig = null;
+let uiEnteredAlt = false;
+function stateSignature(s) {
+  return JSON.stringify({
+    phase: s.phase,
+    build: s.build,
+    deploy: s.deploy,
+    server: s.server,
+    app: s.app,
+    proxyUrl: s.proxyUrl,
+    url: s.url,
+    appUrl: s.appUrl
+  });
+}
+function render(opts) {
   if (pauseFile && existsSync(pauseFile)) return;
   const s = loadState(); if (!s) return;
+  const sig = stateSignature(s);
+  if (!opts?.force && lastStateSig !== null && sig === lastStateSig) return;
+  lastStateSig = sig;
   const LW = 22;
   const SW = 10;
   const stripAnsi = (text) => String(text || '').replace(/\x1b\[[0-9;]*m/g, '');
@@ -884,11 +893,26 @@ function render() {
     + '  ' + kv('browse (no reload)', directUrl) + '\\n'
     + '  ' + kv('cmd', controls)
     + serverHint;
-  process.stderr.write('\\x1b[?1l\\x1b[?1049h\\x1b[?25l\\x1b[H\\x1b[2J' + out + '\\n');
+  let prefix;
+  if (process.platform === 'win32') {
+    prefix = '\\x1b[H\\x1b[2J';
+  } else {
+    if (!uiEnteredAlt) {
+      uiEnteredAlt = true;
+      prefix = '\\x1b[?1l\\x1b[?1049h\\x1b[?25l\\x1b[H\\x1b[2J';
+    } else {
+      prefix = '\\x1b[?25l\\x1b[H\\x1b[2J';
+    }
+  }
+  process.stderr.write(prefix + out + '\\n');
 }
 function restoreTerminal() {
   try { if (process.stdin.isTTY) process.stdin.setRawMode(false); } catch {}
-  process.stderr.write('\\x1b[?1l\\x1b[?25h\\x1b[?1049l');
+  if (process.platform === 'win32') {
+    process.stderr.write('\\x1b[?25h');
+  } else {
+    process.stderr.write('\\x1b[?1l\\x1b[?25h\\x1b[?1049l');
+  }
 }
 function requestParentExit() {
   restoreTerminal();
@@ -919,7 +943,7 @@ if (process.stdin.isTTY) {
           writeFileSync(commandFile, JSON.stringify({ cmd: 'refresh', ts: Date.now() }), 'utf8');
         } catch {}
       }
-      render();
+      render({ force: true });
       return;
     }
     if (ch === 's' && commandFile) {
@@ -929,11 +953,14 @@ if (process.stdin.isTTY) {
           writeFileSync(commandFile, JSON.stringify({ cmd: 'start_server', ts: Date.now() }), 'utf8');
         } catch {}
       }
-      render();
+      render({ force: true });
     }
   });
 }
-process.on('exit', () => { process.stderr.write('\\x1b[?1l\\x1b[?25h\\x1b[?1049l'); });
+process.on('exit', () => {
+  if (process.platform === 'win32') process.stderr.write('\\x1b[?25h');
+  else process.stderr.write('\\x1b[?1l\\x1b[?25h\\x1b[?1049l');
+});
 if (parentPid > 1) {
   setInterval(() => {
     try {
@@ -943,6 +970,7 @@ if (parentPid > 1) {
     }
   }, 1500).unref();
 }
-setInterval(render, 500);
-render();
+const tickMs = process.platform === 'win32' ? 750 : 500;
+setInterval(() => render(), tickMs);
+render({ force: true });
 `;
