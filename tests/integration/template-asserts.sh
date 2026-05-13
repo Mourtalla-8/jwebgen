@@ -121,6 +121,11 @@ assertContains(DEV_WORKER_SCRIPT_TEMPLATE, "payload.cmd === 'refresh'", 'worker 
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'healthCycleRunning', 'worker serializes server health cycles');
 assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, "cmd: 'refresh'", 'dashboard queues worker refresh on key f');
 assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, 'requestParentExit', 'dashboard raw stdin maps Ctrl+C to parent SIGINT');
+assertContains(
+  DEV_DASHBOARD_SCRIPT_TEMPLATE,
+  "process.kill(parentPid, 'SIGINT');\n      process.exit(130);",
+  'dashboard child exits 130 immediately after forwarding SIGINT to parent'
+);
 
 assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, 'function serverDownHint', 'dashboard embeds OS-aware server hints');
 assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, 'JWEBGEN_SERVER_TARGET', 'dashboard distinguishes Tomcat/WildFly from env');

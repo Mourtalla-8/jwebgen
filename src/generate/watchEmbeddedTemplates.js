@@ -893,7 +893,12 @@ function restoreTerminal() {
 function requestParentExit() {
   restoreTerminal();
   if (parentPid > 1) {
-    try { process.kill(parentPid, 'SIGINT'); } catch { process.exit(130); }
+    try {
+      process.kill(parentPid, 'SIGINT');
+      process.exit(130);
+    } catch {
+      process.exit(130);
+    }
   } else {
     process.exit(130);
   }
