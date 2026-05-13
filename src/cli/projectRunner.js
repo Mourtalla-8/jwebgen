@@ -67,6 +67,9 @@ export async function runProjectScript(scriptName, args = [], options = {}, deps
       await execa(scriptPath, args, { cwd: projectRoot, stdio, env });
     }
   } catch (error) {
+    if (error?.exitCode === 130 || error?.signal === 'SIGINT') {
+      throw error;
+    }
     if (error?.code === 'EACCES' || String(error?.message || '').includes('EACCES')) {
       const relative = `./.jwebgen/scripts/${scriptName}`;
       console.error(pc.red(`${scriptName} failed: permission denied (${relative}).`));

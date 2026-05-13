@@ -158,6 +158,7 @@ set -euo pipefail
 
 CLASS_NAME="\${1:-HelloServlet}"
 BASE_NAME="$(printf '%s' "$CLASS_NAME" | sed -E 's/Servlet$//')"
+if [[ -z "$BASE_NAME" ]]; then BASE_NAME="$CLASS_NAME"; fi
 URL_SLUG="$(printf '%s' "$BASE_NAME" | sed -E 's/([A-Z])/-\\1/g' | tr '[:upper:]' '[:lower:]' | sed -E 's/^-+//; s/-+/-/g')"
 URL_PATTERN="/\${URL_SLUG:-hello}"
 
@@ -184,15 +185,15 @@ import ${httpImport}.HttpServletResponse;
 import java.io.IOException;
 import java.io.PrintWriter;
 
-@WebServlet(name = "$CLASS_NAME", urlPatterns = "$URL_PATTERN")
+@WebServlet(name = "$CLASS_NAME", urlPatterns = {"$URL_PATTERN"})
 public class $CLASS_NAME extends HttpServlet {
   @Override
   protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
     resp.setContentType("text/html; charset=UTF-8");
     try (PrintWriter out = resp.getWriter()) {
       out.println("<!DOCTYPE html>");
-      out.println("<html lang=\\"fr\\">");
-      out.println("<head><meta charset=\\"UTF-8\\"><title>$CLASS_NAME</title></head>");
+      out.println("<html lang=fr>");
+      out.println("<head><meta charset=UTF-8><title>$CLASS_NAME</title></head>");
       out.println("<body>");
       out.println("<h1>$CLASS_NAME</h1>");
       out.println("<p>Servlet generated with ${appName}.</p>");
@@ -284,8 +285,9 @@ if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(CLASS_NAME)) {
   process.exit(1);
 }
 
-const BASE_NAME = CLASS_NAME.replace(/Servlet$/, '');
-const URL_SLUG = BASE_NAME
+const stripped = CLASS_NAME.replace(/Servlet$/, '');
+const baseForUrl = stripped === '' ? CLASS_NAME : stripped;
+const URL_SLUG = baseForUrl
   .replace(/([A-Z])/g, '-$1')
   .toLowerCase()
   .replace(/^-+/, '')
@@ -309,15 +311,15 @@ const javaSource = [
   'import java.io.IOException;',
   'import java.io.PrintWriter;',
   '',
-  '@WebServlet(name = "' + CLASS_NAME + '", urlPatterns = "' + URL_PATTERN + '")',
+  '@WebServlet(name = "' + CLASS_NAME + '", urlPatterns = {"' + URL_PATTERN + '"})',
   'public class ' + CLASS_NAME + ' extends HttpServlet {',
   '  @Override',
   '  protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {',
   '    resp.setContentType("text/html; charset=UTF-8");',
   '    try (PrintWriter out = resp.getWriter()) {',
   '      out.println("<!DOCTYPE html>");',
-  '      out.println("<html lang=\\"fr\\">");',
-  '      out.println("<head><meta charset=\\"UTF-8\\"><title>' + CLASS_NAME + '</title></head>");',
+  '      out.println("<html lang=fr>");',
+  '      out.println(String.format("<head><meta charset=UTF-8><title>%s</title></head>", "' + CLASS_NAME + '"));',
   '      out.println("<body>");',
   '      out.println("<h1>' + CLASS_NAME + '</h1>");',
   '      out.println("<p>Servlet generated with ${appName}.</p>");',

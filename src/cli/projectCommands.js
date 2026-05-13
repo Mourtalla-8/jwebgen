@@ -2,10 +2,10 @@ import pc from 'picocolors';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { rm, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
-import { execa } from 'execa';
 import { jwebgenConfigPath, jwebgenMetaDir, jwebgenScriptsDir } from '../project/jwebgenLayout.js';
 import { readJwebgenExports } from '../project/jwebgenRc.js';
 import { probeApacheTomcatHome, resolveWildflyPaths } from '../project/serverPaths.js';
+import { probeTomcatRuntime, probeWildflyRuntime } from '../project/serverRuntimeProbe.js';
 
 /** Effective HTTP app port for status URLs (matches deploy/dev tooling). */
 export function resolveStatusHttpPort(cfg = {}) {
@@ -47,61 +47,10 @@ export function serverRunningFromPgrepResult(result) {
   return null;
 }
 
-async function commandExists(bin, platform = process.platform) {
-  const cmd = platform === 'win32' ? 'where' : 'which';
-  try {
-    const probe = await execa(cmd, [bin], { timeout: 1500, reject: false });
-    return probe.exitCode === 0;
-  } catch {
-    return false;
-  }
-}
-
 async function probeServerRuntime(serverTarget) {
-  if (process.platform === 'win32') {
-    const pattern =
-      serverTarget === 'tomcat'
-        ? /tomcat|catalina\.startup|bootstrap\.jar/i
-        : /wildfly|jboss\.modules|standalone|jboss\.home/i;
-    try {
-      const { stdout, exitCode } = await execa(
-        'powershell.exe',
-        [
-          '-NoProfile',
-          '-NoLogo',
-          '-NonInteractive',
-          '-ExecutionPolicy',
-          'Bypass',
-          '-Command',
-          'Get-CimInstance Win32_Process | Where-Object { $_.Name -eq "java.exe" } | ForEach-Object { $_.CommandLine }'
-        ],
-        { timeout: 12000, windowsHide: true, reject: false }
-      );
-      if (exitCode !== 0 && !stdout) return null;
-      const text = String(stdout || '');
-      if (!text.trim()) return false;
-      return pattern.test(text);
-    } catch {
-      return null;
-    }
-  }
-  try {
-    if (await commandExists('pgrep')) {
-      const pattern = serverTarget === 'tomcat' ? 'tomcat' : 'standalone.sh|org.jboss.as.standalone';
-      const result = await execa('pgrep', ['-f', pattern], { timeout: 2000, reject: false });
-      const mapped = serverRunningFromPgrepResult(result);
-      if (mapped === true) return true;
-    }
-    if (await commandExists('curl')) {
-      const url = serverTarget === 'wildfly' ? 'http://127.0.0.1:9990/' : 'http://127.0.0.1:8080/';
-      const probe = await execa('curl', ['-fsS', '--max-time', '2', url], { timeout: 3000, reject: false });
-      if (probe.exitCode === 0) return true;
-      if (probe.exitCode !== 127) return false;
-    }
-    return null;
-  } catch {
-    return null;
-  }
+  if (serverTarget === 'tomcat') return probeTomcatRuntime({ platform: process.platform });
+  if (serverTarget === 'wildfly') return probeWildflyRuntime({ platform: process.platform });
+  return null;
 }
 
 export async function runClean({ findProjectRoot }) {

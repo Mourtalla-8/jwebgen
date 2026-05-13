@@ -886,11 +886,32 @@ function render() {
     + serverHint;
   process.stderr.write('\\x1b[?1l\\x1b[?1049h\\x1b[?25l\\x1b[H\\x1b[2J' + out + '\\n');
 }
+function restoreTerminal() {
+  try { if (process.stdin.isTTY) process.stdin.setRawMode(false); } catch {}
+  process.stderr.write('\\x1b[?1l\\x1b[?25h\\x1b[?1049l');
+}
+function requestParentExit() {
+  restoreTerminal();
+  if (parentPid > 1) {
+    try {
+      process.kill(parentPid, 'SIGINT');
+      process.exit(130);
+    } catch {
+      process.exit(130);
+    }
+  } else {
+    process.exit(130);
+  }
+}
 if (process.stdin.isTTY) {
   process.stdin.setRawMode(true);
   process.stdin.resume();
   process.stdin.on('data', (buf) => {
     const b = Buffer.isBuffer(buf) ? buf : Buffer.from(String(buf || ''), 'utf8');
+    if (b.length && (b[0] === 3 || b[0] === 4)) {
+      requestParentExit();
+      return;
+    }
     const ch = b.length ? String.fromCharCode(b[0]).toLowerCase() : '';
     if (ch === 'f') {
       if (commandFile) {

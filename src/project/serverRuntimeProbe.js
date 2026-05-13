@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { execa } from 'execa';
 import { accessSync, constants, existsSync } from 'node:fs';
 import path from 'node:path';
 
@@ -153,4 +154,204 @@ export function curlHttpProbe(url, timeoutSec = 2) {
   if (r.error && r.error.code === 'ENOENT') return 'unknown';
   if (r.status === 0) return 'up';
   return 'down';
+}
+
+async function commandExists(bin, platform = process.platform) {
+  const cmd = platform === 'win32' ? 'where' : 'which';
+  try {
+    const probe = await execa(cmd, [bin], { timeout: 1500, reject: false });
+    return probe.exitCode === 0;
+  } catch {
+    return false;
+  }
+}
+
+function mapPgrepExit(result) {
+  if (result.exitCode === 0) return true;
+  if (result.exitCode === 1) return false;
+  return null;
+}
+
+/** True when a JVM is running the Catalina bootstrap (not merely "tomcat" in argv). */
+export async function javaCatalinaBootstrapRunning(platform = process.platform) {
+  if (platform === 'win32') return null;
+  if (!(await commandExists('pgrep', platform))) return null;
+  const result = await execa(
+    'pgrep',
+    ['-f', 'org.apache.catalina.startup.Bootstrap'],
+    { timeout: 2000, reject: false }
+  );
+  return mapPgrepExit(result);
+}
+
+export async function javaWildFlyLikeProcessRunning(platform = process.platform) {
+  if (platform === 'win32') return null;
+  if (!(await commandExists('pgrep', platform))) return null;
+  const result = await execa('pgrep', ['-f', 'org\\.jboss\\.modules\\.Main|org\\.jboss\\.as\\.standalone|org\\.wildfly\\.boot\\.jar'], {
+    timeout: 2000,
+    reject: false
+  });
+  return mapPgrepExit(result);
+}
+
+/**
+ * Linux packaged Tomcat: when systemd says inactive, do not treat HTTP:8080 alone as Tomcat.
+ * @param {{ unit: string, state: string } | null} systemdTomcat
+ * @param {boolean | null} catalinaRunning
+ * @param {'up'|'down'|'unknown'} curl8080
+ * @returns {boolean | null}
+ */
+export function decideTomcatRunningUnix(systemdTomcat, catalinaRunning, curl8080) {
+  if (systemdTomcat?.state === 'active') return true;
+  if (systemdTomcat && systemdTomcat.state !== 'active') {
+    return catalinaRunning === true;
+  }
+  if (catalinaRunning === true) return true;
+  if (curl8080 === 'up') return true;
+  if (curl8080 === 'down') return false;
+  return null;
+}
+
+/**
+ * @param {{ unit: string, state: string } | null} systemdWildfly
+ * @param {boolean | null} wildflyProcess
+ * @param {'up'|'down'|'unknown'} curl9990
+ */
+export function decideWildflyRunningUnix(systemdWildfly, wildflyProcess, curl9990) {
+  if (systemdWildfly?.state === 'active') return true;
+  if (systemdWildfly && systemdWildfly.state !== 'active') {
+    return wildflyProcess === true;
+  }
+  if (wildflyProcess === true) return true;
+  if (curl9990 === 'up') return true;
+  if (curl9990 === 'down') return false;
+  return null;
+}
+
+/** PowerShell java.exe command-line probe (used when Windows service state is inconclusive). */
+async function probeTomcatWindowsCim() {
+  const pattern = /tomcat|catalina\.startup|bootstrap\.jar/i;
+  try {
+    const { stdout, exitCode } = await execa(
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-NoLogo',
+        '-NonInteractive',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-Command',
+        'Get-CimInstance Win32_Process | Where-Object { $_.Name -eq "java.exe" } | ForEach-Object { $_.CommandLine }'
+      ],
+      { timeout: 12000, windowsHide: true, reject: false }
+    );
+    if (exitCode !== 0 && !stdout) return null;
+    const text = String(stdout || '');
+    if (!text.trim()) return false;
+    return pattern.test(text);
+  } catch {
+    return null;
+  }
+}
+
+/** PowerShell java.exe command-line probe for WildFly-style JVMs. */
+async function probeWildflyWindowsCim() {
+  const pattern = /org\.jboss\.modules\.Main|org\.jboss\.as\.standalone|org\.wildfly\.boot\.jar/i;
+  try {
+    const { stdout, exitCode } = await execa(
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-NoLogo',
+        '-NonInteractive',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-Command',
+        'Get-CimInstance Win32_Process | Where-Object { $_.Name -eq "java.exe" } | ForEach-Object { $_.CommandLine }'
+      ],
+      { timeout: 12000, windowsHide: true, reject: false }
+    );
+    if (exitCode !== 0 && !stdout) return null;
+    const text = String(stdout || '');
+    if (!text.trim()) return false;
+    return pattern.test(text);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Windows Tomcat: `sc query` first; if running/start_pending return true; if stopped/stop_pending
+ * require a Catalina-like java process (same idea as systemd inactive + bootstrap on Linux).
+ * @param {{ name: string, state: string } | null} serviceDesc
+ * @param {boolean | null} cimMatch
+ * @returns {boolean | null}
+ */
+export function decideTomcatRunningWindows(serviceDesc, cimMatch) {
+  if (serviceDesc?.state === 'running' || serviceDesc?.state === 'start_pending') return true;
+  if (
+    serviceDesc &&
+    (serviceDesc.state === 'stopped' || serviceDesc.state === 'stop_pending')
+  ) {
+    return cimMatch === true;
+  }
+  if (serviceDesc?.state === 'unknown') return cimMatch;
+  return cimMatch;
+}
+
+/**
+ * @param {{ name: string, state: string } | null} serviceDesc
+ * @param {boolean | null} cimMatch
+ * @returns {boolean | null}
+ */
+export function decideWildflyRunningWindows(serviceDesc, cimMatch) {
+  if (serviceDesc?.state === 'running' || serviceDesc?.state === 'start_pending') return true;
+  if (
+    serviceDesc &&
+    (serviceDesc.state === 'stopped' || serviceDesc.state === 'stop_pending')
+  ) {
+    return cimMatch === true;
+  }
+  if (serviceDesc?.state === 'unknown') return cimMatch;
+  return cimMatch;
+}
+
+async function probeTomcatWindows() {
+  const serviceDesc = describeWindowsTomcatService();
+  if (serviceDesc?.state === 'running' || serviceDesc?.state === 'start_pending') return true;
+  const cimMatch = await probeTomcatWindowsCim();
+  return decideTomcatRunningWindows(serviceDesc, cimMatch);
+}
+
+async function probeWildflyWindows() {
+  const serviceDesc = describeWindowsWildflyService();
+  if (serviceDesc?.state === 'running' || serviceDesc?.state === 'start_pending') return true;
+  const cimMatch = await probeWildflyWindowsCim();
+  return decideWildflyRunningWindows(serviceDesc, cimMatch);
+}
+
+/** Whether Tomcat appears to be running (systemd + Catalina process; HTTP 8080 only as fallback when systemd is inconclusive). On win32: `sc query` service state first, then PowerShell CIM java command lines when needed (see {@link decideTomcatRunningWindows}). */
+export async function probeTomcatRuntime({ platform = process.platform } = {}) {
+  if (platform === 'win32') return probeTomcatWindows();
+
+  const systemdTomcat = platform === 'linux' ? describeFirstResolvedSystemdUnit(['tomcat10', 'tomcat']) : null;
+  const catalinaRunning = await javaCatalinaBootstrapRunning(platform);
+  let curl8080 = /** @type {'up'|'down'|'unknown'} */ ('unknown');
+  if (await commandExists('curl', platform)) {
+    curl8080 = curlHttpProbe('http://127.0.0.1:8080/');
+  }
+  return decideTomcatRunningUnix(systemdTomcat, catalinaRunning, curl8080);
+}
+
+/** Whether WildFly appears to be running (same idea as Tomcat for 9990). On win32: service state + CIM fallback (see {@link decideWildflyRunningWindows}). */
+export async function probeWildflyRuntime({ platform = process.platform } = {}) {
+  if (platform === 'win32') return probeWildflyWindows();
+
+  const systemdWildfly = platform === 'linux' ? describeFirstResolvedSystemdUnit(['wildfly']) : null;
+  const wildflyProcess = await javaWildFlyLikeProcessRunning(platform);
+  let curl9990 = /** @type {'up'|'down'|'unknown'} */ ('unknown');
+  if (await commandExists('curl', platform)) {
+    curl9990 = curlHttpProbe('http://127.0.0.1:9990/');
+  }
+  return decideWildflyRunningUnix(systemdWildfly, wildflyProcess, curl9990);
 }

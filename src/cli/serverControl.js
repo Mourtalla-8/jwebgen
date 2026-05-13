@@ -2,6 +2,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { execa } from 'execa';
 import { probeApacheTomcatHome, resolveWildflyPaths } from '../project/serverPaths.js';
+import { probeTomcatRuntime, probeWildflyRuntime } from '../project/serverRuntimeProbe.js';
 
 const TOMCAT_SERVICE_CANDIDATES = ['Tomcat10', 'tomcat10', 'Tomcat', 'tomcat'];
 const SPAWN_CONFIRM_TIMEOUT_MS = 2000;
@@ -16,57 +17,9 @@ async function commandExists(bin, platform = process.platform) {
   }
 }
 
-function mapPgrep(result) {
-  if (result.exitCode === 0) return true;
-  if (result.exitCode === 1) return false;
-  return null;
-}
-
 async function probeRuntime(target, platform = process.platform) {
-  if (platform === 'win32') {
-    const pattern =
-      target === 'tomcat'
-        ? /tomcat|catalina\.startup|bootstrap\.jar/i
-        : /wildfly|jboss\.modules|standalone|jboss\.home/i;
-    try {
-      const { stdout, exitCode } = await execa(
-        'powershell.exe',
-        [
-          '-NoProfile',
-          '-NoLogo',
-          '-NonInteractive',
-          '-ExecutionPolicy',
-          'Bypass',
-          '-Command',
-          'Get-CimInstance Win32_Process | Where-Object { $_.Name -eq "java.exe" } | ForEach-Object { $_.CommandLine }'
-        ],
-        { timeout: 12000, windowsHide: true, reject: false }
-      );
-      if (exitCode !== 0 && !stdout) return null;
-      const text = String(stdout || '');
-      if (!text.trim()) return false;
-      return pattern.test(text);
-    } catch {
-      return null;
-    }
-  }
-  try {
-    if (await commandExists('pgrep', platform)) {
-      const pattern = target === 'tomcat' ? 'tomcat' : 'standalone.sh|org.jboss.as.standalone';
-      const result = await execa('pgrep', ['-f', pattern], { timeout: 2000, reject: false });
-      const mapped = mapPgrep(result);
-      if (mapped !== null) return mapped;
-    }
-    if (await commandExists('curl', platform)) {
-      const url = target === 'wildfly' ? 'http://127.0.0.1:9990/' : 'http://127.0.0.1:8080/';
-      const probe = await execa('curl', ['-fsS', '--max-time', '2', url], { timeout: 3000, reject: false });
-      if (probe.exitCode === 0) return true;
-      if (probe.exitCode !== 127) return false;
-    }
-    return null;
-  } catch {
-    return null;
-  }
+  if (target === 'tomcat') return probeTomcatRuntime({ platform });
+  return probeWildflyRuntime({ platform });
 }
 
 async function trySystemctl(action, unit) {

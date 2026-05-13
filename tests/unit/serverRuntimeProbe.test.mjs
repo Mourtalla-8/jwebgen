@@ -1,44 +1,62 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 import {
-  isDirWritableByProcess,
-  runTomcatCatalinaVersion,
-  windowsScQueryState
+  decideTomcatRunningUnix,
+  decideTomcatRunningWindows,
+  decideWildflyRunningUnix,
+  decideWildflyRunningWindows
 } from '../../src/project/serverRuntimeProbe.js';
 
-test('isDirWritableByProcess is true for writable temp dir', () => {
-  const d = mkdtempSync(path.join(os.tmpdir(), 'jwebgen-wr-'));
-  try {
-    assert.equal(isDirWritableByProcess(d), true);
-  } finally {
-    rmSync(d, { recursive: true, force: true });
-  }
+test('decideTomcatRunningUnix: systemd inactive ignores HTTP 8080 without Catalina', () => {
+  assert.equal(decideTomcatRunningUnix({ unit: 'tomcat10', state: 'inactive' }, false, 'up'), false);
+  assert.equal(decideTomcatRunningUnix({ unit: 'tomcat10', state: 'inactive' }, null, 'up'), false);
 });
 
-test('runTomcatCatalinaVersion fails when catalina.sh is not executable', { skip: process.platform === 'win32' }, () => {
-  const tmp = mkdtempSync(path.join(os.tmpdir(), 'jwebgen-tcatver-'));
-  try {
-    const bin = path.join(tmp, 'bin');
-    const lib = path.join(tmp, 'lib');
-    const webapps = path.join(tmp, 'webapps');
-    mkdirSync(bin, { recursive: true });
-    mkdirSync(lib, { recursive: true });
-    mkdirSync(webapps, { recursive: true });
-    writeFileSync(path.join(lib, 'catalina.jar'), '');
-    writeFileSync(path.join(bin, 'bootstrap.jar'), '');
-    writeFileSync(path.join(bin, 'catalina.sh'), '#!/bin/sh\necho test\n');
-    chmodSync(path.join(bin, 'catalina.sh'), 0o644);
-    const r = runTomcatCatalinaVersion(tmp, 'linux');
-    assert.equal(r.ok, false);
-    assert.match(String(r.reason || ''), /not executable/);
-  } finally {
-    rmSync(tmp, { recursive: true, force: true });
-  }
+test('decideTomcatRunningUnix: systemd inactive + Catalina bootstrap counts as running', () => {
+  assert.equal(decideTomcatRunningUnix({ unit: 'tomcat10', state: 'inactive' }, true, 'down'), true);
 });
 
-test('windowsScQueryState returns null for non-existent service or when sc.exe is missing', () => {
-  assert.equal(windowsScQueryState('__jwebgen_no_such_service__'), null);
+test('decideTomcatRunningUnix: no systemd row falls back to curl when Catalina absent', () => {
+  assert.equal(decideTomcatRunningUnix(null, false, 'up'), true);
+  assert.equal(decideTomcatRunningUnix(null, false, 'down'), false);
+  assert.equal(decideTomcatRunningUnix(null, false, 'unknown'), null);
+});
+
+test('decideWildflyRunningUnix: systemd inactive ignores 9990 without WildFly process', () => {
+  assert.equal(decideWildflyRunningUnix({ unit: 'wildfly', state: 'failed' }, false, 'up'), false);
+  assert.equal(decideWildflyRunningUnix({ unit: 'wildfly', state: 'inactive' }, true, 'down'), true);
+});
+
+/** Windows `sc query` + CIM precedence mirrors Linux systemd + process (see decideTomcatRunningUnix). */
+test('decideTomcatRunningWindows: service running wins over absent CIM signal', () => {
+  assert.equal(decideTomcatRunningWindows({ name: 'Tomcat10', state: 'running' }, false), true);
+  assert.equal(decideTomcatRunningWindows({ name: 'Tomcat10', state: 'start_pending' }, false), true);
+});
+
+test('decideTomcatRunningWindows: service stopped still true when Catalina-like JVM present', () => {
+  assert.equal(decideTomcatRunningWindows({ name: 'Tomcat10', state: 'stopped' }, true), true);
+  assert.equal(decideTomcatRunningWindows({ name: 'Tomcat10', state: 'stop_pending' }, true), true);
+});
+
+test('decideTomcatRunningWindows: service stopped and no JVM match is false', () => {
+  assert.equal(decideTomcatRunningWindows({ name: 'Tomcat10', state: 'stopped' }, false), false);
+  assert.equal(decideTomcatRunningWindows({ name: 'Tomcat10', state: 'stopped' }, null), false);
+});
+
+test('decideTomcatRunningWindows: no service row falls back to CIM result only', () => {
+  assert.equal(decideTomcatRunningWindows(null, true), true);
+  assert.equal(decideTomcatRunningWindows(null, false), false);
+  assert.equal(decideTomcatRunningWindows(null, null), null);
+});
+
+test('decideTomcatRunningWindows: unknown service state defers to CIM', () => {
+  assert.equal(decideTomcatRunningWindows({ name: 'Tomcat10', state: 'unknown' }, true), true);
+  assert.equal(decideTomcatRunningWindows({ name: 'Tomcat10', state: 'unknown' }, null), null);
+});
+
+test('decideWildflyRunningWindows: same precedence as Tomcat / Unix WildFly', () => {
+  assert.equal(decideWildflyRunningWindows({ name: 'WildFly', state: 'running' }, false), true);
+  assert.equal(decideWildflyRunningWindows({ name: 'WildFly', state: 'stopped' }, true), true);
+  assert.equal(decideWildflyRunningWindows({ name: 'WildFly', state: 'stopped' }, false), false);
+  assert.equal(decideWildflyRunningWindows(null, false), false);
 });

@@ -120,6 +120,12 @@ assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'spawnSync', 'worker uses sync spawn 
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, "payload.cmd === 'refresh'", 'worker handles dashboard refresh command');
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'healthCycleRunning', 'worker serializes server health cycles');
 assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, "cmd: 'refresh'", 'dashboard queues worker refresh on key f');
+assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, 'requestParentExit', 'dashboard raw stdin maps Ctrl+C to parent SIGINT');
+assertContains(
+  DEV_DASHBOARD_SCRIPT_TEMPLATE,
+  "process.kill(parentPid, 'SIGINT');\n      process.exit(130);",
+  'dashboard child exits 130 immediately after forwarding SIGINT to parent'
+);
 
 assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, 'function serverDownHint', 'dashboard embeds OS-aware server hints');
 assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, 'JWEBGEN_SERVER_TARGET', 'dashboard distinguishes Tomcat/WildFly from env');
@@ -157,6 +163,8 @@ assertContains(addServlet, 'jwebgen --build', 'add-servlet next steps build comm
 assertContains(addServlet, 'jwebgen --dev', 'add-servlet next steps dev command');
 assertContains(addServlet, 'jakarta.servlet.ServletException', 'add-servlet includes ServletException import');
 assertContains(addServlet, 'throws ServletException, IOException', 'add-servlet doGet throws ServletException and IOException');
+assertContains(addServlet, 'urlPatterns = {"', 'add-servlet WebServlet urlPatterns is String[]');
+assertContains(addServlet, '<html lang=fr>', 'add-servlet bash Java uses unquoted HTML5 attributes');
 if (String(addServlet).includes('out.println("<script>")')) {
   throw new Error('unexpected inline script in add-servlet output');
 }
@@ -171,6 +179,8 @@ const addServletNode = makeAddServletNodeScript({ basePackage: 'com.ex', appName
 assertContains(addServletNode, '#!/usr/bin/env node', 'add-servlet.mjs shebang');
 assertContains(addServletNode, 'Servlet created:', 'add-servlet.mjs output message');
 assertContains(addServletNode, 'Invalid class name', 'add-servlet.mjs validation');
+assertContains(addServletNode, 'urlPatterns = {"', 'add-servlet.mjs WebServlet urlPatterns is String[]');
+assertContains(addServletNode, 'String.format("<head><meta charset=UTF-8><title>%s</title></head>"', 'add-servlet.mjs title line uses String.format for valid Java');
 
 const addJspNode = makeAddJspNodeScript({ appName: 'jwebgen' });
 assertContains(addJspNode, '#!/usr/bin/env node', 'add-jsp.mjs shebang');

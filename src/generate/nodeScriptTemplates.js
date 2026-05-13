@@ -498,13 +498,33 @@ function shellQuote(value) {
   return "'" + String(value).replace(/'/g, "'\\\\''") + "'";
 }
 
+function sudoStderrMentionsNoNewPrivileges(text) {
+  const t = String(text || '').toLowerCase();
+  return t.includes('no new privileges') || t.includes('no_new_privileges');
+}
+
 function runSudo(args = []) {
   return new Promise((resolve, reject) => {
-    const child = spawn('sudo', args, { stdio: 'inherit', shell: false });
+    const stderrChunks = [];
+    const child = spawn('sudo', args, { stdio: ['inherit', 'inherit', 'pipe'], shell: false });
+    if (child.stderr) {
+      child.stderr.on('data', (c) => {
+        stderrChunks.push(c);
+      });
+    }
     child.on('error', reject);
     child.on('exit', (code, signal) => {
       if (code === 0) resolve();
-      else reject(new Error('sudo failed (' + (signal ? 'signal ' + signal : 'code ' + code) + '): ' + args.join(' ')));
+      else {
+        const errText = Buffer.concat(stderrChunks).toString('utf8');
+        const tail = errText.trim().slice(-800);
+        const base =
+          'sudo failed (' + (signal ? 'signal ' + signal : 'code ' + code) + '): ' + args.join(' ');
+        const msg = tail ? base + '\\n' + tail : base;
+        const err = new Error(msg);
+        err.sudoStderr = errText;
+        reject(err);
+      }
     });
   });
 }
@@ -576,6 +596,14 @@ async function guardedAcl(opLabel, fn, sudoFn) {
         } catch (sudoErr) {
           console.error('Permission denied (' + opLabel + '). Automatic sudo retry failed.');
           console.error(String(sudoErr.message || sudoErr));
+          const merged = String(sudoErr.sudoStderr || '') + '\\n' + String(sudoErr.message || '');
+          if (sudoStderrMentionsNoNewPrivileges(merged)) {
+            console.error(
+              'sudo is blocked (for example no-new-privileges in a container or a security policy). ' +
+                'Point TOMCAT_HOME/CATALINA_HOME or WILDFLY_HOME/WILDFLY_DEPLOYMENTS at directories your user can write, ' +
+                'or fix ownership/chmod on webapps/deployments, or adjust container/host settings so sudo can elevate.'
+            );
+          }
           process.exit(1);
         }
       }
@@ -1081,13 +1109,24 @@ const env = {
 const worker = spawn(process.execPath, [workerScript, stateFile, eventsFile, pauseFile, String(process.pid), commandFile], { cwd: workDir, env, stdio: ['ignore', 'inherit', 'inherit'] });
 const dash = spawn(process.execPath, [dashboardScript, stateFile, pauseFile, commandFile, String(process.pid)], { cwd: workDir, env, stdio: 'inherit' });
 
-const shutdown = () => {
+let shutdownOnce = false;
+const shutdown = (exitCode) => {
+  if (shutdownOnce) return;
+  shutdownOnce = true;
   try { worker.kill('SIGTERM'); } catch {}
   try { dash.kill('SIGTERM'); } catch {}
+  process.exit(exitCode);
 };
-process.on('SIGINT', () => { shutdown(); process.exit(130); });
-process.on('SIGTERM', () => { shutdown(); process.exit(143); });
-worker.on('exit', (code) => { shutdown(); process.exit(code == null ? 1 : code); });
+process.on('SIGINT', () => shutdown(130));
+process.on('SIGTERM', () => shutdown(143));
+worker.on('exit', (code) => {
+  if (shutdownOnce) return;
+  shutdown(code == null ? 1 : code);
+});
+dash.on('exit', (code, signal) => {
+  if (shutdownOnce) return;
+  shutdown(code == null ? (signal ? 1 : 0) : code);
+});
 `;
 }
 
