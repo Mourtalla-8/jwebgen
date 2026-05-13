@@ -599,7 +599,7 @@ async function executeInstallMethod(tool, method, runCommandImpl) {
     return runWindowsTomcatPortableInstall();
   }
   if (method.internalId === 'wildfly-windows-portable') {
-    return runWindowsWildflyPortableInstall();
+    return runWindowsWildflyPortableInstall({ timeoutMs: 32 * 60 * 1000 });
   }
   if (method.shellCommand) {
     const result = await runCommandImpl(method.shellCommand);

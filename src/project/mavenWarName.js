@@ -11,11 +11,13 @@ export function readMavenWarBaseName(projectRoot) {
     return path.basename(projectRoot);
   }
   const finalMatch = xml.match(/<finalName>\s*([^<]+?)\s*<\/finalName>/);
-  if (finalMatch?.[1]) return finalMatch[1].trim();
+  const finalName = finalMatch?.[1]?.trim();
+  if (finalName) return finalName;
 
   const withoutParent = xml.replace(/<parent>[\s\S]*?<\/parent>/gi, '');
   const artifactMatch = withoutParent.match(/<artifactId>\s*([^<]+?)\s*<\/artifactId>/);
-  if (artifactMatch?.[1]) return artifactMatch[1].trim();
+  const artifactId = artifactMatch?.[1]?.trim();
+  if (artifactId) return artifactId;
 
   return path.basename(projectRoot);
 }
