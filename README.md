@@ -2,7 +2,7 @@
 
 Small CLI to scaffold Servlet/JSP (Jakarta) web apps and wire up build, deploy, and dev scripts.
 
-**You need:** Node 20.12+, JDK 11+, Maven. Works on Linux, macOS, Windows. Generated projects lean on Node scripts (`.mjs`); `.sh` wrappers are optional.
+**You need:** Node 20.19+, JDK 11+, Maven. Works on Linux, macOS, Windows. Generated projects lean on Node scripts (`.mjs`); `.sh` wrappers are optional.
 
 ## Install
 
@@ -15,7 +15,7 @@ npm ci
 npm i -g .
 ```
 
-Without global install: `npx jwebgen --help` from that directory.
+Without global install, run the local CLI from the repo root, for example `node bin/jwebgen.js --help` or `npx . --help` (plain `npx jwebgen` resolves from the npm registry, not this tree).
 
 ## New project
 

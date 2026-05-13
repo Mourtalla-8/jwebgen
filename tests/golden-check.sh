@@ -16,8 +16,13 @@ mktemp_mjs() {
   fi
   local base
   base="$(mktemp -t jwebgen.XXXXXX)"
-  mv "$base" "$base.mjs"
-  printf '%s\n' "$base.mjs"
+  if mv "$base" "$base.mjs"; then
+    printf '%s\n' "$base.mjs"
+    return 0
+  fi
+  echo "FAIL: could not rename temp file to .mjs (BSD mktemp path): $base" >&2
+  rm -f "$base" 2>/dev/null || true
+  return 1
 }
 
 echo "[golden] ensure fixtures exist (tests/fixtures-current)"
