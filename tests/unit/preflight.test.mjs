@@ -54,7 +54,17 @@ test('computeSuggestedActions offers WildFly official zip when only curl, unzip,
   assert.equal(actions.some((a) => a.type === 'install' && a.key === 'wildfly'), true);
   const wildfly = actions.find((a) => a.type === 'install' && a.key === 'wildfly');
   assert.ok(wildfly?.installMethods?.some((m) => m.shellCommand && m.shellCommand.includes('download.jboss.org')));
+  assert.ok(wildfly?.installMethods?.some((m) => m.shellCommand && m.shellCommand.includes('github.com/wildfly/wildfly')));
   assert.ok(wildfly?.installMethods?.some((m) => m.shellCommand && m.shellCommand.includes('sha256sum')));
+  for (const m of wildfly?.installMethods || []) {
+    if (!m.shellCommand) continue;
+    assert.doesNotMatch(m.shellCommand, /then;/, 'WildFly install script must not join then with ; (POSIX sh syntax error)');
+    assert.doesNotMatch(m.shellCommand, /else;/, 'WildFly install script must not join else with ; (POSIX sh syntax error)');
+  }
+  const zipMethod = wildfly?.installMethods?.find((m) => m.id === 'wildfly-linux-official-zip');
+  assert.ok(zipMethod?.previewLine, 'official zip method should expose a short preview line');
+  assert.doesNotMatch(zipMethod.previewLine, /set -euo pipefail|mkdir -p/);
+  assert.match(zipMethod.previewLine, /WildFly.*zip/i);
 });
 
 test('computeSuggestedActions returns no install actions when no package manager is detected', () => {

@@ -71,7 +71,8 @@ function previewForShell(cmd) {
 }
 
 /**
- * One-line-friendly shell: download WildFly zip, verify SHA-256 (mirror .sha256 or embedded), unzip, print WILDFLY_HOME hint.
+ * Multi-line shell script for `sh -lc` (newlines avoid `then;` / `else;` which POSIX sh rejects when fragments are joined with `; `).
+ * Download WildFly zip (download.jboss.org, then GitHub releases if 404), verify SHA-256 (.sha256 from same host or embedded), unzip, print WILDFLY_HOME hint.
  * @param {string} version
  * @param {string} zipName
  * @param {string} embeddedSha256
@@ -81,10 +82,22 @@ function wildflyLinuxOfficialZipCommand(version, zipName, embeddedSha256) {
     'set -euo pipefail',
     'mkdir -p "$HOME/opt"',
     `ZIP="$HOME/opt/${zipName}"`,
-    `URL="https://download.jboss.org/wildfly/${version}/${zipName}"`,
-    'curl -fSL -o "$ZIP" "$URL"',
+    `URL_OFF="https://download.jboss.org/wildfly/${version}/${zipName}"`,
+    `URL_GH="https://github.com/wildfly/wildfly/releases/download/${version}/${zipName}"`,
+    'rm -f "$ZIP"',
+    'if ! curl -fSL -o "$ZIP" "$URL_OFF"; then',
+    '  rm -f "$ZIP"',
+    '  curl -fSL -o "$ZIP" "$URL_GH"',
+    'fi',
     'SUM="$ZIP.sha256"',
-    'if curl -fSL -o "$SUM" "$URL.sha256" 2>/dev/null; then',
+    'rm -f "$SUM"',
+    'mirror_ok=0',
+    'if curl -fSL -o "$SUM" "${URL_OFF}.sha256" 2>/dev/null; then',
+    '  mirror_ok=1',
+    'elif curl -fSL -o "$SUM" "${URL_GH}.sha256" 2>/dev/null; then',
+    '  mirror_ok=1',
+    'fi',
+    'if [ "$mirror_ok" -eq 1 ]; then',
     'EXP=$(grep -oE \'[0-9a-fA-F]{64}\' "$SUM" | head -n1 | tr \'[:upper:]\' \'[:lower:]\')',
     'ACT=$(sha256sum "$ZIP" | awk \'{print tolower($1)}\')',
     'test -n "$EXP" && test "$EXP" = "$ACT" || { echo "jwebgen: WildFly SHA256 mismatch (.sha256 from mirror)" >&2; rm -f "$ZIP"; exit 1; }',
@@ -95,13 +108,13 @@ function wildflyLinuxOfficialZipCommand(version, zipName, embeddedSha256) {
     'fi',
     'unzip -oq "$ZIP" -d "$HOME/opt"',
     `echo "export WILDFLY_HOME=\\$HOME/opt/wildfly-${version}"`
-  ].join('; ');
+  ].join('\n');
 }
 
 function finalizeLinuxRows(rows) {
   return sortLinuxInstallMethods(rows).map((r) => ({
     ...r,
-    previewLine: previewForShell(r.shellCommand),
+    previewLine: typeof r.previewLine === 'string' ? r.previewLine : previewForShell(r.shellCommand),
     internalId: null
   }));
 }
@@ -245,8 +258,10 @@ export function getInstallMethodsForKey(key, platform) {
         { id: 'wildfly-linux-dnf', label: 'dnf (wildfly)', shellCommand: 'sudo dnf install -y wildfly' },
         {
           id: 'wildfly-linux-official-zip',
-          label: `Official zip to ~/opt (${v}, curl+unzip+SHA256)`,
-          shellCommand: customZip
+          label: `Official zip to ~/opt (${v}, curl+unzip+SHA256, GitHub fallback)`,
+          shellCommand: customZip,
+          previewLine:
+            `Official WildFly ${v} zip: try jboss.org, else GitHub releases; SHA-256 verify; unzip to ~/opt; print WILDFLY_HOME.`
         }
       ]);
     }
