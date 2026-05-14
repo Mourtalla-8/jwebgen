@@ -43,10 +43,7 @@ test('resolveWildflyPaths discovers WildFly under ~/opt when /opt/wildfly is abs
     const resolved = resolveWildflyPaths({ env: { HOME: isolated }, cfg: {}, platform: 'linux' });
     assert.equal(resolved.wildflyHome, wf);
     assert.equal(resolved.deployments, path.join(wf, 'standalone', 'deployments'));
-    // discoverLinuxWildflyInUserOpt is Linux-only at runtime (guards on process.platform).
-    if (process.platform === 'linux') {
-      assert.equal(discoverLinuxWildflyInUserOpt({ HOME: isolated }), path.resolve(wf));
-    }
+    assert.equal(discoverLinuxWildflyInUserOpt({ HOME: isolated }, 'linux'), path.resolve(wf));
   } finally {
     rmSync(isolated, { recursive: true, force: true });
   }

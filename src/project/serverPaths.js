@@ -30,10 +30,11 @@ export function looksLikeWildflyHome(homeDir) {
  * WildFly official zip install uses `$HOME/opt/wildfly-<version>`. Probe that tree when WILDFLY_HOME is unset
  * so `jwebgen --setup` / `server start` work in a new shell without manually exporting WILDFLY_HOME.
  * @param {NodeJS.ProcessEnv} [env]
+ * @param {NodeJS.Platform} [platform] defaults to `process.platform`; must be `linux` for a non-empty result
  * @returns {string} resolved home or ''
  */
-export function discoverLinuxWildflyInUserOpt(env = process.env) {
-  if (process.platform !== 'linux') return '';
+export function discoverLinuxWildflyInUserOpt(env = process.env, platform = process.platform) {
+  if (platform !== 'linux') return '';
   const homeDir = String(env.HOME || os.homedir() || '').trim();
   if (!homeDir) return '';
   const optDir = path.join(homeDir, 'opt');
@@ -136,7 +137,7 @@ export function resolveWildflyPaths({ env = process.env, cfg = {}, platform = pr
     if (looksLikeWildflyHome(defaultWildflyHome)) {
       wildflyHome = defaultWildflyHome;
     } else {
-      const discovered = discoverLinuxWildflyInUserOpt(env);
+      const discovered = discoverLinuxWildflyInUserOpt(env, platform);
       wildflyHome = discovered || defaultWildflyHome;
     }
     deployments = path.join(wildflyHome, 'standalone', 'deployments');
