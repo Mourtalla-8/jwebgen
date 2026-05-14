@@ -15,6 +15,7 @@ import {
   makeAddJspNodeScript,
   makeLiveReloadClientScript
 } from './src/generate/devAssets.js';
+import { makeBuildScript } from './src/generate/buildTemplate.js';
 import { makeNodeBuildScript, makeNodeDeployScript, makeNodeDevScript, makeNodeWatchScript } from './src/generate/scriptTemplates.js';
 import { helloServlet, indexJsp } from './src/templates.js';
 import { DEV_WORKER_SCRIPT_TEMPLATE, DEV_DASHBOARD_SCRIPT_TEMPLATE } from './src/generate/watchEmbeddedTemplates.js';
@@ -64,12 +65,15 @@ assertContains(deployWildfly, 'skipped redeploy', 'deploy wildfly skip dodeploy 
 assertContains(deployWildfly, 'cmp -s', 'deploy wildfly WAR identity via cmp not size-only');
 assertContains(deployWildfly, 'DEPLOY_HTTP_OK', 'deploy wildfly HTTP probe short-circuits marker failure');
 assertContains(deployWildfly, 'wildfly_cleanup_artifacts_remain', 'deploy wildfly cleanup checks all marker files');
+assertContains(deployWildfly, 'wildfly_discover_home_linux', 'deploy wildfly bash discovers user opt or /opt');
 const deploySelector = makeDeploySelectorScript();
 assertContains(deploySelector, 'Select server target for deployment', 'deploy selector prompts target when unset');
 assertContains(deploySelector, 'JWEBGEN_SERVER_TARGET', 'deploy selector persists chosen target');
 
 const nodeBuild = makeNodeBuildScript();
 assertContains(nodeBuild, '#!/usr/bin/env node', 'build.mjs shebang');
+assertContains(nodeBuild, 'war:exploded', 'build.mjs runs war:exploded in dev for exploded Tomcat deploy');
+assertContains(makeBuildScript(), 'package war:exploded', 'build.sh runs war:exploded when JWEBGEN_DEV=1');
 assertContains(nodeBuild, 'mavenExecutable', 'build.mjs selects maven executable per OS');
 assertContains(nodeBuild, 'mvn.cmd', 'build.mjs handles Windows mvn.cmd');
 assertContains(nodeBuild, "from 'node:child_process'", 'build.mjs imports child_process');
@@ -104,8 +108,11 @@ const nodeWatch = makeNodeWatchScript();
 assertContains(nodeWatch, 'dev.mjs', 'watch.mjs reuses dev.mjs runtime');
 
 assertContains(watch, 'xmllint', 'watch resolve_app_name uses structured POM read');
+assertContains(DEV_WORKER_SCRIPT_TEMPLATE, '/dev/tty', 'worker wires deploy stdin to controlling tty for sudo password');
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'createProxyServer', 'worker contains dev proxy server');
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, '/.jwebgen/live-reload.js', 'worker serves live-reload asset');
+assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'waitForDevAppHttpReady', 'worker delays LiveReload until HTTP app responds after deploy');
+assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'probeDevAppHttpOnce', 'worker probes app URL without serverUp running gate');
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'spawn(process.execPath, [mjsPath]', 'worker prefers Node .mjs build/deploy when present');
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, "process.platform !== 'linux'", 'worker skips systemctl when not Linux');
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, "spawn('systemctl', ['is-active', '--quiet', serverUnit]", 'worker uses systemctl on Linux without bash');
@@ -114,11 +121,18 @@ assertContains(DEV_WORKER_SCRIPT_TEMPLATE, "hasCommand('systemctl')", 'worker ga
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, "hasCommand('ss')", 'worker gates ss usage by availability');
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, "hasCommand('lsof')", 'worker falls back to lsof when ss unavailable');
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'function hasListenerOnPort', 'worker detects listening ports on Windows/macOS');
+assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'JWEBGEN_WILDFLY_USER_OPT_VERSION', 'worker embeds WildFly user-opt version for HOME discovery');
+assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'spawnWinWildflyServer', 'worker prefers hidden PowerShell WildFly start when standalone.ps1 exists');
+assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'server_start_throttled', 'worker throttles rapid Windows server spawn attempts');
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'async function redeployOnly', 'worker can redeploy without full rebuild');
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'function stopSelectedServer', 'worker stops server started from dev UI');
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'spawnSync', 'worker uses sync spawn for shutdown on exit');
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, "payload.cmd === 'refresh'", 'worker handles dashboard refresh command');
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'healthCycleRunning', 'worker serializes server health cycles');
+assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'stale session', 'worker saves initial state before async servers to avoid stale deploy UI');
+assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'function pauseDevDashboard', 'worker pauses dashboard during deploy for sudo TTY');
+assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'deployStillInFlight', 'worker health probe not stuck during post-deploy wait (WildFly)');
+assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, 'syncDashStdinWithDeployPause', 'dashboard releases raw stdin while deploy pause file exists');
 assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, "cmd: 'refresh'", 'dashboard queues worker refresh on key f');
 assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, 'requestParentExit', 'dashboard raw stdin maps Ctrl+C to parent SIGINT');
 assertContains(
