@@ -122,7 +122,30 @@ assertContains(DEV_WORKER_SCRIPT_TEMPLATE, "hasCommand('ss')", 'worker gates ss 
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, "hasCommand('lsof')", 'worker falls back to lsof when ss unavailable');
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'function hasListenerOnPort', 'worker detects listening ports on Windows/macOS');
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'JWEBGEN_WILDFLY_USER_OPT_VERSION', 'worker embeds WildFly user-opt version for HOME discovery');
-assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'spawnWinWildflyServer', 'worker starts WildFly on Windows via standalone.bat when present');
+assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'spawnWinWildflyServer', 'worker defines Windows WildFly spawn helper');
+assertContains(
+  DEV_WORKER_SCRIPT_TEMPLATE,
+  "path.join(home, 'bin', 'standalone.bat')",
+  'worker probes standalone.bat for Windows WildFly start'
+);
+assertContains(
+  DEV_WORKER_SCRIPT_TEMPLATE,
+  "path.join(home, 'bin', 'standalone.ps1')",
+  'worker falls back to standalone.ps1 when bat is absent'
+);
+{
+  const w = DEV_WORKER_SCRIPT_TEMPLATE;
+  const batJoin = "path.join(home, 'bin', 'standalone.bat')";
+  const ps1Join = "path.join(home, 'bin', 'standalone.ps1')";
+  const iBat = w.indexOf(batJoin);
+  const iPs1 = w.indexOf(ps1Join);
+  if (iBat === -1 || iPs1 === -1) {
+    throw new Error('worker template must include both standalone.bat and standalone.ps1 path.join probes');
+  }
+  if (iBat >= iPs1) {
+    throw new Error('worker template must probe standalone.bat before standalone.ps1 (bat-first Windows start)');
+  }
+}
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'server_start_throttled', 'worker throttles rapid Windows server spawn attempts');
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'async function redeployOnly', 'worker can redeploy without full rebuild');
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'function stopSelectedServer', 'worker stops server started from dev UI');
