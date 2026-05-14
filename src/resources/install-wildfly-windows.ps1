@@ -203,7 +203,9 @@ function Set-UserEnvironment {
             }
     }
 
-    if ($entries -notcontains $normalizedBin) {
+    $normalizedBinLower = $normalizedBin.ToLowerInvariant()
+    $entriesLower = @($entries | ForEach-Object { $_.ToLowerInvariant() })
+    if ($entriesLower -notcontains $normalizedBinLower) {
         $entries += $normalizedBin
     }
 

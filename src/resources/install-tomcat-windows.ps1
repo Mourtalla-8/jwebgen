@@ -45,7 +45,7 @@ function Download-File {
     $len = (Get-Item $OutFile).Length
     # Secondary guard only (~12 MB floor). Primary integrity: SHA512 in INIT (Apache .sha512 or embedded).
     if ($len -lt 12582912) {
-        throw "Download-File: Tomcat zip too small ($len bytes) for '$OutFile' — expected well over 12 MB; may be corrupt or an error page."
+        throw "Download-File: Tomcat zip too small ($len bytes) for '$OutFile' - expected well over 12 MB; may be corrupt or an error page."
     }
 }
 
@@ -62,7 +62,7 @@ function Download-ChecksumText {
 
 function Parse-Sha512FromApacheChecksumFile {
     param([Parameter(Mandatory)][string]$Text)
-    $m = [regex]::Match([string]$Text, '([a-fA-F]{128})')
+    $m = [regex]::Match([string]$Text, '([0-9a-fA-F]{128})')
     if (-not $m.Success) {
         throw "Could not parse SHA512 from checksum file"
     }
