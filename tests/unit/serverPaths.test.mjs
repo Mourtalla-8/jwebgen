@@ -4,6 +4,7 @@ import { mkdirSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {
+  discoverLinuxWildflyInUserOpt,
   inferWildflyHomeFromDeployments,
   LINUX_DEFAULT_TOMCAT_HOME,
   LINUX_DEFAULT_WILDFLY_HOME,
@@ -13,6 +14,7 @@ import {
   resolveWildflyPaths,
   validateWildflyDeploymentsPath
 } from '../../src/project/serverPaths.js';
+import { WINDOWS_WILDFLY_PORTABLE_VERSION } from '../../src/project/windowsSetupInstall.js';
 
 test('resolveTomcatHome respects env, config and Linux fallback', () => {
   assert.equal(resolveTomcatHome({ env: { TOMCAT_HOME: '/srv/tomcat' }, cfg: {}, platform: 'linux' }), '/srv/tomcat');
@@ -22,9 +24,29 @@ test('resolveTomcatHome respects env, config and Linux fallback', () => {
 });
 
 test('resolveWildflyPaths builds deployments path from selected home', () => {
-  const resolved = resolveWildflyPaths({ env: {}, cfg: {}, platform: 'linux' });
-  assert.equal(resolved.wildflyHome, LINUX_DEFAULT_WILDFLY_HOME);
-  assert.equal(resolved.deployments, path.join(LINUX_DEFAULT_WILDFLY_HOME, 'standalone', 'deployments'));
+  const isolated = mkdtempSync(path.join(os.tmpdir(), 'jwebgen-wf-isohome-'));
+  try {
+    const resolved = resolveWildflyPaths({ env: { HOME: isolated }, cfg: {}, platform: 'linux' });
+    assert.equal(resolved.wildflyHome, LINUX_DEFAULT_WILDFLY_HOME);
+    assert.equal(resolved.deployments, path.join(LINUX_DEFAULT_WILDFLY_HOME, 'standalone', 'deployments'));
+  } finally {
+    rmSync(isolated, { recursive: true, force: true });
+  }
+});
+
+test('resolveWildflyPaths discovers WildFly under ~/opt when /opt/wildfly is absent', () => {
+  const isolated = mkdtempSync(path.join(os.tmpdir(), 'jwebgen-wf-useropt-'));
+  try {
+    const wf = path.join(isolated, 'opt', `wildfly-${WINDOWS_WILDFLY_PORTABLE_VERSION}`);
+    mkdirSync(wf, { recursive: true });
+    writeFileSync(path.join(wf, 'jboss-modules.jar'), '');
+    const resolved = resolveWildflyPaths({ env: { HOME: isolated }, cfg: {}, platform: 'linux' });
+    assert.equal(resolved.wildflyHome, wf);
+    assert.equal(resolved.deployments, path.join(wf, 'standalone', 'deployments'));
+    assert.equal(discoverLinuxWildflyInUserOpt({ HOME: isolated }), path.resolve(wf));
+  } finally {
+    rmSync(isolated, { recursive: true, force: true });
+  }
 });
 
 test('resolveWildflyPaths infers WILDFLY_HOME when only deployments env is set', () => {
