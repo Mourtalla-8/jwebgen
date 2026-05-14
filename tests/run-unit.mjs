@@ -15,9 +15,17 @@ if (files.length === 0) {
   process.exit(1);
 }
 
-const result = spawnSync(process.execPath, ['--test', ...files], {
-  stdio: 'inherit',
-  shell: false,
-});
+// One Node process per test file so process.env, console, cwd, and test-runner
+// defaults cannot leak across files (hosted macOS/Windows runners are sensitive).
+for (const file of files) {
+  const result = spawnSync(process.execPath, ['--test', file], {
+    stdio: 'inherit',
+    shell: false
+  });
+  const code = result.status;
+  if (code !== 0) {
+    process.exit(code === null ? 1 : code);
+  }
+}
 
-process.exit(result.status === null ? 1 : result.status);
+process.exit(0);

@@ -1,5 +1,7 @@
 import path from 'node:path';
-import { existsSync } from 'node:fs';
+import os from 'node:os';
+import { existsSync, readdirSync } from 'node:fs';
+import { WINDOWS_WILDFLY_PORTABLE_VERSION } from './windowsSetupInstall.js';
 
 export const LINUX_DEFAULT_TOMCAT_HOME = '/var/lib/tomcat10';
 export const LINUX_DEFAULT_WILDFLY_HOME = '/opt/wildfly';
@@ -24,7 +26,35 @@ export function looksLikeWildflyHome(homeDir) {
   return existsSync(path.join(root, 'jboss-modules.jar'));
 }
 
-/** Used by setup/deploy checks: validates explicit env path, or probes common Linux package locations before the webapps stub path. */
+/**
+ * WildFly official zip install uses `$HOME/opt/wildfly-<version>`. Probe that tree when WILDFLY_HOME is unset
+ * so `jwebgen --setup` / `server start` work in a new shell without manually exporting WILDFLY_HOME.
+ * @param {NodeJS.ProcessEnv} [env]
+ * @param {NodeJS.Platform} [platform] defaults to `process.platform`; must be `linux` for a non-empty result
+ * @returns {string} resolved home or ''
+ */
+export function discoverLinuxWildflyInUserOpt(env = process.env, platform = process.platform) {
+  if (platform !== 'linux') return '';
+  const homeDir = String(env.HOME || os.homedir() || '').trim();
+  if (!homeDir) return '';
+  const optDir = path.join(homeDir, 'opt');
+  if (!existsSync(optDir)) return '';
+  const preferred = path.join(optDir, `wildfly-${WINDOWS_WILDFLY_PORTABLE_VERSION}`);
+  if (looksLikeWildflyHome(preferred)) return path.resolve(preferred);
+  let best = '';
+  try {
+    for (const ent of readdirSync(optDir, { withFileTypes: true })) {
+      if (!ent.isDirectory() || !ent.name.startsWith('wildfly-')) continue;
+      const full = path.join(optDir, ent.name);
+      if (!looksLikeWildflyHome(full)) continue;
+      if (!best || ent.name.localeCompare(path.basename(best)) > 0) best = full;
+    }
+  } catch {
+    return '';
+  }
+  return best ? path.resolve(best) : '';
+}
+
 /** When only standalone/deployments is configured, derive WILDFLY_HOME as its grandparent directory. */
 export function inferWildflyHomeFromDeployments(deploymentsDir = '') {
   const dep = path.resolve(String(deploymentsDir || '').trim());
@@ -104,7 +134,12 @@ export function resolveWildflyPaths({ env = process.env, cfg = {}, platform = pr
     }
   }
   if (!wildflyHome && platform === 'linux' && !explicitDeployments) {
-    wildflyHome = defaultWildflyHome;
+    if (looksLikeWildflyHome(defaultWildflyHome)) {
+      wildflyHome = defaultWildflyHome;
+    } else {
+      const discovered = discoverLinuxWildflyInUserOpt(env, platform);
+      wildflyHome = discovered || defaultWildflyHome;
+    }
     deployments = path.join(wildflyHome, 'standalone', 'deployments');
   }
   return {

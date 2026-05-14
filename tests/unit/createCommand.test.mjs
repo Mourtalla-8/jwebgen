@@ -1,4 +1,4 @@
-import test from 'node:test';
+import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
@@ -6,6 +6,7 @@ import { existsSync } from 'node:fs';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { runCreateCommand } from '../../src/cli/createCommand.js';
 
+describe('createCommand', { concurrency: false }, () => {
 test('runCreateCommand keeps typed project name casing for default directory', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'jwebgen-create-casing-'));
   const startCwd = process.cwd();
@@ -80,4 +81,5 @@ test('runCreateCommand keeps typed project name casing for default directory', a
     process.chdir(startCwd);
     await rm(tempRoot, { recursive: true, force: true });
   }
+});
 });

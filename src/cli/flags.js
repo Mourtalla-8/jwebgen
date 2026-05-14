@@ -60,7 +60,7 @@ export function parseFlags(argv = []) {
       flags.help = true;
       continue;
     }
-    if (a === '--version' || a === '-V' || a === '-v') {
+    if (a === '--version' || a === '-V') {
       flags.version = true;
       continue;
     }
@@ -129,7 +129,7 @@ export function parseFlags(argv = []) {
       flags.yes = true;
       continue;
     }
-    if (a === '--verbose') {
+    if (a === '--verbose' || a === '-v') {
       flags.verbose = true;
       continue;
     }
@@ -202,7 +202,7 @@ export function formatFlagsHelp({ appName = 'jwebgen' } = {}) {
     usage,
     section('Main Commands'),
     `  ${cmd('--help, -h')}${desc('Show this help message.')}`,
-    `  ${cmd('--version, -V, -v')}${desc('Show jwebgen version.')}`,
+    `  ${cmd('--version, -V')}${desc('Show jwebgen version.')}`,
     `  ${cmd('--setup [--dry-run]')}${desc('Run setup diagnostics + guided safe actions; --dry-run previews installs only (no commands run).')}`,
     `  ${cmd('--install <maven|tomcat|wildfly>')}${desc('Non-interactive install (portable scripts on Windows; package managers on Linux/macOS when detected). Java: use --setup, not --install.')}`,
     `  ${cmd('server <start|stop|status> <tomcat|wildfly>')}${desc('Global server control (systemd/services on Linux/Windows when present; startup scripts as fallback).')}`,
@@ -210,7 +210,7 @@ export function formatFlagsHelp({ appName = 'jwebgen' } = {}) {
     `  ${cmd('--uninstall')}${desc('Show safe uninstall guidance for global installs.')}`,
     `  ${cmd('--status')}${desc('Show project status.')}`,
     `  ${cmd('--dev')}${desc('Start dev loop in current project.')}`,
-    `  ${cmd('--verbose')}${desc('Enable verbose mode for applicable actions (e.g. --dev).')}`,
+    `  ${cmd('--verbose, -v')}${desc('Enable verbose mode for applicable actions (e.g. --dev).')}`,
     `  ${cmd('--watch')}${desc('Alias for --dev.')}`,
     `  ${cmd('--build')}${desc('Run project build script.')}`,
     `  ${cmd('--deploy')}${desc('Run project deploy script.')}`,

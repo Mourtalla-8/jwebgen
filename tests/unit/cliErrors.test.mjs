@@ -1,7 +1,8 @@
-import test from 'node:test';
+import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { printUnknownCommandAndExit } from '../../src/cli/projectCliUtils.js';
 
+describe('cliErrors', { concurrency: false }, () => {
 test('printUnknownCommandAndExit prints help and exits with code 1', () => {
   const logs = [];
   const originalLog = console.log;
@@ -29,4 +30,5 @@ test('printUnknownCommandAndExit prints help and exits with code 1', () => {
   const combined = logs.join('\n');
   assert.match(combined, /Unknown command/);
   assert.match(combined, /Usage:[^\n]*jwebgen/);
+});
 });

@@ -3,7 +3,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { detectJavaCompiler, evaluateJavaCompatibility, installHint, which } from '../project/inputUtils.js';
-import { looksLikeWildflyHome, probeApacheTomcatHome, resolveWildflyPaths, validateWildflyDeploymentsPath } from '../project/serverPaths.js';
+import { looksLikeWildflyHome, probeApacheTomcatHome, resolveWildflyPaths, validateWildflyDeploymentsPath, discoverLinuxWildflyInUserOpt } from '../project/serverPaths.js';
 import {
   describeFirstResolvedSystemdUnit,
   describeWindowsTomcatService,
@@ -464,15 +464,13 @@ function sanitizeInstallOutputLog(text) {
   return lines.join('\n').trim();
 }
 
+/** @param {{ timeoutMs?: number }} [opts] */
 export async function runCommand(command, { timeoutMs = 10 * 60 * 1000 } = {}) {
   const shell = process.platform === 'win32' ? 'cmd.exe' : 'sh';
   const shellArgs = process.platform === 'win32' ? ['/c', command] : ['-lc', command];
-  const useInheritStdio =
-    process.platform !== 'win32'
-    && /(^|[\s;|&])sudo(\s|$)/.test(command)
-    && process.stdin.isTTY
-    && process.stdout.isTTY
-    && process.stderr.isTTY;
+  const hasSudo = process.platform !== 'win32' && /(^|[\s;|&])sudo(\s|$)/.test(command);
+  // Inherit all stdio for sudo: with stdin ignored, sudo reads empty passwords from stdin ("Sorry, try again").
+  const useInheritStdio = hasSudo;
   const stdio = useInheritStdio ? 'inherit' : (/** @type {const} */ (['ignore', 'pipe', 'pipe']));
   try {
     const child = spawn(shell, shellArgs, { stdio });
@@ -564,7 +562,13 @@ function normalizeInstallResult(result, method) {
 }
 
 function getInstallLocationForTool(tool) {
-  if (process.platform !== 'win32') return '';
+  if (process.platform !== 'win32') {
+    if (tool === 'wildfly') {
+      const p = discoverLinuxWildflyInUserOpt();
+      if (p) return p;
+    }
+    return '';
+  }
   const drive = String(process.env.SystemDrive || 'C:').replace(/[/\\]+$/, '');
   const jwebgenRoot = path.join(`${drive}${path.sep}`, 'jwebgen');
   if (tool === 'maven') return path.join(jwebgenRoot, `apache-maven-${WINDOWS_MAVEN_PORTABLE_VERSION}`);
@@ -580,6 +584,14 @@ function printInstallDone(tool) {
     console.log('Installed to:');
     console.log(location);
   }
+  if (tool === 'wildfly' && process.platform === 'linux' && location) {
+    console.log(
+      pc.dim(
+        'jwebgen auto-detects this path in new shells. Optional for other tools: export WILDFLY_HOME='
+          + JSON.stringify(location)
+      )
+    );
+  }
 }
 
 function resolvePrimaryInstallMethod(tool, platform, runCommandImpl) {
@@ -589,6 +601,13 @@ function resolvePrimaryInstallMethod(tool, platform, runCommandImpl) {
     return null;
   }
   return { method: resolved, runCommandImpl };
+}
+
+/** Default install shell timeout; winget JDK downloads often exceed 10 minutes. */
+function timeoutMsForShellInstallMethod(method) {
+  const cmd = String(method?.shellCommand || '');
+  if (process.platform === 'win32' && /\bwinget\b/i.test(cmd)) return 45 * 60 * 1000;
+  return 10 * 60 * 1000;
 }
 
 async function executeInstallMethod(tool, method, runCommandImpl) {
@@ -602,7 +621,9 @@ async function executeInstallMethod(tool, method, runCommandImpl) {
     return runWindowsWildflyPortableInstall({ timeoutMs: 32 * 60 * 1000 });
   }
   if (method.shellCommand) {
-    const result = await runCommandImpl(method.shellCommand);
+    const result = await runCommandImpl(method.shellCommand, {
+      timeoutMs: timeoutMsForShellInstallMethod(method)
+    });
     return normalizeInstallResult(result, method);
   }
   return { status: 1, timedOut: false, error: new Error('No install method'), signal: null, stdout: '', stderr: '' };
@@ -611,7 +632,7 @@ async function executeInstallMethod(tool, method, runCommandImpl) {
 /**
  * Non-interactive install used by `jwebgen --install <tool>`.
  * @param {string} tool
- * @param {{ runCommandImpl?: typeof runCommand }} [opts]
+ * @param {{ runCommandImpl?: (command: string, opts?: { timeoutMs?: number }) => Promise<{ status: number, timedOut: boolean, error: Error | null, signal: string | null, stdout: string, stderr: string }> }} [opts]
  * @returns {Promise<number>} process exit code
  */
 export async function runInstallTool(tool, { runCommandImpl = runCommand } = {}) {
@@ -642,6 +663,11 @@ export async function runInstallTool(tool, { runCommandImpl = runCommand } = {})
   return 0;
 }
 
+/**
+ * Guided `--setup` flow.
+ * `onCommandStart` receives `{ key, method }` where `method` is the selected install row (e.g. `shellCommand` for sudo detection).
+ * `runCommandImpl` may be called as `(command, { timeoutMs })`.
+ */
 export async function runSetupAssistant({
   confirmPrompt,
   selectPrompt,
@@ -729,7 +755,7 @@ export async function runSetupAssistant({
 
     if (typeof onCommandStart === 'function') {
       try {
-        onCommandStart({ key: action.key });
+        onCommandStart({ key: action.key, method });
       } catch {
         /* ignore */
       }

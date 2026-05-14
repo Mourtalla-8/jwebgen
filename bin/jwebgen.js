@@ -352,7 +352,15 @@ async function runCli() {
             if (isCancel(answer)) return CANCEL_STEP;
             return answer;
           },
-          onCommandStart: ({ key }) => {
+          onCommandStart: ({ key, method }) => {
+            runCli.__setupSpinner = null;
+            const shell = String(method?.shellCommand || '');
+            const needsSudo =
+              process.platform !== 'win32' && /(^|[\s;|&])sudo(\s|$)/.test(shell);
+            if (needsSudo) {
+              console.log(pc.cyan(`Installing ${key} (sudo may ask for your password)...`));
+              return;
+            }
             const s = spinner();
             s.start(`Installing ${key}...`);
             runCli.__setupSpinner = s;

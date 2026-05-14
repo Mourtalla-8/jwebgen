@@ -1,0 +1,2 @@
+# Bash-driven CI (Git Bash on Windows) and golden awk expect Unix newlines.
+*.sh text eol=lf

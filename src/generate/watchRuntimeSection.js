@@ -282,7 +282,7 @@ show_deploy_help() {
 require_node() {
   if ! command -v node >/dev/null 2>&1; then
     ui_err "Node.js is required for dev mode."
-    ui_info "Install Node 20.19+ and retry (example: nvm install 22)."
+    ui_info "Install Node 22+ (LTS) and retry (example: nvm install 22)."
     exit 1
   fi
 }

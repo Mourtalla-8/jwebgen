@@ -8,17 +8,21 @@ test('parseFlags maps --watch to dev action', () => {
   assert.equal(parsed.actionCount, 1);
 });
 
-test('parseFlags maps --version, -V and -v', () => {
+test('parseFlags maps --version and -V only (not -v)', () => {
   assert.equal(parseFlags(['--version']).action, 'version');
   assert.equal(parseFlags(['-V']).action, 'version');
-  assert.equal(parseFlags(['-v']).action, 'version');
+  const vShort = parseFlags(['-v']);
+  assert.equal(vShort.action, null);
+  assert.equal(vShort.flags.verbose, true);
 });
 
-test('parseFlags keeps verbose explicit via --verbose only', () => {
+test('parseFlags keeps verbose via --verbose or -v', () => {
   const parsed = parseFlags(['--dev', '--verbose']);
   assert.equal(parsed.action, 'dev');
   assert.equal(parsed.flags.verbose, true);
   assert.equal(parsed.flags.version, false);
+  const pv = parseFlags(['--dev', '-v']);
+  assert.equal(pv.flags.verbose, true);
 });
 
 test('parseFlags maps setup/update/uninstall lifecycle actions', () => {
@@ -97,8 +101,8 @@ test('formatFlagsHelp includes lifecycle commands for setup/update/uninstall', (
   assert.match(help, /server <start\|stop\|status> <tomcat\|wildfly>/);
   assert.match(help, /--update/);
   assert.match(help, /--uninstall/);
-  assert.match(help, /--version, -V, -v/);
-  assert.match(help, /--verbose/);
+  assert.match(help, /--version, -V/);
+  assert.match(help, /--verbose, -v/);
   assert.match(help, /Java: use --setup/);
   assert.match(help, /Server paths \(all OS\)/);
   assert.match(help, /WILDFLY_DEPLOYMENTS/);

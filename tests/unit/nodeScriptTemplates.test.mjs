@@ -24,6 +24,11 @@ test('makeNodeDeployScript resolves WildFly paths from resolved deployments dir'
   assert.match(s, /Run: jwebgen server start /);
 });
 
+test('makeNodeDeployScript deployWildfly uses resolveWildflyPaths(cfg)', () => {
+  const deploy = makeNodeDeployScript();
+  assert.match(deploy, /async function deployWildfly[\s\S]*?resolveWildflyPaths\(cfg\)/);
+});
+
 test('makeNodeDevScript spawns worker without stdin and dashboard with inherited stdio', () => {
   const s = makeNodeDevScript();
   assert.match(s, /stdio: \['ignore', 'inherit', 'inherit'\]/);
@@ -35,6 +40,20 @@ test('makeNodeDevScript spawns worker without stdin and dashboard with inherited
   assert.match(s, /maybeRunServerInstallAssistant/);
   assert.match(s, /shutdownOnce/);
   assert.match(s, /dash\.on\('exit'/);
+  assert.match(s, /killLinuxSubtree/);
+  assert.match(s, /readFileSync\('\/proc\/' \+ pid \+ '\/status'/);
+  assert.match(s, /writeFileSync\(\s*stateFile/);
+});
+
+test('makeNodeDeployScript uses SUDO_ASKPASS path when stdin is not a TTY', () => {
+  const deploy = makeNodeDeployScript();
+  assert.match(deploy, /function resolveLinuxSudoAskPass/);
+  assert.match(deploy, /function linuxSudoNeedsNonTtyAssist/);
+  assert.match(deploy, /function linuxSudoPasswordlessWorks/);
+  assert.match(deploy, /linuxSudoNeedsNonTtyAssist\(\) && askPass/);
+  assert.match(deploy, /\['-n', \.\.\.args\]/);
+  assert.match(deploy, /SUDO_ASKPASS/);
+  assert.match(deploy, /JWEBGEN_SUDO_INHERIT/);
 });
 
 test('makeNodeDevScript embeds dashboard renderer with ANSI-aware padding', () => {
@@ -43,6 +62,12 @@ test('makeNodeDevScript embeds dashboard renderer with ANSI-aware padding', () =
   assert.match(s, /visibleWidth/);
   assert.match(s, /padAnsi/);
   assert.match(s, /statusWidth/);
+});
+
+test('makeNodeBuildScript runs war:exploded in dev for exploded deploy tree', () => {
+  const build = makeNodeBuildScript();
+  assert.match(build, /\['clean', \.\.\.mvnArgs, 'package'\]/);
+  assert.match(build, /\[\.\.\.mvnArgs, 'package', 'war:exploded'\]/);
 });
 
 test('makeNodeBuildScript warns when Maven executable is missing', () => {
@@ -69,6 +94,13 @@ test('makeNodeDeployScript wraps deploy IO with guardedAcl for permission errors
   assert.match(deploy, /TOMCAT_HOME\/TOMCAT10\/CATALINA_HOME/);
   assert.match(deploy, /validateTomcatHome/);
   assert.match(deploy, /validateWildflyDeployments/);
+});
+
+test('makeNodeDeployScript guardedAcl supports softInDev for Tomcat reload metadata', () => {
+  const deploy = makeNodeDeployScript();
+  assert.match(deploy, /opts && opts\.softInDev === true && isDevMode\(\)/);
+  assert.match(deploy, /Optional dev step skipped/);
+  assert.match(deploy, /softInDev: true/);
 });
 
 test('makeNodeDeployScript guards runtime probes by command availability', () => {
