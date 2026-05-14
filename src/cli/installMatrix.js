@@ -79,7 +79,7 @@ function previewForShell(cmd) {
  */
 function wildflyLinuxOfficialZipCommand(version, zipName, embeddedSha256) {
   return [
-    'set -euo pipefail',
+    'set -euo',
     'mkdir -p "$HOME/opt"',
     `ZIP="$HOME/opt/${zipName}"`,
     `URL_OFF="https://download.jboss.org/wildfly/${version}/${zipName}"`,

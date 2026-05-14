@@ -783,6 +783,14 @@ function runScript(script) {
     const shPath = path.join(scriptsDir, script);
     const useNode = existsSync(mjsPath);
     let ttyIn = null;
+    const cleanupTtyFd = () => {
+      if (ttyIn != null) {
+        try {
+          closeSync(ttyIn);
+        } catch {}
+        ttyIn = null;
+      }
+    };
     const deployNeedsSudoTty = script === 'deploy.sh' && process.platform !== 'win32';
     if (deployNeedsSudoTty) {
       try {
@@ -802,13 +810,12 @@ function runScript(script) {
       p.stdout?.on('data', (c) => { logs += String(c); if (logs.length > 20000) logs = logs.slice(-20000); });
       p.stderr?.on('data', (c) => { logs += String(c); if (logs.length > 20000) logs = logs.slice(-20000); });
     }
-    p.on('error', (err) => reject(err));
+    p.on('error', (err) => {
+      cleanupTtyFd();
+      reject(err);
+    });
     p.on('exit', (code) => {
-      if (ttyIn != null) {
-        try {
-          closeSync(ttyIn);
-        } catch {}
-      }
+      cleanupTtyFd();
       if (code === 0) resolve();
       else reject(new Error((logs || script + ' failed').trim()));
     });

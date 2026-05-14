@@ -2,7 +2,7 @@
 
 Small CLI to scaffold Servlet/JSP (Jakarta) web apps and wire up build, deploy, and dev scripts.
 
-**You need:** Node 22.x+ (current LTS), JDK 11+, Maven. Works on Linux, macOS, Windows. Generated projects lean on Node scripts (`.mjs`); `.sh` wrappers are optional.
+**You need:** Node 22.x+ (LTS supported), JDK 11+, Maven. Works on Linux, macOS, Windows. Generated projects lean on Node scripts (`.mjs`); `.sh` wrappers are optional.
 
 ## Install
 

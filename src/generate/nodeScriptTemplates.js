@@ -653,7 +653,12 @@ async function ensureTomcatDevReloadableContext({ destExploded }) {
       async () => {
         await writeFile(ctx, defaultContext, 'utf8');
       },
-      async () => runSudo(['sh', '-c', ': > ' + shellQuote(ctx) + ' && chmod 664 ' + shellQuote(ctx)]),
+      async () =>
+        runSudo([
+          'sh',
+          '-c',
+          'printf %s ' + shellQuote(defaultContext) + ' > ' + shellQuote(ctx) + ' && chmod 664 ' + shellQuote(ctx)
+        ]),
       soft
     );
     return;
