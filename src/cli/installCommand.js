@@ -13,7 +13,7 @@ export async function runInstallCli(tool) {
     .trim()
     .toLowerCase();
   if (!ALLOWED.has(key)) {
-    console.error(pc.red(`Unknown tool "${tool}". Use: maven, tomcat, or wildfly.`));
+    console.error(pc.red(`Unknown tool "${key}". Use: maven, tomcat, or wildfly.`));
     return 1;
   }
   return runInstallTool(key);
