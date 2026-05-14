@@ -2,6 +2,7 @@ import pc from 'picocolors';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { execa } from 'execa';
+import { isUserInterruptExecaError } from './interruptExit.js';
 import { jwebgenScriptsDir } from '../project/jwebgenLayout.js';
 
 export async function runProjectScript(scriptName, args = [], options = {}, deps) {
@@ -67,7 +68,7 @@ export async function runProjectScript(scriptName, args = [], options = {}, deps
       await execa(scriptPath, args, { cwd: projectRoot, stdio, env });
     }
   } catch (error) {
-    if (error?.exitCode === 130 || error?.signal === 'SIGINT') {
+    if (isUserInterruptExecaError(error)) {
       throw error;
     }
     if (error?.code === 'EACCES' || String(error?.message || '').includes('EACCES')) {
