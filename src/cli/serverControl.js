@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { execa } from 'execa';
 import { probeApacheTomcatHome, resolveWildflyPaths } from '../project/serverPaths.js';
@@ -89,7 +90,29 @@ async function runWildflyWindows(action, env = process.env) {
     if (res.error) return false;
     return res.status === 0;
   }
-  // Prefer hidden detached cmd (same strategy as dev worker): avoid `start`, which opens a blank console on many setups.
+  const ps1 = path.join(wildflyHome, 'bin', 'standalone.ps1');
+  if (existsSync(ps1)) {
+    return spawnDetachedAndConfirm(
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-WindowStyle',
+        'Hidden',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        path.resolve(ps1)
+      ],
+      {
+        cwd: wildflyHome,
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true
+      }
+    );
+  }
+  // Fallback: cmd + bat may still open a console when java.exe allocates one.
   return spawnDetachedAndConfirm('cmd.exe', ['/d', '/c', 'call', 'bin\\standalone.bat'], {
     cwd: wildflyHome,
     detached: true,
