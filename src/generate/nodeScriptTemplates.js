@@ -1,5 +1,6 @@
 import { DEV_DASHBOARD_SCRIPT_TEMPLATE, DEV_WORKER_SCRIPT_TEMPLATE } from './watchEmbeddedTemplates.js';
 import { LINUX_DEFAULT_TOMCAT_HOME, LINUX_DEFAULT_WILDFLY_HOME } from '../project/serverPaths.js';
+import { WINDOWS_WILDFLY_PORTABLE_VERSION } from '../project/windowsSetupInstall.js';
 
 /** Embedded in deploy.mjs / dev.mjs; keep aligned with `serverPaths.js` helpers. */
 const EMBEDDED_SERVER_PRESENCE_HELPERS = `
@@ -62,6 +63,28 @@ function looksLikeWildflyHome(homeDir) {
   const root = String(homeDir || '').trim();
   if (!root || !existsSync(root)) return false;
   return existsSync(path.join(root, 'jboss-modules.jar'));
+}
+
+function discoverLinuxWildflyHomeOpt() {
+  if (process.platform !== 'linux') return '';
+  const homeDir = String(process.env.HOME || '').trim();
+  if (!homeDir) return '';
+  const optDir = path.join(homeDir, 'opt');
+  if (!existsSync(optDir)) return '';
+  const preferred = path.join(optDir, 'wildfly-' + '${WINDOWS_WILDFLY_PORTABLE_VERSION}');
+  if (looksLikeWildflyHome(preferred)) return path.resolve(preferred);
+  let best = '';
+  try {
+    for (const ent of readdirSync(optDir, { withFileTypes: true })) {
+      if (!ent.isDirectory() || !ent.name.startsWith('wildfly-')) continue;
+      const full = path.join(optDir, ent.name);
+      if (!looksLikeWildflyHome(full)) continue;
+      if (!best || ent.name.localeCompare(path.basename(best)) > 0) best = full;
+    }
+  } catch {
+    return '';
+  }
+  return best ? path.resolve(best) : '';
 }
 `.trim();
 
@@ -133,7 +156,8 @@ const mvnArgs = ['-DskipTests'];
 if (!verbose) mvnArgs.unshift('-B', '-ntp');
 
 const isDev = String(process.env.JWEBGEN_DEV || '') === '1';
-const args = isDev ? [...mvnArgs, 'package'] : ['clean', ...mvnArgs, 'package'];
+// Dev deploy copies target/<finalName>/ (exploded); plain "package" often only emits a .war.
+const args = isDev ? [...mvnArgs, 'package', 'war:exploded'] : ['clean', ...mvnArgs, 'package'];
 const mavenExecutable = process.platform === 'win32' ? 'mvn.cmd' : 'mvn';
 
 try {
@@ -161,7 +185,7 @@ try {
 export function makeNodeDeployScript() {
   return `${scriptHeader({ name: 'deploy' })}
 import path from 'node:path';
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { cp, mkdir, rm, writeFile, readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { createInterface } from 'node:readline/promises';
@@ -342,7 +366,12 @@ function resolveWildflyPaths(cfg) {
     }
   }
   if (!wildflyHome && process.platform === 'linux' && !explicitDeployments) {
-    wildflyHome = defaultWildflyHome;
+    if (looksLikeWildflyHome(defaultWildflyHome)) {
+      wildflyHome = defaultWildflyHome;
+    } else {
+      const discovered = discoverLinuxWildflyHomeOpt();
+      wildflyHome = discovered || defaultWildflyHome;
+    }
     deployments = path.join(wildflyHome, 'standalone', 'deployments');
   }
   return { wildflyHome, deployments: String(deployments || '').trim() };
@@ -506,10 +535,79 @@ function sudoStderrMentionsNoNewPrivileges(text) {
   return t.includes('no new privileges') || t.includes('no_new_privileges');
 }
 
+function resolveLinuxSudoAskPass() {
+  if (process.platform !== 'linux') return '';
+  const fromEnv = String(process.env.SUDO_ASKPASS || '').trim();
+  if (fromEnv && existsSync(fromEnv)) return fromEnv;
+  const candidates = [
+    '/usr/lib/ssh/x11-ssh-askpass',
+    '/usr/libexec/openssh/ssh-askpass',
+    '/usr/lib/openssh/ssh-askpass',
+    '/usr/bin/ssh-askpass',
+    '/usr/lib/ssh/ssh-askpass',
+    '/usr/bin/ksshaskpass'
+  ];
+  for (const p of candidates) {
+    if (existsSync(p)) return p;
+  }
+  return '';
+}
+
+function linuxSudoNeedsNonTtyAssist() {
+  if (process.platform !== 'linux') return false;
+  if (String(process.env.JWEBGEN_SUDO_INHERIT || '') === '1') return false;
+  return !process.stdin.isTTY;
+}
+
+function linuxSudoPasswordlessWorks() {
+  if (process.platform !== 'linux') return false;
+  return spawnSync('sudo', ['-n', 'true'], { stdio: 'ignore' }).status === 0;
+}
+
+function resolveSudoSpawnOptions(args) {
+  const askPass = resolveLinuxSudoAskPass();
+  if (linuxSudoNeedsNonTtyAssist() && askPass) {
+    return {
+      cmdArgs: ['-A', ...args],
+      env: { ...process.env, SUDO_ASKPASS: askPass },
+      stdio: ['ignore', 'inherit', 'pipe'],
+      displayArgs: ['-A', ...args]
+    };
+  }
+  if (linuxSudoNeedsNonTtyAssist() && !askPass && linuxSudoPasswordlessWorks()) {
+    return {
+      cmdArgs: ['-n', ...args],
+      env: process.env,
+      stdio: ['ignore', 'inherit', 'pipe'],
+      displayArgs: ['-n', ...args]
+    };
+  }
+  return {
+    cmdArgs: args,
+    env: process.env,
+    stdio: ['inherit', 'inherit', 'pipe'],
+    displayArgs: args
+  };
+}
+
 function runSudo(args = []) {
   return new Promise((resolve, reject) => {
+    const askPass = resolveLinuxSudoAskPass();
+    if (process.platform === 'linux' && linuxSudoNeedsNonTtyAssist() && !askPass && !linuxSudoPasswordlessWorks()) {
+      reject(
+        new Error(
+          'sudo cannot prompt for a password in this context (stdin is not a TTY, e.g. jwebgen --dev worker, and no SUDO_ASKPASS helper was found). ' +
+            'Install an askpass program (e.g. openssh-askpass / ssh-askpass) and ensure DISPLAY is set for a GUI prompt, ' +
+            'or export SUDO_ASKPASS to an executable askpass script, ' +
+            'or run deploy once from a normal terminal (jwebgen deploy / npm run deploy), ' +
+            'or set JWEBGEN_SUDO_INHERIT=1 only if stdin is correctly connected to the deploy process.'
+        )
+      );
+      return;
+    }
+    const { cmdArgs, env, stdio, displayArgs } = resolveSudoSpawnOptions(args);
     const stderrChunks = [];
-    const child = spawn('sudo', args, { stdio: ['inherit', 'inherit', 'pipe'], shell: false });
+    const child = spawn('sudo', cmdArgs, { stdio, shell: false, env });
     if (child.stderr) {
       child.stderr.on('data', (c) => {
         stderrChunks.push(c);
@@ -522,7 +620,7 @@ function runSudo(args = []) {
         const errText = Buffer.concat(stderrChunks).toString('utf8');
         const tail = errText.trim().slice(-800);
         const base =
-          'sudo failed (' + (signal ? 'signal ' + signal : 'code ' + code) + '): ' + args.join(' ');
+          'sudo failed (' + (signal ? 'signal ' + signal : 'code ' + code) + '): ' + displayArgs.join(' ');
         const msg = tail ? base + '\\n' + tail : base;
         const err = new Error(msg);
         err.sudoStderr = errText;
@@ -539,14 +637,25 @@ async function ensureDir(p) {
 async function ensureTomcatDevReloadableContext({ destExploded }) {
   const metaInfDir = path.join(destExploded, 'META-INF');
   const ctx = path.join(metaInfDir, 'context.xml');
-  await guardedAcl('deploy (ensure exploded META-INF directory)', async () => {
-    await ensureDir(metaInfDir);
-  }, async () => runSudo(['mkdir', '-p', metaInfDir]));
+  const soft = { softInDev: true };
+  await guardedAcl(
+    'deploy (ensure exploded META-INF directory)',
+    async () => {
+      await ensureDir(metaInfDir);
+    },
+    async () => runSudo(['mkdir', '-p', metaInfDir]),
+    soft
+  );
   if (!existsSync(ctx)) {
     const defaultContext = '<?xml version="1.0" encoding="UTF-8"?>\\n<Context reloadable="true" />\\n';
-    await guardedAcl('deploy (create exploded META-INF/context.xml)', async () => {
-      await writeFile(ctx, defaultContext, 'utf8');
-    }, async () => runSudo(['sh', '-c', ': > ' + shellQuote(ctx) + ' && chmod 664 ' + shellQuote(ctx)]));
+    await guardedAcl(
+      'deploy (create exploded META-INF/context.xml)',
+      async () => {
+        await writeFile(ctx, defaultContext, 'utf8');
+      },
+      async () => runSudo(['sh', '-c', ': > ' + shellQuote(ctx) + ' && chmod 664 ' + shellQuote(ctx)]),
+      soft
+    );
     return;
   }
   let xml = '';
@@ -559,9 +668,14 @@ async function ensureTomcatDevReloadableContext({ destExploded }) {
   const contextOpenTag = xml.match(/<Context\\b[^>]*>/i);
   if (!contextOpenTag) {
     const merged = (xml.trim().length ? xml.trim() + '\\n' : '') + '<Context reloadable="true" />\\n';
-    await guardedAcl('deploy (append reloadable Context metadata)', async () => {
-      await writeFile(ctx, merged, 'utf8');
-    }, async () => runSudo(['sh', '-c', 'printf %s ' + shellQuote(merged) + ' > ' + shellQuote(ctx)]));
+    await guardedAcl(
+      'deploy (append reloadable Context metadata)',
+      async () => {
+        await writeFile(ctx, merged, 'utf8');
+      },
+      async () => runSudo(['sh', '-c', 'printf %s ' + shellQuote(merged) + ' > ' + shellQuote(ctx)]),
+      soft
+    );
     return;
   }
   const updatedTag = /reloadable\\s*=\\s*["'][^"']*["']/i.test(contextOpenTag[0])
@@ -569,9 +683,14 @@ async function ensureTomcatDevReloadableContext({ destExploded }) {
     : contextOpenTag[0].replace('<Context', '<Context reloadable="true"');
   const nextXml = xml.replace(contextOpenTag[0], updatedTag);
   if (nextXml === xml) return;
-  await guardedAcl('deploy (set Tomcat reloadable=true)', async () => {
-    await writeFile(ctx, nextXml, 'utf8');
-  }, async () => runSudo(['sh', '-c', 'printf %s ' + shellQuote(nextXml) + ' > ' + shellQuote(ctx)]));
+  await guardedAcl(
+    'deploy (set Tomcat reloadable=true)',
+    async () => {
+      await writeFile(ctx, nextXml, 'utf8');
+    },
+    async () => runSudo(['sh', '-c', 'printf %s ' + shellQuote(nextXml) + ' > ' + shellQuote(ctx)]),
+    soft
+  );
 }
 
 function selectWarFile({ targetDir, appName, wars }) {
@@ -587,7 +706,8 @@ function selectWarFile({ targetDir, appName, wars }) {
   return '';
 }
 
-async function guardedAcl(opLabel, fn, sudoFn) {
+async function guardedAcl(opLabel, fn, sudoFn, opts) {
+  const softInDev = opts && opts.softInDev === true && isDevMode();
   try {
     await fn();
   } catch (err) {
@@ -597,6 +717,15 @@ async function guardedAcl(opLabel, fn, sudoFn) {
           await sudoFn();
           return;
         } catch (sudoErr) {
+          if (softInDev) {
+            console.warn(
+              '[jwebgen deploy] Optional dev step skipped (' +
+                opLabel +
+                '): could not elevate (sudo). Hot-reload metadata may be incomplete; app files may still be updated.'
+            );
+            console.warn(String(sudoErr.message || sudoErr));
+            return;
+          }
           console.error('Permission denied (' + opLabel + '). Automatic sudo retry failed.');
           console.error(String(sudoErr.message || sudoErr));
           const merged = String(sudoErr.sudoStderr || '') + '\\n' + String(sudoErr.message || '');
@@ -609,6 +738,15 @@ async function guardedAcl(opLabel, fn, sudoFn) {
           }
           process.exit(1);
         }
+      }
+      if (softInDev) {
+        console.warn(
+          '[jwebgen deploy] Optional dev step skipped (' +
+            opLabel +
+            '): permission denied without usable sudo. Hot-reload metadata may be incomplete.'
+        );
+        console.warn(String(err.message || err));
+        return;
       }
       const isWildflyOp = /wildfly/i.test(String(opLabel || ''));
       console.error('Permission denied (' + opLabel + '). The deployment destination must be writable by your user.');
@@ -676,7 +814,19 @@ async function deployTomcat({ cfg, cleanupOnly, appName }) {
   if (isDevMode()) {
     const explodedSrc = path.join(rootDir, 'target', appName);
     if (!existsSync(explodedSrc)) {
-      console.error('Build required: missing ' + explodedSrc);
+      const warGuess = path.join(rootDir, 'target', appName + '.war');
+      console.error('Build required: missing exploded webapp directory: ' + explodedSrc);
+      if (existsSync(warGuess)) {
+        console.error(
+          'Found ' +
+            warGuess +
+            ' but dev deploy needs an exploded tree (target/' +
+            appName +
+            '/). Re-run build with dev (jwebgen --dev) or: mvn package war:exploded'
+        );
+      } else {
+        console.error('Run a successful Maven build from the project root first.');
+      }
       process.exit(1);
     }
     await guardedAcl('deploy (remove old Tomcat WAR)', async () => {
@@ -689,13 +839,18 @@ async function deployTomcat({ cfg, cleanupOnly, appName }) {
       await cp(explodedSrc, destExploded, { recursive: true, force: true });
     }, async () => runSudo(['cp', '-a', explodedSrc, destExploded]));
     await ensureTomcatDevReloadableContext({ destExploded });
-    await guardedAcl('deploy (touch exploded META-INF/context.xml)', async () => {
-      const ctx = path.join(destExploded, 'META-INF', 'context.xml');
-      if (existsSync(ctx)) await writeFile(ctx, await readFile(ctx));
-    }, async () => {
-      const ctx = path.join(destExploded, 'META-INF', 'context.xml');
-      await runSudo(['sh', '-c', 'if [ -f ' + shellQuote(ctx) + ' ]; then touch ' + shellQuote(ctx) + '; fi']);
-    });
+    await guardedAcl(
+      'deploy (touch exploded META-INF/context.xml)',
+      async () => {
+        const ctx = path.join(destExploded, 'META-INF', 'context.xml');
+        if (existsSync(ctx)) await writeFile(ctx, await readFile(ctx));
+      },
+      async () => {
+        const ctx = path.join(destExploded, 'META-INF', 'context.xml');
+        await runSudo(['sh', '-c', 'if [ -f ' + shellQuote(ctx) + ' ]; then touch ' + shellQuote(ctx) + '; fi']);
+      },
+      { softInDev: true }
+    );
     console.log('Deployed to Tomcat (exploded): ' + destExploded);
     return;
   }
@@ -726,12 +881,7 @@ async function deployTomcat({ cfg, cleanupOnly, appName }) {
 }
 
 async function deployWildfly({ cfg, cleanupOnly, appName }) {
-  const explicitDeployments = String(process.env.WILDFLY_DEPLOYMENTS || cfg.WILDFLY_DEPLOYMENTS || '').trim();
-  const defaultWildflyHome = process.platform === 'linux' ? '${LINUX_DEFAULT_WILDFLY_HOME}' : '';
-  const wildflyHome = explicitDeployments
-    ? String(process.env.WILDFLY_HOME || cfg.WILDFLY_HOME || '').trim()
-    : String(process.env.WILDFLY_HOME || cfg.WILDFLY_HOME || defaultWildflyHome).trim();
-  const deployments = explicitDeployments || String(wildflyHome ? path.join(wildflyHome, 'standalone', 'deployments') : '').trim();
+  const { wildflyHome, deployments } = resolveWildflyPaths(cfg);
   const resolvedDeployments = deployments ? path.resolve(deployments) : '';
   const validatedDeployments = validateWildflyDeployments(resolvedDeployments);
   if (!validatedDeployments.ok) {
@@ -820,7 +970,7 @@ export function makeNodeDevScript() {
   // Embed worker/dashboard code so generated projects remain standalone.
   return `${scriptHeader({ name: 'dev' })}
 import path from 'node:path';
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -976,7 +1126,12 @@ function resolveWildflyPaths(cfg) {
     }
   }
   if (!wildflyHome && process.platform === 'linux' && !explicitDeployments) {
-    wildflyHome = defaultWildflyHome;
+    if (looksLikeWildflyHome(defaultWildflyHome)) {
+      wildflyHome = defaultWildflyHome;
+    } else {
+      const discovered = discoverLinuxWildflyHomeOpt();
+      wildflyHome = discovered || defaultWildflyHome;
+    }
     deployments = path.join(wildflyHome, 'standalone', 'deployments');
   }
   return { wildflyHome, deployments: String(deployments || '').trim() };
@@ -1112,15 +1267,136 @@ const env = {
   JWEBGEN_SERVER_TARGET: target,
   JWEBGEN_APP_NAME: appName
 };
+const httpPortN = Number(env.JWEBGEN_HTTP_PORT || 8080) || 8080;
+const proxyPortN = Number(env.JWEBGEN_PROXY_PORT || 8081) || 8081;
+const livePortN = Number(env.JWEBGEN_LIVE_PORT || 35729) || 35729;
+writeFileSync(
+  stateFile,
+  JSON.stringify({
+    phase: 'idle',
+    build: 'pending',
+    deploy: 'pending',
+    server: 'checking',
+    app: 'checking',
+    live: 'starting',
+    url: 'http://localhost:' + proxyPortN + '/' + appName + '/',
+    appUrl: 'http://localhost:' + httpPortN + '/' + appName + '/',
+    proxyUrl: 'http://localhost:' + proxyPortN + '/' + appName + '/',
+    serverCheckUrl: target === 'wildfly' ? 'http://127.0.0.1:9990' : 'http://127.0.0.1:' + httpPortN,
+    livePort: livePortN,
+    proxyPort: proxyPortN
+  }),
+  'utf8'
+);
 const worker = spawn(process.execPath, [workerScript, stateFile, eventsFile, pauseFile, String(process.pid), commandFile], { cwd: workDir, env, stdio: ['ignore', 'inherit', 'inherit'] });
 const dash = spawn(process.execPath, [dashboardScript, stateFile, pauseFile, commandFile, String(process.pid)], { cwd: workDir, env, stdio: 'inherit' });
+
+function readLinuxPpidMap() {
+  const map = new Map();
+  if (process.platform !== 'linux') return map;
+  let ents = [];
+  try {
+    ents = readdirSync('/proc', { withFileTypes: true });
+  } catch {
+    return map;
+  }
+  for (const ent of ents) {
+    if (!ent.isDirectory() || !/^\\d+$/.test(ent.name)) continue;
+    const pid = Number(ent.name);
+    try {
+      const raw = readFileSync('/proc/' + pid + '/status', 'utf8');
+      const line = raw.split(/\\r?\\n/).find((l) => l.startsWith('PPid:'));
+      if (!line) continue;
+      const ppid = Number(String(line).split(/\\s+/)[1]);
+      if (Number.isFinite(ppid) && ppid > 0) map.set(pid, ppid);
+    } catch {}
+  }
+  return map;
+}
+
+function linuxProcessSubtree(rootPid) {
+  const out = new Set([rootPid]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    const pairs = readLinuxPpidMap();
+    for (const [pid, ppid] of pairs) {
+      if (!out.has(pid) && out.has(ppid)) {
+        out.add(pid);
+        changed = true;
+      }
+    }
+  }
+  return out;
+}
+
+function killLinuxSubtree(rootPid, signal) {
+  if (process.platform !== 'linux' || !Number.isFinite(rootPid) || rootPid < 2) return;
+  const set = linuxProcessSubtree(rootPid);
+  while (set.size) {
+    const pp = readLinuxPpidMap();
+    let leaf = null;
+    for (const pid of set) {
+      let hasChild = false;
+      for (const [c, p] of pp) {
+        if (p === pid && set.has(c)) {
+          hasChild = true;
+          break;
+        }
+      }
+      if (!hasChild) {
+        leaf = pid;
+        break;
+      }
+    }
+    const victim = leaf != null ? leaf : [...set][0];
+    try {
+      process.kill(victim, signal);
+    } catch {}
+    set.delete(victim);
+  }
+}
+
+function sleepBusy(ms) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {}
+}
 
 let shutdownOnce = false;
 const shutdown = (exitCode) => {
   if (shutdownOnce) return;
   shutdownOnce = true;
-  try { worker.kill('SIGTERM'); } catch {}
-  try { dash.kill('SIGTERM'); } catch {}
+  if (process.platform === 'linux') {
+    try {
+      killLinuxSubtree(worker.pid, 'SIGTERM');
+    } catch {}
+    try {
+      killLinuxSubtree(dash.pid, 'SIGTERM');
+    } catch {}
+  } else {
+    try {
+      worker.kill('SIGTERM');
+    } catch {}
+    try {
+      dash.kill('SIGTERM');
+    } catch {}
+  }
+  sleepBusy(280);
+  if (process.platform === 'linux') {
+    try {
+      killLinuxSubtree(worker.pid, 'SIGKILL');
+    } catch {}
+    try {
+      killLinuxSubtree(dash.pid, 'SIGKILL');
+    } catch {}
+  } else {
+    try {
+      worker.kill('SIGKILL');
+    } catch {}
+    try {
+      dash.kill('SIGKILL');
+    } catch {}
+  }
   process.exit(exitCode);
 };
 /** Map child signal-only exit: SIGINT -> 130, SIGTERM -> 143, else treat as failure (1). */

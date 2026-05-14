@@ -1,3 +1,5 @@
+import { WINDOWS_WILDFLY_PORTABLE_VERSION } from '../project/windowsSetupInstall.js';
+
 function shellQuote(value) {
   return `'${String(value).replace(/'/g, `'\"'\"'`)}'`;
 }
@@ -300,9 +302,38 @@ fi
 
 WILDFLY_HOME_INPUT="\${WILDFLY_HOME:-}"
 DEPLOY_DIR_INPUT="\${WILDFLY_DEPLOYMENTS:-}"
+JWEBGEN_WF_OPT_VER='${WINDOWS_WILDFLY_PORTABLE_VERSION}'
+wildfly_discover_home_linux() {
+  if [[ -f "/opt/wildfly/jboss-modules.jar" ]]; then
+    printf '%s' "/opt/wildfly"
+    return
+  fi
+  if [[ -n "\${HOME:-}" ]]; then
+    local pref="\${HOME}/opt/wildfly-\${JWEBGEN_WF_OPT_VER}"
+    if [[ -f "\$pref/jboss-modules.jar" ]]; then
+      printf '%s' "\$pref"
+      return
+    fi
+    local best="" d name
+    shopt -s nullglob
+    for d in "\${HOME}/opt"/wildfly-*; do
+      [[ -d "\$d" && -f "\$d/jboss-modules.jar" ]] || continue
+      name="\$(basename "\$d")"
+      if [[ -z "\$best" || "\$name" > "\$(basename "\$best")" ]]; then
+        best="\$d"
+      fi
+    done
+    shopt -u nullglob
+    if [[ -n "\$best" ]]; then
+      printf '%s' "\$best"
+      return
+    fi
+  fi
+  printf '%s' "/opt/wildfly"
+}
 WILDFLY_HOME="$WILDFLY_HOME_INPUT"
 if [[ -z "$WILDFLY_HOME" && -z "$DEPLOY_DIR_INPUT" ]]; then
-  WILDFLY_HOME="/opt/wildfly"
+  WILDFLY_HOME="\$(wildfly_discover_home_linux)"
 fi
 DEPLOY_DIR="$DEPLOY_DIR_INPUT"
 if [[ -z "$DEPLOY_DIR" ]]; then
