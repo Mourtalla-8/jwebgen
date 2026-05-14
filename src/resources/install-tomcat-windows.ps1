@@ -71,7 +71,22 @@ function Parse-Sha512FromApacheChecksumFile {
 
 function Get-FileDigestSha512 {
     param([Parameter(Mandatory)][string]$Path)
-    return (Get-FileHash -LiteralPath $Path -Algorithm SHA512).Hash.ToLowerInvariant()
+    if (-not (Test-Path -LiteralPath $Path)) {
+        throw "File not found for hashing"
+    }
+    # Do not rely on Get-FileHash (requires PS 4+ / module load); .NET works on older hosts and constrained shells.
+    $stream = [IO.File]::OpenRead($Path)
+    try {
+        $hasher = [Security.Cryptography.SHA512]::Create()
+        try {
+            $bytes = $hasher.ComputeHash($stream)
+        } finally {
+            $hasher.Dispose()
+        }
+        return ([BitConverter]::ToString($bytes) -replace '-', '').ToLowerInvariant()
+    } finally {
+        $stream.Dispose()
+    }
 }
 
 function Verify-TomcatZipSha512 {
