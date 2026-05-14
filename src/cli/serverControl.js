@@ -92,12 +92,23 @@ async function runWildflyWindows(action, env = process.env) {
   }
   const bat = path.join(wildflyHome, 'bin', 'standalone.bat');
   if (existsSync(bat)) {
-    return spawnDetachedAndConfirm('cmd.exe', ['/d', '/c', 'call', 'bin\\standalone.bat'], {
-      cwd: wildflyHome,
-      detached: true,
-      stdio: 'ignore',
-      windowsHide: true
-    });
+    // Avoid cmd.exe + standalone.bat: that chain often spawns a visible, blocking java.exe console.
+    // Start-Process -WindowStyle Hidden detaches the server without an empty console window.
+    const psCmd =
+      'Start-Process -WindowStyle Hidden -WorkingDirectory ' +
+      JSON.stringify(wildflyHome) +
+      ' -FilePath ' +
+      JSON.stringify(bat);
+    return spawnDetachedAndConfirm(
+      'powershell.exe',
+      ['-NoProfile', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-Command', psCmd],
+      {
+        cwd: wildflyHome,
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true
+      }
+    );
   }
   const ps1 = path.join(wildflyHome, 'bin', 'standalone.ps1');
   if (existsSync(ps1)) {

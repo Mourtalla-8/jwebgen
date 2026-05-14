@@ -1404,11 +1404,13 @@ const shutdown = (exitCode) => {
   }
   process.exit(exitCode);
 };
-/** Map child signal-only exit: SIGINT -> 130, SIGTERM -> 143, else treat as failure (1). */
+/** Map child exit for parent: Windows Ctrl+C uses 0xC000013A; SIG* without code. */
 function childExitToParentCode(code, signal) {
+  if (typeof code === 'number' && (code >>> 0) === 3221225786) return 130;
+  if (code === 130 || code === 143) return code;
   if (code != null) return code;
   if (signal === 'SIGINT') return 130;
-  if (signal === 'SIGTERM') return 143;
+  if (signal === 'SIGTERM' || signal === 'SIGKILL') return 143;
   return 1;
 }
 process.on('SIGINT', () => shutdown(130));

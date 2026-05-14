@@ -195,7 +195,31 @@ function spawnWinServerBatch(home, batchRel) {
 function spawnWinWildflyServer(home) {
   const bat = path.join(home, 'bin', 'standalone.bat');
   if (existsSync(bat)) {
-    return spawnWinServerBatch(home, 'bin\\\\standalone.bat');
+    try {
+      const psCmd =
+        'Start-Process -WindowStyle Hidden -WorkingDirectory ' +
+        JSON.stringify(home) +
+        ' -FilePath ' +
+        JSON.stringify(bat);
+      const ps = spawn(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-WindowStyle',
+          'Hidden',
+          '-ExecutionPolicy',
+          'Bypass',
+          '-Command',
+          psCmd
+        ],
+        { cwd: home, detached: true, stdio: 'ignore', windowsHide: true }
+      );
+      ps.on('error', () => {});
+      ps.unref();
+      return true;
+    } catch {
+      /* fall through to standalone.ps1 */
+    }
   }
   try {
     const ps1 = path.join(home, 'bin', 'standalone.ps1');

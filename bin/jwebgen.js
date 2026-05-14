@@ -62,6 +62,7 @@ import {
   showStatus as showStatusImpl
 } from '../src/cli/projectCommands.js';
 import { runProjectScript as runProjectScriptImpl } from '../src/cli/projectRunner.js';
+import { isUserInterruptExecaError, cliExitCodeForInterrupt } from '../src/cli/interruptExit.js';
 import { CANCEL_STEP, SetupCancelledError, enforceActionPreflight, runSetupAssistant, runSetupCheck } from '../src/cli/preflight.js';
 import { runInstallCli } from '../src/cli/installCommand.js';
 import { runCreateCommand } from '../src/cli/createCommand.js';
@@ -454,9 +455,9 @@ async function runCli() {
 }
 
 runCli().catch((error) => {
-  if (error?.exitCode === 130 || error?.signal === 'SIGINT') {
+  if (isUserInterruptExecaError(error)) {
     console.log(pc.yellow('Operation cancelled.'));
-    process.exit(130);
+    process.exit(cliExitCodeForInterrupt(error));
   }
   if (error?.jwebgenHandled) {
     process.exit(1);
