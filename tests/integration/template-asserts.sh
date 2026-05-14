@@ -125,6 +125,11 @@ assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'JWEBGEN_WILDFLY_USER_OPT_VERSION', '
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'spawnWinWildflyServer', 'worker defines Windows WildFly spawn helper');
 assertContains(
   DEV_WORKER_SCRIPT_TEMPLATE,
+  'Start-Process -WindowStyle Hidden',
+  'worker starts WildFly bat via hidden Start-Process to avoid empty java console windows'
+);
+assertContains(
+  DEV_WORKER_SCRIPT_TEMPLATE,
   "path.join(home, 'bin', 'standalone.bat')",
   'worker probes standalone.bat for Windows WildFly start'
 );
@@ -139,11 +144,15 @@ assertContains(
   const ps1Join = "path.join(home, 'bin', 'standalone.ps1')";
   const iBat = w.indexOf(batJoin);
   const iPs1 = w.indexOf(ps1Join);
+  const iSp = w.indexOf('Start-Process -WindowStyle Hidden');
   if (iBat === -1 || iPs1 === -1) {
     throw new Error('worker template must include both standalone.bat and standalone.ps1 path.join probes');
   }
   if (iBat >= iPs1) {
     throw new Error('worker template must probe standalone.bat before standalone.ps1 (bat-first Windows start)');
+  }
+  if (iSp === -1 || !(iBat < iSp && iSp < iPs1)) {
+    throw new Error('worker template must use Start-Process hidden bat between bat probe and ps1 fallback');
   }
 }
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'server_start_throttled', 'worker throttles rapid Windows server spawn attempts');
