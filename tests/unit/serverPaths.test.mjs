@@ -65,9 +65,16 @@ test('resolveWildflyPaths infers WILDFLY_HOME when only deployments env is set',
 
 test('inferWildflyHomeFromDeployments returns empty for unrelated paths', () => {
   assert.equal(inferWildflyHomeFromDeployments('/var/tmp'), '');
-  const dep = path.join(path.sep, 'x', 'y', 'standalone', 'deployments');
-  const inferred = inferWildflyHomeFromDeployments(dep);
-  assert.match(inferred, new RegExp(`[\\\\/]x[\\\\/]y$`));
+  // Use a real temp tree so path.resolve / drive prefixes match the host OS (Windows CI
+  // would not reliably match a regex anchored to /x/y or \\x\\y).
+  const base = mkdtempSync(path.join(os.tmpdir(), 'jwebgen-infer-wf-'));
+  const dep = path.join(base, 'standalone', 'deployments');
+  try {
+    mkdirSync(dep, { recursive: true });
+    assert.equal(inferWildflyHomeFromDeployments(dep), path.resolve(base));
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
 });
 
 test('looksLikeApacheTomcatHome rejects webapps-only directory trees', () => {
