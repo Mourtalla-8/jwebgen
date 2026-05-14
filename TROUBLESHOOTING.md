@@ -18,7 +18,7 @@ No global install: `npx jwebgen …` from the checkout.
 
 ## Node too old
 
-Need Node **20.19+**. Check with `node -v`.
+Need Node **22.x+** (current LTS). Check with `node -v`.
 
 ## Java / Maven
 
