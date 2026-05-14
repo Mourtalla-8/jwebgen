@@ -1,10 +1,11 @@
-import test from 'node:test';
+import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { runProjectScript } from '../../src/cli/projectRunner.js';
 
+describe('projectRunner', { concurrency: false }, () => {
 test('runProjectScript prints actionable message on EACCES', async () => {
   if (process.platform === 'win32') {
     // Windows does not reliably enforce POSIX exec bits, making EACCES hard to simulate here.
@@ -103,4 +104,5 @@ test('runProjectScript cleanup-dev without sudo marker uses generic failure mess
     console.error = originalError;
     await rm(tmpRoot, { recursive: true, force: true });
   }
+});
 });
