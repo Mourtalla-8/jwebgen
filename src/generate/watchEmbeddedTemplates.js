@@ -193,6 +193,10 @@ function spawnWinServerBatch(home, batchRel) {
   }
 }
 function spawnWinWildflyServer(home) {
+  const bat = path.join(home, 'bin', 'standalone.bat');
+  if (existsSync(bat)) {
+    return spawnWinServerBatch(home, 'bin\\\\standalone.bat');
+  }
   try {
     const ps1 = path.join(home, 'bin', 'standalone.ps1');
     if (existsSync(ps1)) {
@@ -201,7 +205,6 @@ function spawnWinWildflyServer(home) {
         'powershell.exe',
         [
           '-NoProfile',
-          '-NonInteractive',
           '-WindowStyle',
           'Hidden',
           '-ExecutionPolicy',
@@ -218,7 +221,7 @@ function spawnWinWildflyServer(home) {
   } catch {
     /* fall through */
   }
-  return spawnWinServerBatch(home, 'bin\\\\standalone.bat');
+  return false;
 }
 function stopSelectedServer() {
   if (!serverStartedByDev) return;

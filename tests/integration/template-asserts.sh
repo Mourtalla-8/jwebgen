@@ -122,7 +122,7 @@ assertContains(DEV_WORKER_SCRIPT_TEMPLATE, "hasCommand('ss')", 'worker gates ss 
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, "hasCommand('lsof')", 'worker falls back to lsof when ss unavailable');
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'function hasListenerOnPort', 'worker detects listening ports on Windows/macOS');
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'JWEBGEN_WILDFLY_USER_OPT_VERSION', 'worker embeds WildFly user-opt version for HOME discovery');
-assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'spawnWinWildflyServer', 'worker prefers hidden PowerShell WildFly start when standalone.ps1 exists');
+assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'spawnWinWildflyServer', 'worker starts WildFly on Windows via standalone.bat when present');
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'server_start_throttled', 'worker throttles rapid Windows server spawn attempts');
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'async function redeployOnly', 'worker can redeploy without full rebuild');
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'function stopSelectedServer', 'worker stops server started from dev UI');

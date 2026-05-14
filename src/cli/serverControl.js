@@ -90,13 +90,21 @@ async function runWildflyWindows(action, env = process.env) {
     if (res.error) return false;
     return res.status === 0;
   }
+  const bat = path.join(wildflyHome, 'bin', 'standalone.bat');
+  if (existsSync(bat)) {
+    return spawnDetachedAndConfirm('cmd.exe', ['/d', '/c', 'call', 'bin\\standalone.bat'], {
+      cwd: wildflyHome,
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true
+    });
+  }
   const ps1 = path.join(wildflyHome, 'bin', 'standalone.ps1');
   if (existsSync(ps1)) {
     return spawnDetachedAndConfirm(
       'powershell.exe',
       [
         '-NoProfile',
-        '-NonInteractive',
         '-WindowStyle',
         'Hidden',
         '-ExecutionPolicy',
@@ -112,13 +120,7 @@ async function runWildflyWindows(action, env = process.env) {
       }
     );
   }
-  // Fallback: cmd + bat may still open a console when java.exe allocates one.
-  return spawnDetachedAndConfirm('cmd.exe', ['/d', '/c', 'call', 'bin\\standalone.bat'], {
-    cwd: wildflyHome,
-    detached: true,
-    stdio: 'ignore',
-    windowsHide: true
-  });
+  return false;
 }
 
 async function runTomcatUnix(action, env = process.env, platform = process.platform) {
@@ -179,5 +181,8 @@ export async function runGlobalServerCommand(action, target, { platform = proces
     return 1;
   }
   out(`${target} ${action} command sent`);
+  if (action === 'start' && target === 'wildfly' && platform === 'win32') {
+    out('Allow a few seconds for the JVM, then: jwebgen server status wildfly');
+  }
   return 0;
 }
