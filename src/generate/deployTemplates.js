@@ -314,15 +314,11 @@ wildfly_discover_home_linux() {
       printf '%s' "\$pref"
       return
     fi
-    local best="" d name
+    local best=""
     shopt -s nullglob
-    for d in "\${HOME}/opt"/wildfly-*; do
-      [[ -d "\$d" && -f "\$d/jboss-modules.jar" ]] || continue
-      name="\$(basename "\$d")"
-      if [[ -z "\$best" || "\$name" > "\$(basename "\$best")" ]]; then
-        best="\$d"
-      fi
-    done
+    best="\$(for d in "\${HOME}/opt"/wildfly-*; do
+      [[ -d "\$d" && -f "\$d/jboss-modules.jar" ]] && printf '%s\\n' "\$d"
+    done | sort -V | tail -n1)"
     shopt -u nullglob
     if [[ -n "\$best" ]]; then
       printf '%s' "\$best"
@@ -578,7 +574,11 @@ if [[ -z "$TARGET" ]]; then
     mkdir -p "$SCRIPT_DIR/.." 2>/dev/null || true
     if [[ -f "$SCRIPT_DIR/../.jwebgenrc" ]]; then
       if grep -qE '^[[:space:]]*export[[:space:]]+JWEBGEN_SERVER_TARGET=' "$SCRIPT_DIR/../.jwebgenrc" 2>/dev/null; then
-        sed -i -E 's|^[[:space:]]*export[[:space:]]+JWEBGEN_SERVER_TARGET=.*$|export JWEBGEN_SERVER_TARGET="'"$TARGET"'"|' "$SCRIPT_DIR/../.jwebgenrc" 2>/dev/null || true
+        if sed --version >/dev/null 2>&1; then
+          sed -i -E 's|^[[:space:]]*export[[:space:]]+JWEBGEN_SERVER_TARGET=.*$|export JWEBGEN_SERVER_TARGET="'"$TARGET"'"|' "$SCRIPT_DIR/../.jwebgenrc" 2>/dev/null || true
+        else
+          sed -i '' -E 's|^[[:space:]]*export[[:space:]]+JWEBGEN_SERVER_TARGET=.*$|export JWEBGEN_SERVER_TARGET="'"$TARGET"'"|' "$SCRIPT_DIR/../.jwebgenrc" 2>/dev/null || true
+        fi
       else
         printf '\nexport JWEBGEN_SERVER_TARGET="%s"\n' "$TARGET" >> "$SCRIPT_DIR/../.jwebgenrc" 2>/dev/null || true
       fi
