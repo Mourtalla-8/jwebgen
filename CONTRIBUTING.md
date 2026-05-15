@@ -49,6 +49,11 @@ CI publishes with **npm CLI**. npm requires either **2FA** on your account plus 
 
 If the workflow logs show `403 ... Two-factor authentication or granular access token with bypass 2fa`, replace `NPM_TOKEN` with an **Automation**-class token.
 
+If the logs show `403 ... You may not perform that action with these credentials`:
+
+- Granular token: confirm **Packages and scopes** includes **`jwebgen`** with **Read and write** (not read-only).
+- Confirm the npm **user/org** tied to this token **owns or can publish** `jwebgen`. For the **first** npm publish, connect with `npm login` locally as that user once, or publish manually so the name is associated with your account (`npm publish --access public` from a clean checkout). Tokens cannot claim a package name on behalf of a user who lacks publish rights.
+
 ### Optional: version commits on the branch
 
 This repository does **not** use `@semantic-release/git`, so Actions do **not** push a `chore(release)` commit to `main` / `next` (avoids failures on **protected branches** that require PRs). If you want release commits on the branch, add `@semantic-release/git` back in [`.releaserc.json`](.releaserc.json) and grant the releaser permission to bypass branch rules (e.g. allow **GitHub Actions** to bypass for `main` and `next`, or use a PAT with `contents: write` as `GITHUB_TOKEN` for the Release job).
