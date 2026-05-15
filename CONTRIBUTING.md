@@ -17,6 +17,8 @@ npm run check
 
 Touching deploy/dev flows? Run `--new`, `--build`, `--deploy`, `--dev`, `--status` on a machine you have (Linux, macOS, or Windows) with a real or fake server layout.
 
-Target branch is usually `develop`; follow whatever branch rules the repo uses. Release: bump version + `CHANGELOG.md`, tag on `main` when that’s the project convention.
+Target branch is usually `develop`; follow whatever branch rules the repo uses.
+
+Release (0.x line): bump `version` in `package.json` + `CHANGELOG.md`, merge to `main`, tag `v0.x.y` (e.g. `v0.1.0`). While on 0.x, minor bumps may include breaking CLI changes. Run `npm run release:verify` before tagging.
 
 The npm tarball is only `bin/`, `src/`, and the top-level Markdown docs—tests stay in git, not in `npm pack`.
