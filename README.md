@@ -6,6 +6,15 @@ Small CLI to scaffold Servlet/JSP (Jakarta) web apps and wire up build, deploy, 
 
 ## Install
 
+From npm (Node 22.x+):
+
+```bash
+npm install -g jwebgen
+# or: npx jwebgen@0.1.0 --help
+```
+
+`npx jwebgen` (without a path) resolves the published package from the registry, not a local clone.
+
 From a clone:
 
 ```bash
@@ -15,7 +24,7 @@ npm ci
 npm i -g .
 ```
 
-Without global install, run the local CLI from the repo root, for example `node bin/jwebgen.js --help` or `npx . --help` (plain `npx jwebgen` resolves from the npm registry, not this tree).
+Without global install, run the local CLI from the repo root, for example `node bin/jwebgen.js --help` or `npx . --help`.
 
 ## New project
 
@@ -59,4 +68,4 @@ npm run smoke:global-install
 
 [TROUBLESHOOTING.md](TROUBLESHOOTING.md) · [CONTRIBUTING.md](CONTRIBUTING.md)
 
-Releases: tag `vX.Y.Z`; workflows live under `.github/workflows/`.
+Releases: tag `v0.x.y` on `main` (0.x = unstable API); workflows live under `.github/workflows/`.

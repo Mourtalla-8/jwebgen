@@ -1,6 +1,6 @@
 {
   "name": "jwebgen",
-  "version": "2.2.1",
+  "version": "0.1.0",
   "description": "CLI to scaffold Jakarta Servlet/JSP apps with build, deploy, and dev scripts.",
   "type": "module",
   "bin": {
@@ -9,6 +9,7 @@
   "files": [
     "bin",
     "src",
+    "LICENSE",
     "README.md",
     "TROUBLESHOOTING.md",
     "CHANGELOG.md",
@@ -27,6 +28,17 @@
   },
   "engines": {
     "node": ">=22.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Mourtalla-8/jwebgen.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Mourtalla-8/jwebgen/issues"
+  },
+  "homepage": "https://github.com/Mourtalla-8/jwebgen#readme",
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
     "@clack/prompts": "^1.2.0",
