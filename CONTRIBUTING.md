@@ -54,6 +54,13 @@ If the logs show `403 ... You may not perform that action with these credentials
 - Granular token: confirm **Packages and scopes** includes **`jwebgen`** with **Read and write** (not read-only).
 - Confirm the npm **user/org** tied to this token **owns or can publish** `jwebgen`. For the **first** npm publish, connect with `npm login` locally as that user once, or publish manually so the name is associated with your account (`npm publish --access public` from a clean checkout). Tokens cannot claim a package name on behalf of a user who lacks publish rights.
 
+If the logs show `npm error code EOTP` / **This operation requires a one-time password**:
+
+- GitHub Actions cannot complete interactive OTP — the secret is **not** using a publish-capable **Automation** token, or the value is wrong (e.g. truncated, extra spaces/newlines, or not the token string itself).
+- Regenerate a **Granular** token with type **Automation** (not “Publish” only) and paste only the token (often starts with `npm_`).
+
+If `workflow_dispatch` finishes green but nothing appears on npm, check the job log for **There are no relevant changes** — semantic-release only publishes when there are `fix` / `feat` / etc. commits since the last **git** release tag; `docs:` merge alone does not trigger a release.
+
 ### Optional: version commits on the branch
 
 This repository does **not** use `@semantic-release/git`, so Actions do **not** push a `chore(release)` commit to `main` / `next` (avoids failures on **protected branches** that require PRs). If you want release commits on the branch, add `@semantic-release/git` back in [`.releaserc.json`](.releaserc.json) and grant the releaser permission to bypass branch rules (e.g. allow **GitHub Actions** to bypass for `main` and `next`, or use a PAT with `contents: write` as `GITHUB_TOKEN` for the Release job).
