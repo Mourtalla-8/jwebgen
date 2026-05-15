@@ -1406,6 +1406,7 @@ const shutdown = (exitCode) => {
 };
 /** Map child exit for parent: Windows Ctrl+C uses 0xC000013A; SIG* without code. */
 function childExitToParentCode(code, signal) {
+  if (shutdownOnce) return 130;
   if (typeof code === 'number' && (code >>> 0) === 3221225786) return 130;
   if (code === 130 || code === 143) return code;
   if (code != null) return code;

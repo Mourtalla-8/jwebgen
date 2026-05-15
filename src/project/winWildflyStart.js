@@ -1,8 +1,16 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 
-/** cmd.exe argv: detached minimized window, same pattern as Tomcat startup.bat + start. */
-export const WIN_WILDFLY_START_CMD_ARGS = ['/d', '/c', 'start', '', '/MIN', 'call', 'bin\\standalone.bat'];
+/** cmd.exe argv: start minimized console running standalone.bat from bin (no call — avoids interactive pause). */
+export const WIN_WILDFLY_START_CMD_ARGS = ['/d', '/c', 'start', '', '/MIN', 'standalone.bat'];
+
+/**
+ * @param {string} wildflyHome
+ * @returns {string}
+ */
+export function winWildflyBinDir(wildflyHome) {
+  return path.join(String(wildflyHome || '').trim(), 'bin');
+}
 
 /**
  * @param {string} wildflyHome
@@ -10,11 +18,12 @@ export const WIN_WILDFLY_START_CMD_ARGS = ['/d', '/c', 'start', '', '/MIN', 'cal
  */
 export function buildWinWildflySpawnOptions(wildflyHome, env = process.env) {
   const home = String(wildflyHome || '').trim();
+  const binDir = winWildflyBinDir(home);
   return {
     command: 'cmd.exe',
     args: WIN_WILDFLY_START_CMD_ARGS,
     options: {
-      cwd: home,
+      cwd: binDir,
       detached: true,
       stdio: 'ignore',
       windowsHide: true,
@@ -82,8 +91,9 @@ export function embedWinWildflySpawnFunctionSource() {
   const bat = path.join(home, 'bin', 'standalone.bat');
   if (existsSync(bat)) {
     try {
-      const p = spawn('cmd.exe', ['/d', '/c', 'start', '', '/MIN', 'call', 'bin\\\\standalone.bat'], {
-        cwd: home,
+      const binDir = path.join(home, 'bin');
+      const p = spawn('cmd.exe', ['/d', '/c', 'start', '', '/MIN', 'standalone.bat'], {
+        cwd: binDir,
         detached: true,
         stdio: 'ignore',
         windowsHide: true,

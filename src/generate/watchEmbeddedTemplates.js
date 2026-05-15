@@ -1083,6 +1083,7 @@ function requestParentExit() {
     process.exit(130);
   }
 }
+process.on('SIGINT', () => requestParentExit());
 if (process.stdin.isTTY) {
   process.stdin.setRawMode(true);
   process.stdin.resume();

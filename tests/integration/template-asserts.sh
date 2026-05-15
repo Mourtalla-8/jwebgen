@@ -130,8 +130,13 @@ assertContains(
 );
 assertContains(
   DEV_WORKER_SCRIPT_TEMPLATE,
-  "'start'",
-  'worker uses cmd start before call standalone.bat on Windows'
+  "'standalone.bat'",
+  'worker starts standalone.bat via cmd start on Windows'
+);
+assertContains(
+  DEV_WORKER_SCRIPT_TEMPLATE,
+  'cwd: binDir',
+  'worker runs WildFly start with cwd set to bin directory'
 );
 assertContains(
   DEV_WORKER_SCRIPT_TEMPLATE,
@@ -181,6 +186,11 @@ assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'deployStillInFlight', 'worker health
 assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, 'syncDashStdinWithDeployPause', 'dashboard releases raw stdin while deploy pause file exists');
 assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, "cmd: 'refresh'", 'dashboard queues worker refresh on key f');
 assertContains(DEV_DASHBOARD_SCRIPT_TEMPLATE, 'requestParentExit', 'dashboard raw stdin maps Ctrl+C to parent SIGINT');
+assertContains(
+  DEV_DASHBOARD_SCRIPT_TEMPLATE,
+  "process.on('SIGINT', () => requestParentExit())",
+  'dashboard handles terminal SIGINT like raw-mode Ctrl+C'
+);
 assertContains(
   DEV_DASHBOARD_SCRIPT_TEMPLATE,
   "process.kill(parentPid, 'SIGINT');\n      process.exit(130);",

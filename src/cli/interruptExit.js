@@ -11,6 +11,7 @@ export function isUserInterruptExecaError(error) {
   if (e.signal === 'SIGINT') return true;
   const c = e.exitCode;
   if (c === 130 || c === 143) return true;
+  if (c === 1 && e.signal === 'SIGINT') return true;
   if (typeof c === 'number' && (c >>> 0) === WINDOWS_STATUS_CONTROL_C_EXIT_U) return true;
   return false;
 }
