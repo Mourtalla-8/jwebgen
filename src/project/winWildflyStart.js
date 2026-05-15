@@ -111,7 +111,13 @@ export function embedWinWildflySpawnFunctionSource() {
           '-File',
           ps1Abs
         ],
-        { cwd: home, detached: true, stdio: 'ignore', windowsHide: true }
+        {
+          cwd: home,
+          detached: true,
+          stdio: 'ignore',
+          windowsHide: true,
+          env: { ...process.env, JBOSS_HOME: home, WILDFLY_HOME: home }
+        }
       );
       ps.on('error', () => {});
       ps.unref();
