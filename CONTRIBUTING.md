@@ -25,7 +25,7 @@ Touching deploy/dev flows? Run `--new`, `--build`, `--deploy`, `--dev`, `--statu
 | Prerelease | PR `develop` → `next` | On merge to `next`, **semantic-release** publishes to npm with dist-tag **`next`** and creates a GitHub **prerelease**. |
 | Stable | PR `next` → `main` | On merge to `main`, **semantic-release** publishes to npm as **`latest`** and creates a GitHub **release**. |
 
-Do not push release tags manually; versions and `CHANGELOG.md` are updated by the release bot.
+semantic-release runs on push to **`main`** / **`next`** only (see `.github/workflows/release.yml`). Tags and GitHub Releases are created from CI; **do not push version tags manually.** The checkout used for publishing gets an updated `CHANGELOG.md` and `package.json` **inside the npm tarball only**—the copy on the default branch may lag until someone merges doc updates.
 
 ## Conventional Commits (required for releases)
 
@@ -38,13 +38,20 @@ Releases are driven by [semantic-release](https://semantic-release.gitbook.io/) 
 
 Squash merges: set the **squash commit title** to a valid conventional message so the merged commit is analyzable.
 
-## GitHub settings (maintainers)
+## GitHub Actions secrets (maintainers)
 
-semantic-release pushes a version commit (`package.json`, `package-lock.json`, `CHANGELOG.md`) with `[skip ci]` in the message.
+### `NPM_TOKEN` (required)
 
-On **protected** `main` and `next`, allow **GitHub Actions** (or `github-actions[bot]`) to **bypass** rules for those branches, or the npm publish may succeed while the git push of the release commit fails. Alternatively use a PAT with `contents: write` as `GITHUB_TOKEN` / `GH_TOKEN` in a custom setup (not configured in this repo by default).
+CI publishes with **npm CLI**. npm requires either **2FA** on your account plus a capable token, or a token that can publish without an interactive OTP.
 
-Ensure **Actions** repository secret **`NPM_TOKEN`** is set (npm automation or publish token) so the Release workflow can run `npm publish`.
+- **Recommended:** create a **Granular Access Token** on [npmjs.com](https://www.npmjs.com/) → *Access tokens* → *Generate new token* → type **Automation**, with **Read and write** on package `jwebgen` (or all packages). Automation tokens can publish when 2FA is enabled on the account.
+- **Classic:** token type **Automation** (legacy) also works for non-interactive publish.
+
+If the workflow logs show `403 ... Two-factor authentication or granular access token with bypass 2fa`, replace `NPM_TOKEN` with an **Automation**-class token.
+
+### Optional: version commits on the branch
+
+This repository does **not** use `@semantic-release/git`, so Actions do **not** push a `chore(release)` commit to `main` / `next` (avoids failures on **protected branches** that require PRs). If you want release commits on the branch, add `@semantic-release/git` back in [`.releaserc.json`](.releaserc.json) and grant the releaser permission to bypass branch rules (e.g. allow **GitHub Actions** to bypass for `main` and `next`, or use a PAT with `contents: write` as `GITHUB_TOKEN` for the Release job).
 
 ## npm package layout
 

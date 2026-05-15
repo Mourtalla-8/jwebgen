@@ -5,6 +5,10 @@ on:
     branches: [main, next]
   workflow_dispatch:
 
+concurrency:
+  group: semantic-release-${{ github.repository }}
+  cancel-in-progress: false
+
 jobs:
   release:
     runs-on: ubuntu-latest
