@@ -1,4 +1,5 @@
 import { WINDOWS_WILDFLY_PORTABLE_VERSION } from '../project/windowsSetupInstall.js';
+import { embedWinWildflySpawnFunctionSource } from '../project/winWildflyStart.js';
 
 export const DEV_WORKER_SCRIPT_TEMPLATE = `import http from 'node:http';
 import crypto from 'node:crypto';
@@ -192,61 +193,7 @@ function spawnWinServerBatch(home, batchRel) {
     return false;
   }
 }
-function spawnWinWildflyServer(home) {
-  const bat = path.join(home, 'bin', 'standalone.bat');
-  if (existsSync(bat)) {
-    try {
-      const psCmd =
-        'Start-Process -WindowStyle Hidden -WorkingDirectory ' +
-        JSON.stringify(home) +
-        ' -FilePath ' +
-        JSON.stringify(bat);
-      const ps = spawn(
-        'powershell.exe',
-        [
-          '-NoProfile',
-          '-WindowStyle',
-          'Hidden',
-          '-ExecutionPolicy',
-          'Bypass',
-          '-Command',
-          psCmd
-        ],
-        { cwd: home, detached: true, stdio: 'ignore', windowsHide: true }
-      );
-      ps.on('error', () => {});
-      ps.unref();
-      return true;
-    } catch {
-      /* fall through to standalone.ps1 */
-    }
-  }
-  try {
-    const ps1 = path.join(home, 'bin', 'standalone.ps1');
-    if (existsSync(ps1)) {
-      const ps1Abs = path.resolve(ps1);
-      const ps = spawn(
-        'powershell.exe',
-        [
-          '-NoProfile',
-          '-WindowStyle',
-          'Hidden',
-          '-ExecutionPolicy',
-          'Bypass',
-          '-File',
-          ps1Abs
-        ],
-        { cwd: home, detached: true, stdio: 'ignore', windowsHide: true }
-      );
-      ps.on('error', () => {});
-      ps.unref();
-      return true;
-    }
-  } catch {
-    /* fall through */
-  }
-  return false;
-}
+${embedWinWildflySpawnFunctionSource()}
 function stopSelectedServer() {
   if (!serverStartedByDev) return;
   try {

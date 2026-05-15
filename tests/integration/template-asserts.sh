@@ -125,8 +125,18 @@ assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'JWEBGEN_WILDFLY_USER_OPT_VERSION', '
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'spawnWinWildflyServer', 'worker defines Windows WildFly spawn helper');
 assertContains(
   DEV_WORKER_SCRIPT_TEMPLATE,
-  'Start-Process -WindowStyle Hidden',
-  'worker starts WildFly bat via hidden Start-Process to avoid empty java console windows'
+  "'/MIN'",
+  'worker starts WildFly via cmd start /MIN to detach standalone.bat'
+);
+assertContains(
+  DEV_WORKER_SCRIPT_TEMPLATE,
+  "'start'",
+  'worker uses cmd start before call standalone.bat on Windows'
+);
+assertContains(
+  DEV_WORKER_SCRIPT_TEMPLATE,
+  'JBOSS_HOME: home',
+  'worker passes JBOSS_HOME when spawning WildFly on Windows'
 );
 assertContains(
   DEV_WORKER_SCRIPT_TEMPLATE,
@@ -144,15 +154,19 @@ assertContains(
   const ps1Join = "path.join(home, 'bin', 'standalone.ps1')";
   const iBat = w.indexOf(batJoin);
   const iPs1 = w.indexOf(ps1Join);
-  const iSp = w.indexOf('Start-Process -WindowStyle Hidden');
+  const iMin = w.indexOf("'/MIN'");
+  const iStart = w.indexOf("'start'");
   if (iBat === -1 || iPs1 === -1) {
     throw new Error('worker template must include both standalone.bat and standalone.ps1 path.join probes');
   }
   if (iBat >= iPs1) {
     throw new Error('worker template must probe standalone.bat before standalone.ps1 (bat-first Windows start)');
   }
-  if (iSp === -1 || !(iBat < iSp && iSp < iPs1)) {
-    throw new Error('worker template must use Start-Process hidden bat between bat probe and ps1 fallback');
+  if (iMin === -1 || iStart === -1 || !(iBat < iStart && iStart < iPs1)) {
+    throw new Error('worker template must use cmd start /MIN for bat before ps1 fallback');
+  }
+  if (w.includes('Start-Process -WindowStyle Hidden') && w.indexOf('Start-Process') < iPs1) {
+    throw new Error('worker template must not use Start-Process on standalone.bat (unreliable on Windows)');
   }
 }
 assertContains(DEV_WORKER_SCRIPT_TEMPLATE, 'server_start_throttled', 'worker throttles rapid Windows server spawn attempts');

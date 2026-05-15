@@ -1,9 +1,10 @@
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { execa } from 'execa';
+import pc from 'picocolors';
 import { probeApacheTomcatHome, resolveWildflyPaths } from '../project/serverPaths.js';
 import { probeTomcatRuntime, probeWildflyRuntime } from '../project/serverRuntimeProbe.js';
+import { tryStartWildflyWindowsDetached } from '../project/winWildflyStart.js';
 
 const TOMCAT_SERVICE_CANDIDATES = ['Tomcat10', 'tomcat10', 'Tomcat', 'tomcat'];
 const SPAWN_CONFIRM_TIMEOUT_MS = 2000;
@@ -90,48 +91,7 @@ async function runWildflyWindows(action, env = process.env) {
     if (res.error) return false;
     return res.status === 0;
   }
-  const bat = path.join(wildflyHome, 'bin', 'standalone.bat');
-  if (existsSync(bat)) {
-    // Avoid cmd.exe + standalone.bat: that chain often spawns a visible, blocking java.exe console.
-    // Start-Process -WindowStyle Hidden detaches the server without an empty console window.
-    const psCmd =
-      'Start-Process -WindowStyle Hidden -WorkingDirectory ' +
-      JSON.stringify(wildflyHome) +
-      ' -FilePath ' +
-      JSON.stringify(bat);
-    return spawnDetachedAndConfirm(
-      'powershell.exe',
-      ['-NoProfile', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-Command', psCmd],
-      {
-        cwd: wildflyHome,
-        detached: true,
-        stdio: 'ignore',
-        windowsHide: true
-      }
-    );
-  }
-  const ps1 = path.join(wildflyHome, 'bin', 'standalone.ps1');
-  if (existsSync(ps1)) {
-    return spawnDetachedAndConfirm(
-      'powershell.exe',
-      [
-        '-NoProfile',
-        '-WindowStyle',
-        'Hidden',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-File',
-        path.resolve(ps1)
-      ],
-      {
-        cwd: wildflyHome,
-        detached: true,
-        stdio: 'ignore',
-        windowsHide: true
-      }
-    );
-  }
-  return false;
+  return tryStartWildflyWindowsDetached(wildflyHome, env, spawnDetachedAndConfirm);
 }
 
 async function runTomcatUnix(action, env = process.env, platform = process.platform) {
@@ -194,6 +154,15 @@ export async function runGlobalServerCommand(action, target, { platform = proces
   out(`${target} ${action} command sent`);
   if (action === 'start' && target === 'wildfly' && platform === 'win32') {
     out('Allow a few seconds for the JVM, then: jwebgen server status wildfly');
+    await new Promise((r) => setTimeout(r, 4000));
+    const running = await probeWildflyRuntime({ platform: 'win32' });
+    if (running === false) {
+      out(
+        pc.yellow(
+          'WildFly process was launched but is not responding on port 9990 yet. Check JAVA_HOME, then try running bin\\standalone.bat once from WILDFLY_HOME.'
+        )
+      );
+    }
   }
   return 0;
 }
