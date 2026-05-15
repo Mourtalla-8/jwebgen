@@ -2,12 +2,16 @@ import pc from 'picocolors';
 
 const ACTION_FLAGS = new Set([
   '--help',
+  '--version',
   '--status',
   '--start',
   '--stop',
   '--restart',
   '--reload',
   '--setup',
+  '--install',
+  '--update',
+  '--uninstall',
   '--dev',
   '--watch',
   '--build',
@@ -15,6 +19,7 @@ const ACTION_FLAGS = new Set([
   '--clean',
   '--migrate',
   '--servlet',
+  '--jsp',
   '--new',
   '--create'
 ]);
@@ -22,6 +27,12 @@ const ACTION_FLAGS = new Set([
 export function parseFlags(argv = []) {
   const flags = {
     help: false,
+    version: false,
+    setup: false,
+    install: false,
+    installTool: null,
+    update: false,
+    uninstall: false,
     status: false,
     dev: false,
     build: false,
@@ -30,10 +41,12 @@ export function parseFlags(argv = []) {
     cleanDeploy: false,
     migrate: false,
     servlet: false,
+    jsp: false,
     create: false,
     watch: false,
     yes: false,
     verbose: false,
+    dryRun: false,
     server: null, // tomcat|wildfly|null
     args: []
   };
@@ -45,6 +58,31 @@ export function parseFlags(argv = []) {
 
     if (a === '--help' || a === '-h') {
       flags.help = true;
+      continue;
+    }
+    if (a === '--version' || a === '-V') {
+      flags.version = true;
+      continue;
+    }
+    if (a === '--setup') {
+      flags.setup = true;
+      continue;
+    }
+    if (a === '--install') {
+      flags.install = true;
+      const next = argv[i + 1];
+      if (next && !String(next).startsWith('-')) {
+        flags.installTool = String(next).toLowerCase();
+        i += 1;
+      }
+      continue;
+    }
+    if (a === '--update') {
+      flags.update = true;
+      continue;
+    }
+    if (a === '--uninstall') {
+      flags.uninstall = true;
       continue;
     }
     if (a === '--status') {
@@ -79,6 +117,10 @@ export function parseFlags(argv = []) {
       flags.servlet = true;
       continue;
     }
+    if (a === '--jsp') {
+      flags.jsp = true;
+      continue;
+    }
     if (a === '--new' || a === '-n' || a === '--create' || a === '-c') {
       flags.create = true;
       continue;
@@ -89,6 +131,10 @@ export function parseFlags(argv = []) {
     }
     if (a === '--verbose' || a === '-v') {
       flags.verbose = true;
+      continue;
+    }
+    if (a === '--dry-run') {
+      flags.dryRun = true;
       continue;
     }
     if (a === '--tomcat' || a === '-t') {
@@ -113,6 +159,11 @@ export function parseFlags(argv = []) {
 
   const actions = [
     flags.help ? 'help' : null,
+    flags.version ? 'version' : null,
+    flags.install ? 'install' : null,
+    flags.setup ? 'setup' : null,
+    flags.update ? 'update' : null,
+    flags.uninstall ? 'uninstall' : null,
     flags.status ? 'status' : null,
     (flags.dev || flags.watch) ? 'dev' : null,
     flags.build ? 'build' : null,
@@ -120,6 +171,7 @@ export function parseFlags(argv = []) {
     flags.clean ? 'clean' : null,
     flags.migrate ? 'migrate' : null,
     flags.servlet ? 'servlet' : null,
+    flags.jsp ? 'jsp' : null,
     flags.create ? 'create' : null
   ].filter(Boolean);
 
@@ -142,7 +194,7 @@ export function parseFlags(argv = []) {
 export function formatFlagsHelp({ appName = 'jwebgen' } = {}) {
   const title = pc.bold(pc.cyan(`${appName} - Java Web CLI`));
   const usage = `${pc.bold('Usage:')} ${appName} [option]`;
-  const cmd = (s) => pc.green(s.padEnd(33, ' '));
+  const cmd = (s) => pc.green(s.padEnd(48, ' '));
   const desc = (s) => pc.white(s);
   const section = (name) => `\n${pc.bold(pc.yellow(name))}`;
   return [
@@ -150,8 +202,15 @@ export function formatFlagsHelp({ appName = 'jwebgen' } = {}) {
     usage,
     section('Main Commands'),
     `  ${cmd('--help, -h')}${desc('Show this help message.')}`,
+    `  ${cmd('--version, -V')}${desc('Show jwebgen version.')}`,
+    `  ${cmd('--setup [--dry-run]')}${desc('Run setup diagnostics + guided safe actions; --dry-run previews installs only (no commands run).')}`,
+    `  ${cmd('--install <maven|tomcat|wildfly>')}${desc('Non-interactive install (portable scripts on Windows; package managers on Linux/macOS when detected). Java: use --setup, not --install.')}`,
+    `  ${cmd('server <start|stop|status> <tomcat|wildfly>')}${desc('Global server control (systemd/services on Linux/Windows when present; startup scripts as fallback).')}`,
+    `  ${cmd('--update')}${desc('Show safe update guidance for global installs.')}`,
+    `  ${cmd('--uninstall')}${desc('Show safe uninstall guidance for global installs.')}`,
     `  ${cmd('--status')}${desc('Show project status.')}`,
     `  ${cmd('--dev')}${desc('Start dev loop in current project.')}`,
+    `  ${cmd('--verbose, -v')}${desc('Enable verbose mode for applicable actions (e.g. --dev).')}`,
     `  ${cmd('--watch')}${desc('Alias for --dev.')}`,
     `  ${cmd('--build')}${desc('Run project build script.')}`,
     `  ${cmd('--deploy')}${desc('Run project deploy script.')}`,
@@ -159,6 +218,7 @@ export function formatFlagsHelp({ appName = 'jwebgen' } = {}) {
     `  ${cmd('--clean --deploy')}${desc('Clean deployed app on selected server (current project only).')}`,
     `  ${cmd('--migrate, -m')}${desc('Upgrade a legacy jwebgen project.')}`,
     `  ${cmd('--servlet <Name>')}${desc('Create a servlet (class name auto-normalized).')}`,
+    `  ${cmd('--jsp <name>')}${desc('Create a JSP under WEB-INF/jsp (adds .jsp if missing).')}`,
     section('Project Creation'),
     `  ${cmd('--new, -n <projectName>')}${desc('Create a new project (interactive by default).')}`,
     `  ${cmd('--create, -c <projectName>')}${desc('Alias for --new.')}`,
@@ -167,7 +227,11 @@ export function formatFlagsHelp({ appName = 'jwebgen' } = {}) {
     section('Dev Note'),
     `  ${desc('If multiple servers/services listen on port 8080 on the same machine,')}`,
     `  ${desc('dev/deploy can fail with port conflicts. Keep only one HTTP server active')}`,
-    `  ${desc('or set another app port with JWEBGEN_HTTP_PORT.')}`
+    `  ${desc('or set another app port with JWEBGEN_HTTP_PORT.')}`,
+    section('Server paths (all OS)'),
+    `  ${desc('Tomcat: set TOMCAT_HOME / CATALINA_HOME to the real install (contains lib/catalina.jar).')}`,
+    `  ${desc('WildFly: set WILDFLY_HOME or WILDFLY_DEPLOYMENTS (…/standalone/deployments).')}`,
+    `  ${desc('Linux: common distro paths are probed; macOS: Homebrew tomcat@10 / wildfly-as libexec when present.')}`
   ].join('\n');
 }
 

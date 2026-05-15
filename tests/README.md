@@ -1,24 +1,12 @@
-# Internal Test Harness
+# Tests
 
-This directory contains the internal generator validation harness, independent from `projectTest`.
+| Command | What it runs |
+|---------|----------------|
+| `npm run test:unit` | Unit tests |
+| `npm run test` | Unit + golden + integration matrix |
+| `bash ./tests/golden-check.sh` | Fixture shell syntax |
+| `bash ./tests/integration/template-asserts.sh` | Template strings |
+| `bash ./tests/smoke-generated-project.sh` | Create + smoke (needs JDK, Maven) |
+| `npm run smoke:global-install` | Global `npm i -g .` smoke |
 
-## Scripts
-
-- `tests/golden-check.sh`  
-  Verifies golden snapshots of generated files.
-
-- `tests/integration/run-matrix.sh`  
-  Runs a deterministic matrix with system shims.
-
-## Expected fixtures
-
-- `tests/fixtures-current/tomcat/`
-- `tests/fixtures-current/wildfly/`
-
-Each fixture contains at least:
-- `.jwebgen/DEV.md`
-- `.jwebgen/scripts/build.sh`
-- `.jwebgen/scripts/deploy.sh`
-- `.jwebgen/scripts/dev.sh`
-- `.jwebgen/scripts/watch.sh`
-
+Fixtures: `tests/fixtures-current/tomcat/` and `wildfly/` (`.jwebgen/scripts/*.sh`, `.jwebgen/DEV.md`).

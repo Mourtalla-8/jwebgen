@@ -10,15 +10,7 @@ import {
   note
 } from '@clack/prompts';
 import pc from 'picocolors';
-import {
-  gitignore,
-  helloServlet,
-  indexJsp,
-  pomXml,
-  readmeMd,
-  tomcatContextXmlDev,
-  webXml
-} from '../src/templates.js';
+import { gitignore, helloServlet, indexJsp, pomXml, readmeMd, tomcatContextXmlDev, webXml } from '../src/templates.js';
 import {
   slugifyArtifactId as slugifyArtifactIdImpl,
   normalizePackageCandidate as normalizePackageCandidateImpl,
@@ -40,6 +32,9 @@ import {
   makeLiveReloadServerScript as makeLiveReloadServerScriptImpl,
   makeLiveReloadSnippet as makeLiveReloadSnippetImpl,
   makeAddServletScript as makeAddServletScriptImpl,
+  makeAddJspScript as makeAddJspScriptImpl,
+  makeAddServletNodeScript as makeAddServletNodeScriptImpl,
+  makeAddJspNodeScript as makeAddJspNodeScriptImpl,
   makeDevMd as makeDevMdImpl
 } from '../src/generate/devAssets.js';
 import {
@@ -48,15 +43,18 @@ import {
   makeDeployServerScript as makeDeployServerScriptImpl,
   makeDeploySelectorScript as makeDeploySelectorScriptImpl,
   makeDevScript as makeDevScriptImpl,
-  makeWatchScript as makeWatchScriptImpl
+  makeWatchScript as makeWatchScriptImpl,
+  makeNodeBuildScript as makeNodeBuildScriptImpl,
+  makeNodeDeployScript as makeNodeDeployScriptImpl,
+  makeNodeDevScript as makeNodeDevScriptImpl,
+  makeNodeWatchScript as makeNodeWatchScriptImpl
 } from '../src/generate/scriptTemplates.js';
 import { parseFlags, formatFlagsHelp, isLikelyLegacySubcommand } from '../src/cli/flags.js';
 import { detectLegacyProjectIssues as detectLegacyProjectIssuesModule } from '../src/project/legacyDetection.js';
 import {
   findProjectRoot as findProjectRootImpl,
   parseCliOptions as parseCliOptionsImpl,
-  detectServerTargetFromProject as detectServerTargetFromProjectImpl,
-  showHelp as showHelpImpl
+  detectServerTargetFromProject as detectServerTargetFromProjectImpl
 } from '../src/cli/projectCliUtils.js';
 import {
   runClean as runCleanImpl,
@@ -64,15 +62,22 @@ import {
   showStatus as showStatusImpl
 } from '../src/cli/projectCommands.js';
 import { runProjectScript as runProjectScriptImpl } from '../src/cli/projectRunner.js';
+import { isUserInterruptExecaError, cliExitCodeForInterrupt } from '../src/cli/interruptExit.js';
+import { CANCEL_STEP, SetupCancelledError, enforceActionPreflight, runSetupAssistant, runSetupCheck } from '../src/cli/preflight.js';
+import { runInstallCli } from '../src/cli/installCommand.js';
 import { runCreateCommand } from '../src/cli/createCommand.js';
+import { runGlobalServerCommand } from '../src/cli/serverControl.js';
 import { writeFileSafe, makeExecutable } from '../src/cli/fileUtils.js';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { jwebgenConfigPath, jwebgenMetaDir } from '../src/project/jwebgenLayout.js';
+import pkg from '../package.json' with { type: 'json' };
 
 const APP_NAME = 'jwebgen';
+const APP_VERSION = pkg.version;
 const CANONICAL_DEPLOY_SCRIPT = 'deploy.sh';
 const LEGACY_DEPLOY_SCRIPT = 'deploy-tomcat.sh';
+const INSTALLABLE_TOOLS = new Set(['maven', 'tomcat', 'wildfly']);
 
 const SERVER_OPTIONS = [
   { value: 'tomcat', label: 'Tomcat' },
@@ -118,7 +123,14 @@ async function main(cli = {}) {
     makeDeploySelectorScript: makeDeploySelectorScriptImpl,
     makeDevScript: makeDevScriptImpl,
     makeWatchScript: makeWatchScriptImpl,
+    makeNodeBuildScript: makeNodeBuildScriptImpl,
+    makeNodeDeployScript: makeNodeDeployScriptImpl,
+    makeNodeDevScript: makeNodeDevScriptImpl,
+    makeNodeWatchScript: makeNodeWatchScriptImpl,
     makeAddServletScript: ({ basePackage }) => makeAddServletScriptImpl({ basePackage, appName: APP_NAME }),
+    makeAddJspScript: () => makeAddJspScriptImpl({ appName: APP_NAME }),
+    makeAddServletNodeScript: ({ basePackage }) => makeAddServletNodeScriptImpl({ basePackage, appName: APP_NAME }),
+    makeAddJspNodeScript: () => makeAddJspNodeScriptImpl({ appName: APP_NAME }),
     makeLiveReloadClientScript: makeLiveReloadClientScriptImpl,
     makeExecutable,
     ensureBuildTools,
@@ -168,7 +180,14 @@ async function runMigrate() {
     makeDeploySelectorScript: makeDeploySelectorScriptImpl,
     makeDevScript: makeDevScriptImpl,
     makeWatchScript: makeWatchScriptImpl,
+    makeNodeBuildScript: makeNodeBuildScriptImpl,
+    makeNodeDeployScript: makeNodeDeployScriptImpl,
+    makeNodeDevScript: makeNodeDevScriptImpl,
+    makeNodeWatchScript: makeNodeWatchScriptImpl,
     makeAddServletScript: ({ basePackage }) => makeAddServletScriptImpl({ basePackage, appName: APP_NAME }),
+    makeAddJspScript: () => makeAddJspScriptImpl({ appName: APP_NAME }),
+    makeAddServletNodeScript: ({ basePackage }) => makeAddServletNodeScriptImpl({ basePackage, appName: APP_NAME }),
+    makeAddJspNodeScript: () => makeAddJspNodeScriptImpl({ appName: APP_NAME }),
     makeLiveReloadClientScript: makeLiveReloadClientScriptImpl,
     makeExecutable,
     legacyDeployScript: LEGACY_DEPLOY_SCRIPT
@@ -222,11 +241,50 @@ function showHelp() {
   console.log(formatFlagsHelp({ appName: APP_NAME }));
 }
 
+function showVersion() {
+  console.log(`${APP_NAME} ${APP_VERSION}`);
+}
+
+function showServerCommandHelp() {
+  console.log(pc.cyan('Usage:'));
+  console.log('  jwebgen server start <tomcat|wildfly>');
+  console.log('  jwebgen server stop <tomcat|wildfly>');
+  console.log('  jwebgen server status <tomcat|wildfly>');
+}
+
+function showUpdateGuidance() {
+  console.log(pc.cyan('Safe update flow (global install):'));
+  console.log('  npm i -g jwebgen@latest');
+  console.log(pc.cyan('If installed from source checkout:'));
+  console.log('  git pull');
+  console.log('  npm ci');
+  console.log('  npm i -g .');
+}
+
+function showUninstallGuidance() {
+  console.log(pc.cyan('Safe uninstall flow (global install):'));
+  console.log('  npm uninstall -g jwebgen');
+  console.log(pc.cyan('If running from a local checkout only:'));
+  console.log('  remove the clone folder when you no longer need local one-off runs.');
+  console.log(pc.cyan('Optional cleanup: remove old clones or temp projects manually.'));
+}
+
 async function runCli() {
   const [, , ...argv] = process.argv;
   if (argv.length === 0) {
     showHelp();
     return;
+  }
+
+  if (argv[0] === 'server') {
+    const action = String(argv[1] || '').trim().toLowerCase();
+    const target = String(argv[2] || '').trim().toLowerCase();
+    if (!['start', 'stop', 'status'].includes(action) || !['tomcat', 'wildfly'].includes(target)) {
+      showServerCommandHelp();
+      process.exit(1);
+    }
+    const code = await runGlobalServerCommand(action, target);
+    process.exit(code);
   }
 
   if (isLikelyLegacySubcommand(argv[0])) {
@@ -256,6 +314,85 @@ async function runCli() {
     showHelp();
     return;
   }
+  if (action === 'version') return showVersion();
+  if (action === 'install') {
+    const tool = String(flags.installTool || '').trim();
+    if (!tool || !INSTALLABLE_TOOLS.has(tool)) {
+      console.log(pc.red('Usage: jwebgen --install <maven|tomcat|wildfly>'));
+      process.exit(1);
+    }
+    const spin = spinner();
+    spin.start(`Installing ${tool}...`);
+    let code = 1;
+    try {
+      code = await runInstallCli(tool);
+    } finally {
+      spin.stop(code === 0 ? 'Done' : 'Failed');
+    }
+    process.exit(typeof code === 'number' ? code : 1);
+  }
+  if (action === 'setup') {
+    let ok = false;
+    if (process.stdin.isTTY && process.stdout.isTTY) {
+      try {
+        ok = await runSetupAssistant({
+          dryRun: flags.dryRun,
+          verbose: flags.verbose,
+          confirmPrompt: async ({ message, initialValue }) => {
+            const answer = await confirm({ message, initialValue });
+            if (isCancel(answer)) return CANCEL_STEP;
+            return Boolean(answer);
+          },
+          selectPrompt: async ({ message, options }) => {
+            const normalized = (options || []).map((opt) =>
+              opt && typeof opt === 'object' && 'value' in opt && 'label' in opt
+                ? { value: opt.value, label: String(opt.label) }
+                : { value: opt, label: String(opt) }
+            );
+            const answer = await select({ message, options: normalized });
+            if (isCancel(answer)) return CANCEL_STEP;
+            return answer;
+          },
+          onCommandStart: ({ key, method }) => {
+            runCli.__setupSpinner = null;
+            const shell = String(method?.shellCommand || '');
+            const needsSudo =
+              process.platform !== 'win32' && /(^|[\s;|&])sudo(\s|$)/.test(shell);
+            if (needsSudo) {
+              console.log(pc.cyan(`Installing ${key} (sudo may ask for your password)...`));
+              return;
+            }
+            const s = spinner();
+            s.start(`Installing ${key}...`);
+            runCli.__setupSpinner = s;
+          },
+          onCommandEnd: ({ result }) => {
+            const s = runCli.__setupSpinner;
+            runCli.__setupSpinner = null;
+            if (!s) return;
+            if (result?.status === 0) s.stop('Done');
+            else s.stop('Failed');
+          }
+        });
+      } catch (err) {
+        if (err instanceof SetupCancelledError) {
+          console.log(pc.yellow('Setup cancelled.'));
+          process.exit(typeof err.exitCode === 'number' ? err.exitCode : 130);
+        }
+        console.error(pc.red('Setup stopped due to an unexpected error.'));
+        if (flags.verbose && err?.message) console.error(pc.yellow(String(err.message)));
+        process.exit(1);
+      }
+    } else {
+      ok = runSetupCheck({ dryRun: flags.dryRun });
+    }
+    if (!ok) process.exit(1);
+    return;
+  }
+  if (action === 'update') return showUpdateGuidance();
+  if (action === 'uninstall') return showUninstallGuidance();
+
+  enforceActionPreflight(action);
 
   if (action === 'status') return await showStatus();
   if (action === 'clean') {
@@ -282,7 +419,10 @@ async function runCli() {
       process.exit(1);
     }
     const target = await ensureServerTarget({ projectRoot, requestedTarget: flags.server });
-    return await runProjectScript('dev.sh', flags.args, { verbose: flags.verbose, env: { JWEBGEN_SERVER_TARGET: target } });
+    return await runProjectScript('dev.sh', flags.args, {
+      verbose: flags.verbose,
+      env: { JWEBGEN_SERVER_TARGET: target }
+    });
   }
   if (action === 'servlet') {
     if (flags.args.length === 0) {
@@ -290,6 +430,13 @@ async function runCli() {
       process.exit(1);
     }
     return await runProjectScript('add-servlet.sh', flags.args);
+  }
+  if (action === 'jsp') {
+    if (flags.args.length === 0) {
+      console.log(pc.yellow('Usage: jwebgen --jsp <name>'));
+      process.exit(1);
+    }
+    return await runProjectScript('add-jsp.sh', flags.args);
   }
   if (action === 'create') {
     const projectName = flags.args[0] || '';
@@ -308,8 +455,9 @@ async function runCli() {
 }
 
 runCli().catch((error) => {
-  if (error?.exitCode === 130 || error?.signal === 'SIGINT') {
-    process.exit(0);
+  if (isUserInterruptExecaError(error)) {
+    console.log(pc.yellow('Operation cancelled.'));
+    process.exit(cliExitCodeForInterrupt(error));
   }
   if (error?.jwebgenHandled) {
     process.exit(1);

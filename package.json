@@ -1,7 +1,7 @@
 {
   "name": "jwebgen",
-  "version": "2.2.0",
-  "description": "CLI generator for Java web projects (Servlet/JSP).",
+  "version": "0.1.0",
+  "description": "CLI to scaffold Jakarta Servlet/JSP apps with build, deploy, and dev scripts.",
   "type": "module",
   "bin": {
     "jwebgen": "bin/jwebgen.js"
@@ -9,22 +9,36 @@
   "files": [
     "bin",
     "src",
-    "tests",
+    "LICENSE",
     "README.md",
     "TROUBLESHOOTING.md",
     "CHANGELOG.md",
     "CONTRIBUTING.md"
   ],
   "scripts": {
-    "test:unit": "node --test tests/unit/*.test.mjs",
+    "test:unit": "node tests/run-unit.mjs",
     "test": "npm run test:unit && bash ./tests/golden-check.sh && bash ./tests/integration/template-asserts.sh && bash ./tests/integration/run-matrix.sh",
     "check:syntax": "bash ./tests/check-syntax.sh",
+    "check:wording": "bash ./tests/check-wording.sh",
     "lint": "eslint .",
-    "check": "npm run check:syntax && npm run lint && npm run test",
+    "smoke:generated": "bash ./tests/smoke-generated-project.sh",
+    "smoke:global-install": "node tests/install-global-smoke.mjs",
+    "check": "npm run check:syntax && npm run check:wording && npm run lint && npm run test",
     "release:verify": "npm pack --dry-run >/dev/null && npm run check"
   },
   "engines": {
-    "node": ">=18.19.0"
+    "node": ">=22.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Mourtalla-8/jwebgen.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Mourtalla-8/jwebgen/issues"
+  },
+  "homepage": "https://github.com/Mourtalla-8/jwebgen#readme",
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
     "@clack/prompts": "^1.2.0",

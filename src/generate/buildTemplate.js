@@ -14,7 +14,8 @@ fi
 cd "$ROOT_DIR"
 if [[ "\${JWEBGEN_DEV:-0}" = "1" ]]; then
   # In dev mode, avoid "clean" to preserve incremental builds (much faster).
-  mvn "\${MVN_COMMON_ARGS[@]}" package
+  # Dev deploy expects target/<finalName>/ (exploded); add war:exploded after package.
+  mvn "\${MVN_COMMON_ARGS[@]}" package war:exploded
 else
   mvn clean "\${MVN_COMMON_ARGS[@]}" package
 fi

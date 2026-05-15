@@ -6,6 +6,25 @@ cd "$ROOT_DIR"
 
 fail() { echo "FAIL: $1" >&2; exit 1; }
 
+mktemp_mjs() {
+  # GNU mktemp supports --suffix; BSD mktemp (macOS) requires XXXXXX at the end.
+  # Keep the resulting filename ending with .mjs so `node --check` treats it as ESM.
+  local tmpdir="${TMPDIR:-/tmp}"
+  if mktemp --version >/dev/null 2>&1; then
+    mktemp --suffix=.mjs "${tmpdir%/}/jwebgen.XXXXXX"
+    return 0
+  fi
+  local base
+  base="$(mktemp -t jwebgen.XXXXXX)"
+  if mv "$base" "$base.mjs"; then
+    printf '%s\n' "$base.mjs"
+    return 0
+  fi
+  echo "FAIL: could not rename temp file to .mjs (BSD mktemp path): $base" >&2
+  rm -f "$base" 2>/dev/null || true
+  return 1
+}
+
 echo "[golden] ensure fixtures exist (tests/fixtures-current)"
 [[ -d "tests/fixtures-current/tomcat/.jwebgen/scripts" ]] || fail "missing tests/fixtures-current/tomcat/.jwebgen/scripts"
 [[ -d "tests/fixtures-current/wildfly/.jwebgen/scripts" ]] || fail "missing tests/fixtures-current/wildfly/.jwebgen/scripts"
@@ -17,8 +36,8 @@ for env in tomcat wildfly; do
   bash -n "tests/fixtures-current/$env/.jwebgen/scripts/dev.sh"
   bash -n "tests/fixtures-current/$env/.jwebgen/scripts/watch.sh"
 
-  worker_tmp="$(mktemp --suffix=.mjs)"
-  dashboard_tmp="$(mktemp --suffix=.mjs)"
+  worker_tmp="$(mktemp_mjs)"
+  dashboard_tmp="$(mktemp_mjs)"
   awk '
     /cat > "\$WORKER_SCRIPT" <<'\''EOF'\''/ { in_worker=1; next }
     /cat > "\$DASHBOARD_SCRIPT" <<'\''EOF'\''/ { in_worker=0; in_dashboard=1; next }

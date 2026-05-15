@@ -48,6 +48,8 @@ export async function dispatchCommand(command, args, handlers) {
       return await runProjectScript('watch.sh', args);
     case 'servlet':
       return await runProjectScript('add-servlet.sh', normalizeServletArgs(args));
+    case 'jsp':
+      return await runProjectScript('add-jsp.sh', args);
     case 'clean':
       return await runClean();
     case 'status':

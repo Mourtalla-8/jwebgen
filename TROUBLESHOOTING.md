@@ -2,69 +2,65 @@
 
 ## `jwebgen: command not found`
 
-- Ensure global install succeeded:
-  - `npm i -g .`
-- Check npm global prefix and bin:
-  - `npm config get prefix`
-  - `ls "$(npm config get prefix)/bin" | grep jwebgen`
+Install: `npm i -g .` from the repo (or your global package).
 
-If `jwebgen` exists there, add this bin directory to your shell `PATH`:
+Find the binary: `npm config get prefix` → look in `bin/` (or the Windows equivalent). Add that folder to `PATH`, or for a quick try:
 
-- zsh:
-  - `echo 'export PATH="$(npm config get prefix)/bin:$PATH"' >> ~/.zshrc`
-  - `source ~/.zshrc`
-- bash:
-  - `echo 'export PATH="$(npm config get prefix)/bin:$PATH"' >> ~/.bashrc`
-  - `source ~/.bashrc`
-- fish:
-  - `set -Ux fish_user_paths (npm config get prefix)/bin $fish_user_paths`
+```bash
+export PATH="$(npm config get prefix)/bin:$PATH"
+```
 
-No global setup alternative:
-- `npx jwebgen --help`
+PowerShell: `$env:Path = "$(npm config get prefix);$env:Path"`
 
-## Node version error
+No global install: `npx jwebgen …` from the checkout.
 
-- `jwebgen` requires Node 18.19+.
-- Check:
-  - `node -v`
-- Upgrade and retry.
+`jwebgen --setup` can print PATH hints; it never edits your shell files for you.
 
-## Java or Maven missing
+## Node too old
 
-- Check:
-  - `javac -version`
-  - `mvn -version`
-- Install missing tool and rerun.
+Need Node **22.x+** (LTS supported). Check with `node -v`.
 
-## Deploy/dev scripts fail on non-Linux
+## Java / Maven
 
-- Generated scripts target Linux/systemd primarily.
-- On macOS/Windows, run app server manually and adapt server paths/env vars.
+`javac -version` and `mvn --version` should work. Setup looks for a real **Apache Maven** on `PATH`, not a random `mvn` shim.
 
-## Permission denied during deploy
+`jwebgen --setup` for a full check; `--setup --dry-run` to preview. In CI/non-interactive mode, setup stays diagnostics-only.
 
-- Some deploy operations require writing to system paths.
-- Refresh sudo session:
-  - `sudo -v`
-- Retry deployment.
+## Windows (PATH, JDK, winget)
 
-## Need to remove deployed app for current project
+Setup runs inside **Node** and only sees the environment of that process. After you change **user or system** `PATH`, `JAVA_HOME`, or `CATALINA_HOME`, fully **restart** the terminal, your IDE, or any parent app, then run `javac -version` in the same place you run `jwebgen`.
 
-- Manual cleanup from project root:
-  - `jwebgen --clean --deploy`
-- Auto cleanup also runs when leaving `jwebgen --dev` (best effort).
+A **JDK** is required (`javac` must work), not a JRE-only install. If `JAVA_HOME` points at a JDK but `javac` is not on `PATH`, set `JAVA_HOME` anyway: diagnostics also look under `%JAVA_HOME%\bin\javac.exe`.
 
-## Port already in use (`8080`, `9990`, live reload ports)
+Tomcat and WildFly checks run `catalina.bat` / `jboss-cli.bat`, which need **Java** available the same way your manual installs do (typically `JAVA_HOME` and/or JDK `bin` on `PATH`).
 
-- Typical case:
-  - Tomcat + WildFly + another local HTTP service are active on the same machine.
-  - More than one service tries to bind `:8080`.
-- Check process owners:
-  - `ss -lntp`
-- Keep only one HTTP server active on `8080` for the current project.
-- In `jwebgen --dev`, remediation now supports:
-  - stopping the respawning systemd service that reclaims the port
-  - validated HTTP port fallback (auto tries 8081..8090 and keeps it only if server/app become reachable)
-- You can still force ports manually with:
-  - `JWEBGEN_HTTP_PORT=8081 jwebgen --dev`
-  - `JWEBGEN_LIVE_PORT=35731 jwebgen --dev`
+If `winget install …` fails on the **msstore** source with a certificate error (`0x8a15005e`), install from the **winget** source only, for example: `winget install --source winget --id EclipseAdoptium.Temurin.21.JDK`. The guided setup suggests commands in that form.
+
+## Deploy / dev on macOS or Windows
+
+Prefer the generated `*.mjs` scripts. Point env at real installs:
+
+- Tomcat: directory with `lib/catalina.jar` and a working `catalina` script.
+- WildFly: root with `jboss-modules.jar`, or set `WILDFLY_DEPLOYMENTS` to `…/standalone/deployments`.
+
+`jwebgen --status` shows what path it resolved.
+
+## “Server missing” but something is installed
+
+Empty `webapps/` trees don’t count. Tomcat must answer a version probe; WildFly needs CLI + layout checks. Packaged servers often need sudo or ACL tweaks to let your user write `webapps` or `standalone/deployments`.
+
+## Permission errors on deploy
+
+Try `sudo -v`, then deploy again. Some paths are root-owned by design.
+
+## Remove deployed app for this project
+
+`jwebgen --clean --deploy`. Leaving `--dev` also tries to clean up (best effort).
+
+## Update / uninstall CLI
+
+`jwebgen --update` and `jwebgen --uninstall` print safe steps. From a clone without PATH: `node bin/jwebgen.js --update`.
+
+## Port busy (8080, 9990, LiveReload)
+
+See what listens: `ss -lntp` (Linux) or your OS equivalent. Run one HTTP server for the app port, or set `JWEBGEN_HTTP_PORT`. LiveReload defaults to `35729`; override with `JWEBGEN_LIVE_PORT` if needed.

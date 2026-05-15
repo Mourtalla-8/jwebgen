@@ -8,11 +8,12 @@ on:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        node-version: [18, 20]
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node-version: ["22", "24"]
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -26,8 +27,95 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run checks
+      - name: CLI install maven (hosted runners)
+        if: runner.os != 'Linux'
+        run: node bin/jwebgen.js --install maven
+
+      - name: Expose Maven PATH for current CI job (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $systemDrive = if ($env:SystemDrive) { $env:SystemDrive } else { 'C:' }
+          $installRoot = Join-Path $systemDrive 'jwebgen'
+          $mavenBin = $null
+          if (Test-Path -LiteralPath $installRoot) {
+            $mavenRoot = Get-ChildItem -Path $installRoot -Directory -Filter 'apache-maven-*' |
+              Sort-Object -Property Name -Descending |
+              Select-Object -First 1
+            if ($mavenRoot) {
+              $mavenBin = Join-Path $mavenRoot.FullName 'bin'
+            }
+          }
+          if (-not $mavenBin) {
+            $mvnCmd = Get-Command mvn -ErrorAction SilentlyContinue
+            if ($mvnCmd) {
+              $mavenBin = Split-Path -Parent $mvnCmd.Source
+            }
+          }
+          if (-not $mavenBin) {
+            throw "Maven binary directory not found under $installRoot and mvn is not available in PATH"
+          }
+          $mavenBin >> $env:GITHUB_PATH
+
+      - name: Verify Maven availability for smoke (macOS/Windows)
+        if: runner.os != 'Linux'
+        run: mvn --version
+
+      - name: Smoke generated project (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: bash ./tests/smoke-generated-project.sh
+
+      - name: Global install smoke (all platforms)
+        run: npm run smoke:global-install
+
+      - name: Run checks (Linux)
+        if: runner.os == 'Linux'
         run: npm run check
 
       - name: Verify package
         run: npm pack --dry-run
+
+      - name: Lint (macOS/Windows)
+        if: runner.os != 'Linux'
+        run: npm run lint
+
+      - name: Unit tests (macOS/Windows)
+        if: runner.os != 'Linux'
+        run: npm run test:unit
+
+      - name: CLI help smoke (macOS/Windows)
+        if: runner.os != 'Linux'
+        run: node bin/jwebgen.js --help
+
+      - name: CLI setup diagnostics (macOS/Windows)
+        if: runner.os != 'Linux'
+        run: |
+          node -e "const cp=require('node:child_process'); const r=cp.spawnSync(process.execPath,['bin/jwebgen.js','--setup','--dry-run'],{stdio:'inherit'}); const code=typeof r.status==='number'?r.status:1; if (code!==0 && code!==1) process.exit(code);"
+
+      - name: Golden fixtures (macOS/Windows)
+        if: runner.os != 'Linux'
+        run: bash ./tests/golden-check.sh
+
+      - name: Template asserts (macOS/Windows)
+        if: runner.os != 'Linux'
+        run: bash ./tests/integration/template-asserts.sh
+
+      - name: CLI new smoke (macOS/Windows)
+        if: runner.os != 'Linux'
+        run: |
+          node -e "const fs=require('node:fs'); const os=require('node:os'); const path=require('node:path'); const cp=require('node:child_process'); const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'jwebgen-smoke-')); cp.execFileSync(process.execPath,[path.join(process.cwd(),'bin','jwebgen.js'),'--new','myapp','--yes'],{cwd:tmp,stdio:'inherit'});"
+
+      - name: Generated Node entrypoints --check (macOS/Windows)
+        if: runner.os != 'Linux'
+        run: |
+          node -e "const fs=require('node:fs'); const os=require('node:os'); const path=require('node:path'); const cp=require('node:child_process'); const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'jwebgen-mjs-')); cp.execFileSync(process.execPath,[path.join(process.cwd(),'bin','jwebgen.js'),'--new','mjsapp','--yes'],{cwd:tmp,stdio:'inherit'}); const d=path.join(tmp,'mjsapp','.jwebgen','scripts'); for (const f of ['build.mjs','deploy.mjs','dev.mjs','watch.mjs']) { cp.execFileSync(process.execPath,['--check',path.join(d,f)],{stdio:'inherit'}); }"
+
+      - name: Windows/macOS servlet and jsp node-script smoke
+        if: runner.os != 'Linux'
+        run: |
+          node -e "const fs=require('node:fs'); const os=require('node:os'); const path=require('node:path'); const cp=require('node:child_process'); const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'jwebgen-servletjsp-')); cp.execFileSync(process.execPath,[path.join(process.cwd(),'bin','jwebgen.js'),'--new','webapp','--yes'],{cwd:tmp,stdio:'inherit'}); const cwd=path.join(tmp,'webapp'); cp.execFileSync(process.execPath,[path.join(process.cwd(),'bin','jwebgen.js'),'--servlet','HelloServlet'],{cwd,stdio:'inherit'}); cp.execFileSync(process.execPath,[path.join(process.cwd(),'bin','jwebgen.js'),'--jsp','home'],{cwd,stdio:'inherit'});"
+
+      - name: Windows status hint parity
+        if: runner.os == 'Windows'
+        run: |
+          node -e "const fs=require('node:fs'); const os=require('node:os'); const path=require('node:path'); const cp=require('node:child_process'); const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'jwebgen-status-')); cp.execFileSync(process.execPath,[path.join(process.cwd(),'bin','jwebgen.js'),'--new','statusapp','--yes'],{cwd:tmp,stdio:'inherit'}); const app=path.join(tmp,'statusapp'); const fake=path.join(tmp,'fake-tomcat'); fs.mkdirSync(path.join(fake,'webapps','statusapp'),{recursive:true}); const out=cp.execFileSync(process.execPath,[path.join(process.cwd(),'bin','jwebgen.js'),'--status'],{cwd:app,encoding:'utf8',env:{...process.env,TOMCAT_HOME:fake,JWEBGEN_SERVER_TARGET:'tomcat'}}); if (out.includes('systemctl')) { throw new Error('Windows status output should not include systemctl hints'); }"

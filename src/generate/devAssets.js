@@ -158,6 +158,7 @@ set -euo pipefail
 
 CLASS_NAME="\${1:-HelloServlet}"
 BASE_NAME="$(printf '%s' "$CLASS_NAME" | sed -E 's/Servlet$//')"
+if [[ -z "$BASE_NAME" ]]; then BASE_NAME="$CLASS_NAME"; fi
 URL_SLUG="$(printf '%s' "$BASE_NAME" | sed -E 's/([A-Z])/-\\1/g' | tr '[:upper:]' '[:lower:]' | sed -E 's/^-+//; s/-+/-/g')"
 URL_PATTERN="/\${URL_SLUG:-hello}"
 
@@ -173,25 +174,31 @@ TARGET_FILE="$PACKAGE_DIR/$CLASS_NAME.java"
 
 mkdir -p "$PACKAGE_DIR"
 
+if [[ -e "$TARGET_FILE" ]]; then
+  echo "Servlet already exists: $TARGET_FILE" >&2
+  exit 1
+fi
+
 cat > "$TARGET_FILE" <<EOF
 package ${defaultWebPackage};
 
 import ${annotationImport}.WebServlet;
+import ${servletImport}.ServletException;
 import ${httpImport}.HttpServlet;
 import ${httpImport}.HttpServletRequest;
 import ${httpImport}.HttpServletResponse;
 import java.io.IOException;
 import java.io.PrintWriter;
 
-@WebServlet(name = "$CLASS_NAME", urlPatterns = "$URL_PATTERN")
+@WebServlet(name = "$CLASS_NAME", urlPatterns = {"$URL_PATTERN"})
 public class $CLASS_NAME extends HttpServlet {
   @Override
-  protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+  protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
     resp.setContentType("text/html; charset=UTF-8");
     try (PrintWriter out = resp.getWriter()) {
       out.println("<!DOCTYPE html>");
-      out.println("<html lang=\\"fr\\">");
-      out.println("<head><meta charset=\\"UTF-8\\"><title>$CLASS_NAME</title></head>");
+      out.println("<html lang=en>");
+      out.println("<head><meta charset=UTF-8><title>$CLASS_NAME</title></head>");
       out.println("<body>");
       out.println("<h1>$CLASS_NAME</h1>");
       out.println("<p>Servlet generated with ${appName}.</p>");
@@ -212,84 +219,223 @@ echo "  jwebgen --dev"
 `;
 }
 
+export function makeAddJspScript({ appName }) {
+  return `#!/usr/bin/env bash
+set -euo pipefail
+
+JSP_NAME="\${1:-index}"
+JSP_NAME="$(printf '%s' "$JSP_NAME" | xargs)"
+if [[ -z "$JSP_NAME" ]]; then
+  echo "Usage: jwebgen --jsp <name>"
+  exit 1
+fi
+if [[ "$JSP_NAME" != *.jsp ]]; then
+  JSP_NAME="\${JSP_NAME}.jsp"
+fi
+if [[ "$JSP_NAME" == */* || "$JSP_NAME" == *".."* ]]; then
+  echo "Invalid JSP name: path segments are not allowed."
+  exit 1
+fi
+if [[ ! "$JSP_NAME" =~ ^[A-Za-z0-9._-]+\\.jsp$ ]]; then
+  echo "Invalid JSP name. Allowed: letters, digits, dot, dash, underscore."
+  exit 1
+fi
+
+SCRIPT_DIR="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+JSP_DIR="$ROOT_DIR/src/main/webapp/WEB-INF/jsp"
+TARGET_FILE="$JSP_DIR/$JSP_NAME"
+BASE_NAME="\${JSP_NAME%.jsp}"
+
+mkdir -p "$JSP_DIR"
+if [[ -e "$TARGET_FILE" ]]; then
+  echo "JSP already exists: $TARGET_FILE"
+  exit 1
+fi
+
+cat > "$TARGET_FILE" <<EOF
+<%@ page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" %>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>$BASE_NAME</title>
+</head>
+<body>
+  <h1>$BASE_NAME</h1>
+  <p>JSP generated with ${appName}.</p>
+</body>
+</html>
+EOF
+
+echo "JSP created: $TARGET_FILE"
+echo "Next steps:"
+echo "  jwebgen --build"
+echo "  jwebgen --deploy"
+echo "Or run continuous mode:"
+echo "  jwebgen --dev"
+`;
+}
+
+export function makeAddServletNodeScript({ basePackage, appName }) {
+  const defaultWebPackage = `${basePackage}.web`;
+  return `#!/usr/bin/env node
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { mkdir, writeFile, access } from 'node:fs/promises';
+
+const CLASS_NAME = String(process.argv[2] || 'HelloServlet').trim();
+if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(CLASS_NAME)) {
+  console.error('Invalid class name. Example: HelloServlet');
+  process.exit(1);
+}
+
+const stripped = CLASS_NAME.replace(/Servlet$/, '');
+const baseForUrl = stripped === '' ? CLASS_NAME : stripped;
+const URL_SLUG = baseForUrl
+  .replace(/([A-Z])/g, '-$1')
+  .toLowerCase()
+  .replace(/^-+/, '')
+  .replace(/-+/g, '-');
+const URL_PATTERN = '/' + (URL_SLUG || 'hello');
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const ROOT_DIR = path.resolve(__dirname, '../..');
+const PACKAGE_DIR = path.join(ROOT_DIR, 'src', 'main', 'java', ${JSON.stringify(packageToPath(defaultWebPackage))});
+const TARGET_FILE = path.join(PACKAGE_DIR, CLASS_NAME + '.java');
+
+const javaSource = [
+  'package ${defaultWebPackage};',
+  '',
+  'import jakarta.servlet.annotation.WebServlet;',
+  'import jakarta.servlet.ServletException;',
+  'import jakarta.servlet.http.HttpServlet;',
+  'import jakarta.servlet.http.HttpServletRequest;',
+  'import jakarta.servlet.http.HttpServletResponse;',
+  'import java.io.IOException;',
+  'import java.io.PrintWriter;',
+  '',
+  '@WebServlet(name = "' + CLASS_NAME + '", urlPatterns = {"' + URL_PATTERN + '"})',
+  'public class ' + CLASS_NAME + ' extends HttpServlet {',
+  '  @Override',
+  '  protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {',
+  '    resp.setContentType("text/html; charset=UTF-8");',
+  '    try (PrintWriter out = resp.getWriter()) {',
+  '      out.println("<!DOCTYPE html>");',
+  '      out.println("<html lang=en>");',
+  '      out.println(String.format("<head><meta charset=UTF-8><title>%s</title></head>", "' + CLASS_NAME + '"));',
+  '      out.println("<body>");',
+  '      out.println("<h1>' + CLASS_NAME + '</h1>");',
+  '      out.println("<p>Servlet generated with ${appName}.</p>");',
+  '      out.println("<p>URL: ' + URL_PATTERN + '</p>");',
+  '      out.println("</body>");',
+  '      out.println("</html>");',
+  '    }',
+  '  }',
+  '}',
+  ''
+].join('\\n');
+
+await mkdir(PACKAGE_DIR, { recursive: true });
+try {
+  await access(TARGET_FILE);
+  console.error('Servlet already exists: ' + TARGET_FILE);
+  process.exit(1);
+} catch {
+  // target does not exist, continue
+}
+await writeFile(TARGET_FILE, javaSource, 'utf8');
+console.log('Servlet created: ' + TARGET_FILE);
+console.log('Next steps:');
+console.log('  jwebgen --build');
+console.log('  jwebgen --deploy');
+console.log('Or run continuous mode:');
+console.log('  jwebgen --dev');
+`;
+}
+
+export function makeAddJspNodeScript({ appName }) {
+  return `#!/usr/bin/env node
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { mkdir, writeFile, access } from 'node:fs/promises';
+
+let jspName = String(process.argv[2] || 'index').trim();
+if (!jspName) {
+  console.error('Usage: jwebgen --jsp <name>');
+  process.exit(1);
+}
+if (!jspName.endsWith('.jsp')) jspName += '.jsp';
+if (jspName.includes('/') || jspName.includes('\\\\') || jspName.includes('..')) {
+  console.error('Invalid JSP name: path segments are not allowed.');
+  process.exit(1);
+}
+if (!/^[A-Za-z0-9._-]+\\.jsp$/.test(jspName)) {
+  console.error('Invalid JSP name. Allowed: letters, digits, dot, dash, underscore.');
+  process.exit(1);
+}
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const ROOT_DIR = path.resolve(__dirname, '../..');
+const JSP_DIR = path.join(ROOT_DIR, 'src', 'main', 'webapp', 'WEB-INF', 'jsp');
+const TARGET_FILE = path.join(JSP_DIR, jspName);
+const BASE_NAME = jspName.slice(0, -4);
+
+await mkdir(JSP_DIR, { recursive: true });
+try {
+  await access(TARGET_FILE);
+  console.error('JSP already exists: ' + TARGET_FILE);
+  process.exit(1);
+} catch {
+  // target does not exist, continue
+}
+
+const content = [
+  '<%@ page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" %>',
+  '<!DOCTYPE html>',
+  '<html lang="en">',
+  '<head>',
+  '  <meta charset="UTF-8">',
+  '  <title>' + BASE_NAME + '</title>',
+  '</head>',
+  '<body>',
+  '  <h1>' + BASE_NAME + '</h1>',
+  '  <p>JSP generated with ${appName}.</p>',
+  '</body>',
+  '</html>',
+  ''
+].join('\\n');
+
+await writeFile(TARGET_FILE, content, 'utf8');
+console.log('JSP created: ' + TARGET_FILE);
+console.log('Next steps:');
+console.log('  jwebgen --build');
+console.log('  jwebgen --deploy');
+console.log('Or run continuous mode:');
+console.log('  jwebgen --dev');
+`;
+}
+
 export function makeDevMd({ appName, serverTarget }) {
-  const prereqServer =
+  const serverBlurb =
     serverTarget === 'tomcat'
-      ? `## Prerequisites (Tomcat)
-
-- Tomcat installed + started
-- Optional variable: \`TOMCAT10\` (default: \`/var/lib/tomcat10\`)
-
-Commands (depending on your distro):
-
-\`\`\`bash
-# Debian/Ubuntu
-sudo apt install tomcat10
-sudo systemctl start tomcat10
-\`\`\`
-
-Sur Arch :
-
-\`\`\`bash
-sudo pacman -S tomcat10
-sudo systemctl start tomcat10
-\`\`\``
+      ? 'Run Tomcat; set `TOMCAT_HOME` / `CATALINA_HOME` if detection misses it. Dev mode uses exploded sync + reloadable context when the template sets it.'
       : serverTarget === 'wildfly'
-        ? `## Prerequisites (WildFly)
+        ? 'Run WildFly; set `WILDFLY_HOME` or `WILDFLY_DEPLOYMENTS` if needed. Dev drops the WAR and touches `.dodeploy`.'
+        : 'First `jwebgen --dev` or `--deploy` will ask Tomcat vs WildFly and write `.jwebgen/.jwebgenrc`.';
 
-- WildFly installed and started
-- Useful variables:
-  - \`WILDFLY_HOME\` (default: \`/opt/wildfly\`)
-  - \`WILDFLY_DEPLOYMENTS\` (default: \`$WILDFLY_HOME/standalone/deployments\`)`
-        : `## Prerequisites (server to choose)
+  return `# Dev — ${appName}
 
-- No server was selected during quick project creation.
-- On first \`jwebgen --dev\` or \`jwebgen --deploy\`, jwebgen will ask for Tomcat or WildFly and save the choice.`;
+App URL: \`http://localhost:8080/${appName}/\` (change with \`JWEBGEN_HTTP_PORT\`).
 
-  const devNotes =
-    serverTarget === 'tomcat'
-      ? `- In dev mode, deployment is **exploded** + incremental sync (rsync when available), without restarting Tomcat.
-- \`src/main/webapp/META-INF/context.xml\` enables \`reloadable="true"\` to help Tomcat reload context changes.`
-        : serverTarget === 'wildfly'
-        ? `- In dev mode, the script deploys the WAR to the deployments directory and triggers \`.dodeploy\`.`
-        : `- In dev mode, target server is selected at first run and stored in \`.jwebgen/.jwebgenrc\`.`;
+${serverBlurb}
 
-  return `# Quick Development
+Need JDK 11+, Maven, and Node (scripts + LiveReload). Entrypoints: \`.jwebgen/scripts/build\`, \`deploy\`, \`dev\`, \`watch\` — prefer \`*.mjs\` when present. Add code with \`jwebgen --servlet\` / \`jwebgen --jsp\`.
 
-URL de dev stable :
+State files and stubs under \`.jwebgen/\` are recreated by dev/watch; root \`.gitignore\` already ignores most of them.
 
-\`\`\`
-http://localhost:8080/${appName}/
-\`\`\`
-
-${prereqServer}
-
-Ce template est Jakarta-only (Servlet API 6+).
-
-## Required tools
-
-- Java (JDK) 11+
-- Maven (\`mvn\`)
-- Node.js (**uniquement** pour \`./.jwebgen/scripts/dev.sh\` et le reload navigateur)
-
-Generated scripts:
-
-- \`./.jwebgen/scripts/build.sh\` : compile le WAR
-- \`./.jwebgen/scripts/deploy.sh\` : deploys to the target server
-- \`./.jwebgen/scripts/dev.sh\` : mode dev continu (watch + rebuild + deploy + reload navigateur)
-- \`./.jwebgen/scripts/watch.sh\` : rebuild + redeploy automatique
-- \`jwebgen --servlet [ClassName]\` : creates a servlet
-
-Contexte du projet :
-
-- stack : modern jakarta
-- target server: ${serverTarget}
-
-Notes :
-
-- ${devNotes}
-- If the target server is unavailable, dev mode offers \`Retry / Help / Quit\` with diagnostics.
-- LiveReload in dev mode uses a local WebSocket server (auto-fallback on port conflict, starts at \`35729\`, configurable via \`JWEBGEN_LIVE_PORT\`).
-- The \`target/\` directory can be removed/recreated at any time
+If the engine is down, the dashboard nudges you; start the server and hit \`[f]\` refresh. LiveReload WebSocket defaults to \`35729\` (\`JWEBGEN_LIVE_PORT\` overrides). \`target/\` is safe to delete.
 `;
 }

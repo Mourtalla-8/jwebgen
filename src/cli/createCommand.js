@@ -38,7 +38,14 @@ export async function runCreateCommand(deps) {
     makeDeploySelectorScript,
     makeDevScript,
     makeWatchScript,
+    makeNodeBuildScript,
+    makeNodeDeployScript,
+    makeNodeDevScript,
+    makeNodeWatchScript,
     makeAddServletScript,
+    makeAddJspScript,
+    makeAddServletNodeScript,
+    makeAddJspNodeScript,
     makeLiveReloadClientScript,
     makeExecutable,
     ensureBuildTools,
@@ -139,7 +146,11 @@ export async function runCreateCommand(deps) {
   const javaDetection = detectJavaCompiler();
 
   if (!javaDetection.present) {
-    console.log(pc.red('Java (JDK) is missing or `javac` cannot be found.'));
+    if (javaDetection.jreOnly) {
+      console.log(pc.red(javaDetection.display || 'JRE without javac'));
+    } else {
+      console.log(pc.red('Java (JDK) is missing or `javac` cannot be found.'));
+    }
     console.log(pc.yellow(`Required install: ${installHint('java')}`));
     console.log(pc.yellow('Creation is stopped until a compatible JDK is available.'));
     process.exit(1);
@@ -258,7 +269,18 @@ export async function runCreateCommand(deps) {
     );
     await writeFileSafe(path.join(scriptsDir, 'dev.sh'), makeDevScript({ serverTarget }));
     await writeFileSafe(path.join(scriptsDir, 'watch.sh'), makeWatchScript());
+    if (typeof makeNodeBuildScript === 'function') await writeFileSafe(path.join(scriptsDir, 'build.mjs'), makeNodeBuildScript());
+    if (typeof makeNodeDeployScript === 'function') await writeFileSafe(path.join(scriptsDir, 'deploy.mjs'), makeNodeDeployScript());
+    if (typeof makeNodeDevScript === 'function') await writeFileSafe(path.join(scriptsDir, 'dev.mjs'), makeNodeDevScript());
+    if (typeof makeNodeWatchScript === 'function') await writeFileSafe(path.join(scriptsDir, 'watch.mjs'), makeNodeWatchScript());
     if (addServlet) await writeFileSafe(path.join(scriptsDir, 'add-servlet.sh'), makeAddServletScript({ basePackage }));
+    if (typeof makeAddJspScript === 'function') await writeFileSafe(path.join(scriptsDir, 'add-jsp.sh'), makeAddJspScript());
+    if (addServlet && typeof makeAddServletNodeScript === 'function') {
+      await writeFileSafe(path.join(scriptsDir, 'add-servlet.mjs'), makeAddServletNodeScript({ basePackage, appName }));
+    }
+    if (typeof makeAddJspNodeScript === 'function') {
+      await writeFileSafe(path.join(scriptsDir, 'add-jsp.mjs'), makeAddJspNodeScript({ appName }));
+    }
     if (serverTarget === 'tomcat' || serverTarget === 'wildfly') {
       await writeFileSafe(path.join(workDir, '.jwebgen', '.jwebgenrc'), `export JWEBGEN_SERVER_TARGET="${serverTarget}"\n`);
     }
@@ -270,7 +292,14 @@ export async function runCreateCommand(deps) {
       '.jwebgen/scripts/deploy-wildfly.sh',
       '.jwebgen/scripts/dev.sh',
       '.jwebgen/scripts/watch.sh',
-      addServlet ? '.jwebgen/scripts/add-servlet.sh' : null
+      typeof makeNodeBuildScript === 'function' ? '.jwebgen/scripts/build.mjs' : null,
+      typeof makeNodeDeployScript === 'function' ? '.jwebgen/scripts/deploy.mjs' : null,
+      typeof makeNodeDevScript === 'function' ? '.jwebgen/scripts/dev.mjs' : null,
+      typeof makeNodeWatchScript === 'function' ? '.jwebgen/scripts/watch.mjs' : null,
+      addServlet ? '.jwebgen/scripts/add-servlet.sh' : null,
+      typeof makeAddJspScript === 'function' ? '.jwebgen/scripts/add-jsp.sh' : null,
+      addServlet && typeof makeAddServletNodeScript === 'function' ? '.jwebgen/scripts/add-servlet.mjs' : null,
+      typeof makeAddJspNodeScript === 'function' ? '.jwebgen/scripts/add-jsp.mjs' : null
     ].filter(Boolean);
     for (const relativePath of scriptFiles) await makeExecutable(path.join(workDir, relativePath));
     await mkdir(path.dirname(targetDir), { recursive: true });
@@ -284,7 +313,7 @@ export async function runCreateCommand(deps) {
     await rm(tempRoot, { recursive: true, force: true });
   }
 
-  console.log(pc.green(`\n✅ Project created: ${targetDir}`));
+  console.log(pc.green(`\nProject created: ${targetDir}`));
   if (buildNow) {
     const { javaOk, mavenOk } = await ensureBuildTools();
     if (!javaOk) console.log(pc.yellow(`Java not found. ${installHint('java')}`));

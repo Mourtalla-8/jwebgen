@@ -1,11 +1,16 @@
-import test from 'node:test';
+import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { runProjectScript } from '../../src/cli/projectRunner.js';
 
+describe('projectRunner', { concurrency: false }, () => {
 test('runProjectScript prints actionable message on EACCES', async () => {
+  if (process.platform === 'win32') {
+    // Windows does not reliably enforce POSIX exec bits, making EACCES hard to simulate here.
+    return;
+  }
   const tmpRoot = await mkdtemp(path.join(os.tmpdir(), 'jwebgen-runner-eacces-'));
   const scriptsDir = path.join(tmpRoot, '.jwebgen', 'scripts');
   await mkdir(scriptsDir, { recursive: true });
@@ -60,7 +65,7 @@ test('runProjectScript prints cleanup sudo guidance for cleanup-dev marker', asy
     );
     const out = lines.join('\n');
     assert.match(out, /Cleanup failed for target server directories/i);
-    assert.match(out, /sudo -v && jwebgen --clean --deploy/);
+    assert.match(out, /sudo -v and retry jwebgen --deploy --cleanup-dev/i);
   } finally {
     console.error = originalError;
     await rm(tmpRoot, { recursive: true, force: true });
@@ -94,9 +99,10 @@ test('runProjectScript cleanup-dev without sudo marker uses generic failure mess
     const out = lines.join('\n');
     assert.match(out, /deploy\.sh failed:/i);
     assert.doesNotMatch(out, /Cleanup failed for target server directories/i);
-    assert.doesNotMatch(out, /sudo -v && jwebgen --clean --deploy/);
+    assert.doesNotMatch(out, /sudo -v and retry jwebgen --deploy --cleanup-dev/i);
   } finally {
     console.error = originalError;
     await rm(tmpRoot, { recursive: true, force: true });
   }
+});
 });

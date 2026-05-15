@@ -224,9 +224,9 @@ show_server_help() {
   fi
   if [[ -n "$DETECT_CONFLICT_PORT" ]]; then
     if [[ "$DETECT_REASON" =~ (is\ not\ running|stopped|inactive|not\ detected) ]]; then
-      action_hint="[d] start server  [f] refresh  [a] help  [q] quit"
+      action_hint="[s] start server  [f] refresh  [a] help  [q] quit"
     elif [[ -n "$DETECT_OWNER_PID" ]]; then
-      action_hint="[k] kill pid $DETECT_OWNER_PID  [s] stop service  [f] refresh  [a] help  [q] quit"
+      action_hint="[k] kill pid $DETECT_OWNER_PID  [v] stop service  [f] refresh  [a] help  [q] quit"
     else
       action_hint="[i] inspect  [x] kill port  [f] refresh  [a] help  [q] quit"
     fi
@@ -238,7 +238,7 @@ show_server_help() {
     return 0
   fi
   if [[ "$DETECT_REASON" =~ (is\ not\ running|stopped|inactive|not\ detected) ]]; then
-    action_hint="[d] start server  [f] refresh  [a] help  [q] quit"
+    action_hint="[s] start server  [f] refresh  [a] help  [q] quit"
     ui_info "Actions auto: $action_hint"
     if [[ "$SERVER_TARGET" = "wildfly" ]]; then
       ui_info "Command: sudo systemctl start wildfly"
@@ -251,7 +251,7 @@ show_server_help() {
       ui_info "Actions auto: $action_hint"
       ui_info "Contexte app: /$APP_NAME/"
     elif [[ "$SERVER_TARGET" = "wildfly" && "$DETECT_REASON" == *"HTTP 000"* ]]; then
-      action_hint="[d] restart server  [f] refresh  [a] help  [q] quit"
+      action_hint="[s] restart server  [f] refresh  [a] help  [q] quit"
       ui_info "Actions auto: $action_hint"
       ui_info "Command: sudo systemctl restart wildfly"
     else
@@ -282,7 +282,7 @@ show_deploy_help() {
 require_node() {
   if ! command -v node >/dev/null 2>&1; then
     ui_err "Node.js is required for dev mode."
-    ui_info "Install Node 18+ and retry (example: nvm install 20)."
+    ui_info "Install Node 22+ (LTS) and retry (example: nvm install 22)."
     exit 1
   fi
 }
@@ -296,12 +296,12 @@ stop_dashboard() {
 }
 start_dashboard() {
   if [[ "$JWEBGEN_VERBOSE" = "1" ]]; then return 0; fi
-  node "$DASHBOARD_SCRIPT" "$STATE_FILE" "$UI_PAUSE_FILE" "$$" 1>&$TTY_OUT_FD 2>&$TTY_OUT_FD &
+  node "$DASHBOARD_SCRIPT" "$STATE_FILE" "$UI_PAUSE_FILE" "$COMMAND_FILE" "$$" 1>&$TTY_OUT_FD 2>&$TTY_OUT_FD &
   DASHBOARD_PID="$!"
 }
 
 start_worker() {
-  node "$WORKER_SCRIPT" "$STATE_FILE" "$EVENTS_FILE" "$UI_PAUSE_FILE" "$$" &
+  node "$WORKER_SCRIPT" "$STATE_FILE" "$EVENTS_FILE" "$UI_PAUSE_FILE" "$$" "$COMMAND_FILE" &
   WORKER_PID="$!"
 }
 restart_worker() {

@@ -2,8 +2,56 @@ import pc from 'picocolors';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { rm, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
-import { execa } from 'execa';
 import { jwebgenConfigPath, jwebgenMetaDir, jwebgenScriptsDir } from '../project/jwebgenLayout.js';
+import { readJwebgenExports } from '../project/jwebgenRc.js';
+import { probeApacheTomcatHome, resolveWildflyPaths } from '../project/serverPaths.js';
+import { probeTomcatRuntime, probeWildflyRuntime } from '../project/serverRuntimeProbe.js';
+
+/** Effective HTTP app port for status URLs (matches deploy/dev tooling). */
+export function resolveStatusHttpPort(cfg = {}) {
+  const fromEnv = String(process.env.JWEBGEN_HTTP_PORT || '').trim();
+  if (fromEnv) return fromEnv;
+  const fromCfg = String(cfg.JWEBGEN_HTTP_PORT || '').trim();
+  if (fromCfg) return fromCfg;
+  return '8080';
+}
+
+/** OS-specific hint when `--status` shows Tomcat stopped (avoid Linux-only systemd on Windows). */
+export function hintTomcatWhenStoppedForStatus(platform = process.platform) {
+  if (platform === 'win32') {
+    return 'To start Tomcat: install/start the Tomcat Windows service or run bin\\startup.bat; set TOMCAT_HOME, TOMCAT10, or CATALINA_HOME the same way jwebgen status and deploy resolve Tomcat home (Maven on PATH for build).';
+  }
+  if (platform === 'darwin') {
+    return 'To start Tomcat: use your installer, Homebrew, or bin/catalina.sh run (Apache Tomcat is not integrated with systemd on macOS).';
+  }
+  return 'To start Tomcat: sudo systemctl start tomcat10 (or your distro/package equivalent).';
+}
+
+/** OS-specific hint when `--status` shows WildFly stopped. */
+export function hintWildflyWhenStoppedForStatus(platform = process.platform) {
+  if (platform === 'win32') {
+    return 'To start WildFly: run bin\\standalone.bat or install as a Windows service; set WILDFLY_HOME (or WILDFLY_DEPLOYMENTS) in env or .jwebgen/.jwebgenrc.';
+  }
+  if (platform === 'darwin') {
+    return 'To start WildFly: run $WILDFLY_HOME/bin/standalone.sh from a terminal (or your process manager).';
+  }
+  return 'To start WildFly: run standalone.sh from WILDFLY_HOME/bin, or sudo systemctl start wildfly if a service is configured.';
+}
+
+/** Map `pgrep` exit codes to running / not running / unknown (for tests and parity with BSD pgrep). */
+export function serverRunningFromPgrepResult(result) {
+  const code = result.exitCode;
+  if (code === 0) return true;
+  if (code === 1) return false;
+  if (String(result.stderr || '').trim()) return null;
+  return null;
+}
+
+async function probeServerRuntime(serverTarget) {
+  if (serverTarget === 'tomcat') return probeTomcatRuntime({ platform: process.platform });
+  if (serverTarget === 'wildfly') return probeWildflyRuntime({ platform: process.platform });
+  return null;
+}
 
 export async function runClean({ findProjectRoot }) {
   const projectRoot = findProjectRoot();
@@ -33,22 +81,12 @@ export async function showStatus({ findProjectRoot }) {
   console.log(pc.cyan(`Project: ${path.basename(projectRoot)}`));
   console.log(pc.cyan(`Root: ${projectRoot}`));
 
-  let serverTarget = '';
-  const cfgPath = jwebgenConfigPath(projectRoot);
-  if (existsSync(cfgPath)) {
-    try {
-      const raw = await readFile(cfgPath, 'utf8');
-      const m = raw.match(/JWEBGEN_SERVER_TARGET\s*=\s*"?([a-zA-Z0-9_-]+)"?/);
-      serverTarget = String(m?.[1] || '').trim();
-    } catch {
-      // ignore
-    }
-  }
+  const cfg = readJwebgenExports(projectRoot);
+  const envTarget = String(process.env.JWEBGEN_SERVER_TARGET || '').trim();
+  let serverTarget = envTarget === 'tomcat' || envTarget === 'wildfly' ? envTarget : '';
   if (!serverTarget) {
-    const envTarget = String(process.env.JWEBGEN_SERVER_TARGET || '').trim();
-    if (envTarget === 'tomcat' || envTarget === 'wildfly') {
-      serverTarget = envTarget;
-    }
+    const cfgTarget = String(cfg.JWEBGEN_SERVER_TARGET || '').trim();
+    if (cfgTarget === 'tomcat' || cfgTarget === 'wildfly') serverTarget = cfgTarget;
   }
   const hasConfiguredServer = serverTarget === 'tomcat' || serverTarget === 'wildfly';
   if (!hasConfiguredServer) {
@@ -61,48 +99,58 @@ export async function showStatus({ findProjectRoot }) {
     return;
   }
 
-  try {
-    if (serverTarget === 'tomcat') {
-      const { stdout } = await execa('pgrep', ['-f', 'tomcat'], { timeout: 2000 });
-      if (stdout.trim()) {
-        console.log(pc.green('Tomcat: running'));
-      } else {
-        console.log(pc.yellow('Tomcat: stopped'));
-        console.log(pc.yellow('To start Tomcat: sudo systemctl start tomcat10 (or equivalent)'));
-      }
+  const running = await probeServerRuntime(serverTarget);
+  if (running === null) {
+    console.log(pc.yellow('Server: unknown status (process probe unavailable)'));
+  } else if (serverTarget === 'tomcat') {
+    if (running) {
+      console.log(pc.green('Tomcat: running'));
     } else {
-      const { stdout } = await execa('pgrep', ['-f', 'standalone.sh|org.jboss.as.standalone'], { timeout: 2000 });
-      if (stdout.trim()) {
-        console.log(pc.green('WildFly: running'));
-      } else {
-        console.log(pc.yellow('WildFly: stopped'));
-        console.log(pc.yellow('To start WildFly: systemctl start wildfly (if configured) or standalone.sh'));
-      }
+      console.log(pc.yellow('Tomcat: stopped'));
+      console.log(pc.yellow(hintTomcatWhenStoppedForStatus()));
     }
-  } catch {
-    console.log(pc.yellow('Server: unknown status (pgrep unavailable)'));
+  } else if (running) {
+    console.log(pc.green('WildFly: running'));
+  } else {
+    console.log(pc.yellow('WildFly: stopped'));
+    console.log(pc.yellow(hintWildflyWhenStoppedForStatus()));
   }
 
   const appName = await readAppNameFromPom(projectRoot, path.basename(projectRoot));
+  const statusPort = resolveStatusHttpPort(cfg);
   if (serverTarget === 'tomcat') {
-    const tomcatDir = process.env.TOMCAT10 || '/var/lib/tomcat10';
-    const warPath = path.join(tomcatDir, 'webapps', `${appName}.war`);
-    const explodedPath = path.join(tomcatDir, 'webapps', appName);
+    const probe = probeApacheTomcatHome({ cfg });
+    if (!probe.ok || !probe.home) {
+      console.log(
+        pc.yellow(
+          probe.home
+            ? `Deployment: unknown (Tomcat path is not a usable install: ${probe.home}; set TOMCAT_HOME or CATALINA_HOME to the real Tomcat directory)`
+            : 'Deployment: unknown (configure TOMCAT_HOME, TOMCAT10, or CATALINA_HOME in env or .jwebgen/.jwebgenrc)'
+        )
+      );
+      return;
+    }
+    const home = probe.home;
+    const warPath = path.join(home, 'webapps', `${appName}.war`);
+    const explodedPath = path.join(home, 'webapps', appName);
     if (existsSync(warPath) || existsSync(explodedPath)) {
       console.log(pc.green('Deployment: present'));
-      console.log(pc.cyan(`URL : http://localhost:8080/${appName}/`));
+      console.log(pc.cyan(`URL : http://localhost:${statusPort}/${appName}/`));
     } else {
       console.log(pc.yellow('Deployment: absent'));
     }
     return;
   }
 
-  const wildflyHome = process.env.WILDFLY_HOME || '/opt/wildfly';
-  const deployments = process.env.WILDFLY_DEPLOYMENTS || path.join(wildflyHome, 'standalone', 'deployments');
+  const { deployments } = resolveWildflyPaths({ cfg });
+  if (!deployments) {
+    console.log(pc.yellow('Deployment: unknown (configure WILDFLY_DEPLOYMENTS or WILDFLY_HOME in env/.jwebgenrc)'));
+    return;
+  }
   const deployed = path.join(deployments, `${appName}.war`);
   if (existsSync(deployed)) {
     console.log(pc.green('Deployment: present'));
-    console.log(pc.cyan(`URL : http://localhost:8080/${appName}/`));
+    console.log(pc.cyan(`URL : http://localhost:${statusPort}/${appName}/`));
   } else {
     console.log(pc.yellow('Deployment: absent'));
   }
@@ -117,7 +165,14 @@ export async function runMigrate({
   makeDeploySelectorScript,
   makeDevScript,
   makeWatchScript,
+  makeNodeBuildScript,
+  makeNodeDeployScript,
+  makeNodeDevScript,
+  makeNodeWatchScript,
   makeAddServletScript,
+  makeAddJspScript,
+  makeAddServletNodeScript,
+  makeAddJspNodeScript,
   makeLiveReloadClientScript,
   makeExecutable,
   legacyDeployScript
@@ -130,6 +185,7 @@ export async function runMigrate({
 
   const scriptsDir = jwebgenScriptsDir(projectRoot);
   await mkdir(scriptsDir, { recursive: true });
+  await cleanupLegacyJwebgenUnderSrc(projectRoot);
   const appName = await readAppNameFromPom(projectRoot, path.basename(projectRoot));
   const configuredTarget = await readConfiguredServerTarget(projectRoot);
   const legacyScriptTarget = await detectExplicitServerTargetFromDevScript(projectRoot);
@@ -151,8 +207,31 @@ export async function runMigrate({
   );
   await writeFileSafe(path.join(scriptsDir, 'dev.sh'), makeDevScript({ serverTarget }));
   await writeFileSafe(path.join(scriptsDir, 'watch.sh'), makeWatchScript());
+
+  // Cross-platform Node entrypoints (preferred by the CLI when present).
+  if (typeof makeNodeBuildScript === 'function') {
+    await writeFileSafe(path.join(scriptsDir, 'build.mjs'), makeNodeBuildScript());
+  }
+  if (typeof makeNodeDeployScript === 'function') {
+    await writeFileSafe(path.join(scriptsDir, 'deploy.mjs'), makeNodeDeployScript());
+  }
+  if (typeof makeNodeDevScript === 'function') {
+    await writeFileSafe(path.join(scriptsDir, 'dev.mjs'), makeNodeDevScript());
+  }
+  if (typeof makeNodeWatchScript === 'function') {
+    await writeFileSafe(path.join(scriptsDir, 'watch.mjs'), makeNodeWatchScript());
+  }
   const basePackage = await inferBasePackage(projectRoot, appName);
   await writeFileSafe(path.join(scriptsDir, 'add-servlet.sh'), makeAddServletScript({ basePackage }));
+  if (typeof makeAddJspScript === 'function') {
+    await writeFileSafe(path.join(scriptsDir, 'add-jsp.sh'), makeAddJspScript({ appName }));
+  }
+  if (typeof makeAddServletNodeScript === 'function') {
+    await writeFileSafe(path.join(scriptsDir, 'add-servlet.mjs'), makeAddServletNodeScript({ basePackage, appName }));
+  }
+  if (typeof makeAddJspNodeScript === 'function') {
+    await writeFileSafe(path.join(scriptsDir, 'add-jsp.mjs'), makeAddJspNodeScript({ appName }));
+  }
   await writeProjectConfigServerTarget(projectRoot, serverTarget);
   await writeFileSafe(path.join(projectRoot, '.jwebgen', 'live-reload.js'), makeLiveReloadClientScript());
 
@@ -173,9 +252,74 @@ export async function runMigrate({
   await makeExecutable(path.join(scriptsDir, 'dev.sh'));
   await makeExecutable(path.join(scriptsDir, 'watch.sh'));
   await makeExecutable(path.join(scriptsDir, 'add-servlet.sh'));
+  if (typeof makeAddJspScript === 'function') await makeExecutable(path.join(scriptsDir, 'add-jsp.sh'));
+  if (typeof makeAddServletNodeScript === 'function') await makeExecutable(path.join(scriptsDir, 'add-servlet.mjs'));
+  if (typeof makeAddJspNodeScript === 'function') await makeExecutable(path.join(scriptsDir, 'add-jsp.mjs'));
+
+  if (typeof makeNodeBuildScript === 'function') await makeExecutable(path.join(scriptsDir, 'build.mjs'));
+  if (typeof makeNodeDeployScript === 'function') await makeExecutable(path.join(scriptsDir, 'deploy.mjs'));
+  if (typeof makeNodeDevScript === 'function') await makeExecutable(path.join(scriptsDir, 'dev.mjs'));
+  if (typeof makeNodeWatchScript === 'function') await makeExecutable(path.join(scriptsDir, 'watch.mjs'));
 
   console.log(pc.green('Migration complete: scripts regenerated to current format.'));
   console.log(pc.cyan('You can run again: jwebgen --dev'));
+}
+
+/** Remove servlet filter + duplicated webapp client from pre–v2 layouts (tooling stays under /.jwebgen only). */
+async function cleanupLegacyJwebgenUnderSrc(projectRoot) {
+  const javaRoot = path.join(projectRoot, 'src', 'main', 'java');
+  if (existsSync(javaRoot)) {
+    const stack = [javaRoot];
+    while (stack.length > 0) {
+      const dir = stack.pop();
+      let entries;
+      try {
+        entries = await readdir(dir, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      for (const ent of entries) {
+        const full = path.join(dir, ent.name);
+        if (ent.isDirectory()) {
+          stack.push(full);
+          continue;
+        }
+        if (ent.name === 'DevLiveReloadFilter.java') {
+          try {
+            const relNorm = path.relative(javaRoot, full).split(path.sep).join('/');
+            const legacyGeneratedPath =
+              relNorm.endsWith('dev/DevLiveReloadFilter.java') || relNorm === 'DevLiveReloadFilter.java';
+            let text = '';
+            try {
+              text = await readFile(full, 'utf8');
+            } catch {
+              continue;
+            }
+            const legacyGeneratedContent = text.includes('/.jwebgen/live-reload.js');
+            if (!(legacyGeneratedPath || legacyGeneratedContent)) continue;
+            await rm(full, { force: true });
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+    }
+  }
+  const webLegacyDir = path.join(projectRoot, 'src', 'main', 'webapp', '.jwebgen');
+  if (!existsSync(webLegacyDir)) return;
+  let names;
+  try {
+    names = await readdir(webLegacyDir);
+  } catch {
+    return;
+  }
+  if (names.length === 0 || names.every((n) => n === 'live-reload.js')) {
+    try {
+      await rm(webLegacyDir, { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 async function inferBasePackage(projectRoot, appName) {

@@ -1,3 +1,5 @@
+import { WINDOWS_WILDFLY_PORTABLE_VERSION } from '../project/windowsSetupInstall.js';
+
 function shellQuote(value) {
   return `'${String(value).replace(/'/g, `'\"'\"'`)}'`;
 }
@@ -17,36 +19,6 @@ GREEN='\\\\033[0;32m'
 YELLOW='\\\\033[1;33m'
 BLUE='\\\\033[0;34m'
 NC='\\\\033[0m' # No Color
-
-APP_NAME=${shellQuote(appName)}
-SCRIPT_DIR="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
-TOMCAT_DIR="\${TOMCAT10:-}"
-if [[ -z "$TOMCAT_DIR" ]]; then
-  for d in /var/lib/tomcat10 /var/lib/tomcat; do
-    if [[ -d "$d" ]]; then TOMCAT_DIR="$d"; break; fi
-  done
-fi
-TOMCAT_DIR="\${TOMCAT_DIR:-/var/lib/tomcat10}"
-CLEANUP_DEV_MODE=0
-if [[ "\${1:-}" = "--cleanup-dev" ]]; then
-  CLEANUP_DEV_MODE=1
-fi
-
-tomcat_unit_name() {
-  local c
-  if ! command -v systemctl >/dev/null 2>&1; then
-    echo "tomcat10"
-    return 0
-  fi
-  for c in tomcat10 tomcat; do
-    systemctl status "$c" >/dev/null 2>&1
-    case "$?" in
-      0|3) echo "$c"; return 0 ;;
-    esac
-  done
-  echo "tomcat10"
-}
 
 log_info() {
   echo -e "\${BLUE}ℹ\${NC} $1"
@@ -76,6 +48,48 @@ run_privileged() {
     return 1
   fi
   sudo -n "$@"
+}
+
+APP_NAME=${shellQuote(appName)}
+SCRIPT_DIR="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+TOMCAT_DIR="\${TOMCAT_HOME:-\${TOMCAT10:-\${CATALINA_HOME:-}}}"
+if [[ -z "$TOMCAT_DIR" ]]; then
+  for d in /var/lib/tomcat10 /var/lib/tomcat; do
+    if [[ -d "$d" ]]; then TOMCAT_DIR="$d"; break; fi
+  done
+fi
+TOMCAT_DIR="\${TOMCAT_DIR:-/var/lib/tomcat10}"
+if [[ -z "$TOMCAT_DIR" || "$TOMCAT_DIR" = "/" ]]; then
+  log_error "Tomcat home is not configured. Set TOMCAT_HOME, TOMCAT10, or CATALINA_HOME."
+  exit 1
+fi
+if [[ ! -d "$TOMCAT_DIR" ]]; then
+  log_error "Tomcat home path was not found: $TOMCAT_DIR"
+  exit 1
+fi
+if [[ ! -d "$TOMCAT_DIR/webapps" ]]; then
+  log_error "Tomcat webapps directory was not found under: $TOMCAT_DIR"
+  exit 1
+fi
+CLEANUP_DEV_MODE=0
+if [[ "\${1:-}" = "--cleanup-dev" ]]; then
+  CLEANUP_DEV_MODE=1
+fi
+
+tomcat_unit_name() {
+  local c
+  if ! command -v systemctl >/dev/null 2>&1; then
+    echo "tomcat10"
+    return 0
+  fi
+  for c in tomcat10 tomcat; do
+    systemctl status "$c" >/dev/null 2>&1
+    case "$?" in
+      0|3) echo "$c"; return 0 ;;
+    esac
+  done
+  echo "tomcat10"
 }
 
 # Servlet / @WebServlet class changes need a reloadable Context; JSP can update without it.
@@ -146,6 +160,7 @@ if [[ "$CLEANUP_DEV_MODE" = "0" ]]; then
   else
     log_error "Tomcat is not running"
     log_info "Start it: sudo systemctl start $TOMCAT_UNIT"
+    echo "__JWEBGEN_EVENT__ server_down" >&2
     exit 1
   fi
 fi
@@ -285,8 +300,53 @@ if [[ -d "$ROOT_DIR/target" ]]; then
   WAR_FILE="$(find "$ROOT_DIR/target" -maxdepth 1 -name '*.war' 2>/dev/null | sort | tail -n 1)" || true
 fi
 
-WILDFLY_HOME="\${WILDFLY_HOME:-/opt/wildfly}"
-DEPLOY_DIR="\${WILDFLY_DEPLOYMENTS:-$WILDFLY_HOME/standalone/deployments}"
+WILDFLY_HOME_INPUT="\${WILDFLY_HOME:-}"
+DEPLOY_DIR_INPUT="\${WILDFLY_DEPLOYMENTS:-}"
+JWEBGEN_WF_OPT_VER='${WINDOWS_WILDFLY_PORTABLE_VERSION}'
+wildfly_discover_home_linux() {
+  if [[ -f "/opt/wildfly/jboss-modules.jar" ]]; then
+    printf '%s' "/opt/wildfly"
+    return
+  fi
+  if [[ -n "\${HOME:-}" ]]; then
+    local pref="\${HOME}/opt/wildfly-\${JWEBGEN_WF_OPT_VER}"
+    if [[ -f "\$pref/jboss-modules.jar" ]]; then
+      printf '%s' "\$pref"
+      return
+    fi
+    local best=""
+    shopt -s nullglob
+    best="\$(for d in "\${HOME}/opt"/wildfly-*; do
+      [[ -d "\$d" && -f "\$d/jboss-modules.jar" ]] && printf '%s\\n' "\$d"
+    done | sort -V | tail -n1)"
+    shopt -u nullglob
+    if [[ -n "\$best" ]]; then
+      printf '%s' "\$best"
+      return
+    fi
+  fi
+  printf '%s' "/opt/wildfly"
+}
+WILDFLY_HOME="$WILDFLY_HOME_INPUT"
+if [[ -z "$WILDFLY_HOME" && -z "$DEPLOY_DIR_INPUT" ]]; then
+  WILDFLY_HOME="\$(wildfly_discover_home_linux)"
+fi
+DEPLOY_DIR="$DEPLOY_DIR_INPUT"
+if [[ -z "$DEPLOY_DIR" ]]; then
+  DEPLOY_DIR="$WILDFLY_HOME/standalone/deployments"
+fi
+if [[ -z "$DEPLOY_DIR" || "$DEPLOY_DIR" = "/" ]]; then
+  echo "WildFly deployments path is not configured. Set WILDFLY_DEPLOYMENTS (or WILDFLY_HOME)."
+  exit 1
+fi
+if [[ -z "$DEPLOY_DIR_INPUT" && -n "$WILDFLY_HOME" && ! -d "$WILDFLY_HOME" ]]; then
+  echo "WildFly home path was not found: $WILDFLY_HOME"
+  exit 1
+fi
+if [[ ! -d "$DEPLOY_DIR" ]]; then
+  echo "WildFly deployments directory was not found: $DEPLOY_DIR"
+  exit 1
+fi
 CLEANUP_DEV_MODE=0
 if [[ "\${1:-}" = "--cleanup-dev" ]]; then
   CLEANUP_DEV_MODE=1
@@ -490,7 +550,47 @@ if [[ -z "$TARGET" && -f "$SCRIPT_DIR/../.jwebgenrc" ]]; then
   TARGET="\${JWEBGEN_SERVER_TARGET:-}"
 fi
 
-TARGET="\${TARGET:-tomcat}"
+if [[ -z "$TARGET" ]]; then
+  if [[ -t 0 && -t 1 ]]; then
+    echo "Select server target for deployment:"
+    echo "  1) tomcat"
+    echo "  2) wildfly"
+    while true; do
+      read -r -p "Choose target [1/2, t/w]: " ans
+      case "\${ans,,}" in
+        1|t|tomcat)
+          TARGET="tomcat"
+          ;;
+        2|w|wildfly)
+          TARGET="wildfly"
+          ;;
+        *)
+          echo "Invalid choice. Enter 1 (tomcat) or 2 (wildfly)."
+          continue
+          ;;
+      esac
+      break
+    done
+    mkdir -p "$SCRIPT_DIR/.." 2>/dev/null || true
+    if [[ -f "$SCRIPT_DIR/../.jwebgenrc" ]]; then
+      if grep -qE '^[[:space:]]*export[[:space:]]+JWEBGEN_SERVER_TARGET=' "$SCRIPT_DIR/../.jwebgenrc" 2>/dev/null; then
+        if sed --version >/dev/null 2>&1; then
+          sed -i -E 's|^[[:space:]]*export[[:space:]]+JWEBGEN_SERVER_TARGET=.*$|export JWEBGEN_SERVER_TARGET="'"$TARGET"'"|' "$SCRIPT_DIR/../.jwebgenrc" 2>/dev/null || true
+        else
+          sed -i '' -E 's|^[[:space:]]*export[[:space:]]+JWEBGEN_SERVER_TARGET=.*$|export JWEBGEN_SERVER_TARGET="'"$TARGET"'"|' "$SCRIPT_DIR/../.jwebgenrc" 2>/dev/null || true
+        fi
+      else
+        printf '\nexport JWEBGEN_SERVER_TARGET="%s"\n' "$TARGET" >> "$SCRIPT_DIR/../.jwebgenrc" 2>/dev/null || true
+      fi
+    else
+      printf 'export JWEBGEN_SERVER_TARGET="%s"\n' "$TARGET" > "$SCRIPT_DIR/../.jwebgenrc" 2>/dev/null || true
+    fi
+  else
+    echo "Server target is not configured. Run in an interactive terminal to choose tomcat/wildfly,"
+    echo "or set JWEBGEN_SERVER_TARGET (or .jwebgen/.jwebgenrc) before deploying."
+    exit 1
+  fi
+fi
 
 case "$TARGET" in
   tomcat)

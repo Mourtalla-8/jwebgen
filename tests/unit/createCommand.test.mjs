@@ -1,4 +1,4 @@
-import test from 'node:test';
+import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
@@ -6,6 +6,7 @@ import { existsSync } from 'node:fs';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { runCreateCommand } from '../../src/cli/createCommand.js';
 
+describe('createCommand', { concurrency: false }, () => {
 test('runCreateCommand keeps typed project name casing for default directory', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'jwebgen-create-casing-'));
   const startCwd = process.cwd();
@@ -48,6 +49,9 @@ test('runCreateCommand keeps typed project name casing for default directory', a
     makeDevScript: () => '#!/usr/bin/env bash\necho dev\n',
     makeWatchScript: () => '#!/usr/bin/env bash\necho watch\n',
     makeAddServletScript: () => '#!/usr/bin/env bash\necho add\n',
+    makeAddJspScript: () => '#!/usr/bin/env bash\necho add-jsp\n',
+    makeAddServletNodeScript: () => '#!/usr/bin/env node\nconsole.log("add-servlet")\n',
+    makeAddJspNodeScript: () => '#!/usr/bin/env node\nconsole.log("add-jsp")\n',
     makeLiveReloadClientScript: () => 'console.log("lr")',
     makeExecutable: async () => {},
     ensureBuildTools: async () => ({ javaOk: true, mavenOk: true }),
@@ -67,9 +71,15 @@ test('runCreateCommand keeps typed project name casing for default directory', a
     assert.equal(existsSync(targetDir), true);
     const pom = await readFile(path.join(targetDir, 'pom.xml'), 'utf8');
     assert.match(pom, /<artifactId>exo1<\/artifactId>/);
-    assert.ok(!writes.some((f) => f.includes('/src/main/webapp/.jwebgen/')));
+    assert.ok(writes.some((f) => f.endsWith(path.join('.jwebgen', 'live-reload.js'))));
+    assert.ok(writes.some((f) => f.endsWith(path.join('.jwebgen', 'scripts', 'add-jsp.sh'))));
+    assert.ok(writes.some((f) => f.endsWith(path.join('.jwebgen', 'scripts', 'add-servlet.mjs'))));
+    assert.ok(writes.some((f) => f.endsWith(path.join('.jwebgen', 'scripts', 'add-jsp.mjs'))));
+    assert.ok(!writes.some((f) => f.includes(`${path.sep}DevLiveReloadFilter.java`)));
+    assert.ok(!writes.some((f) => f.includes(path.join('webapp', '.jwebgen'))));
   } finally {
     process.chdir(startCwd);
     await rm(tempRoot, { recursive: true, force: true });
   }
+});
 });

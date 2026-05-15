@@ -179,12 +179,12 @@ prompt_server_remediation() {
     primary_label="refresh"
     if needs_server_start; then
       start_needed=1
-      primary_key="d"
+      primary_key="s"
       primary_label="start"
     elif [[ "$SERVER_TARGET" = "wildfly" && "$DETECT_REASON" == *"HTTP 000"* ]]; then
       wildfly_http000=1
       start_needed=1
-      primary_key="d"
+      primary_key="s"
       primary_label="restart"
     fi
     if [[ "$primary_key" = "f" ]]; then
@@ -198,7 +198,7 @@ prompt_server_remediation() {
         options="[\${primary_key}]\${primary_label} / [f]refresh / [a]help / [q]uit"
       elif [[ -n "$DETECT_OWNER_PID" ]]; then
         has_pid_conflict=1
-        options="[k]ill owner / [s]top service / [f]refresh / [a]help / [q]uit"
+        options="[k]ill owner / [v]stop service / [f]refresh / [a]help / [q]uit"
       else
         options="[i]nspect / [x]kill port / [f]refresh / [a]help / [q]uit"
       fi
@@ -378,7 +378,7 @@ prompt_server_remediation() {
           fi
         fi
         ;;
-      [Ss])
+      [Vv])
         if [[ "$has_conflict" != "1" || "$has_pid_conflict" != "1" ]]; then
           ui_warn "Option is not available in this menu."
           continue
@@ -476,7 +476,7 @@ prompt_server_remediation() {
         ui_warn "Application still unreachable after redeploy."
         continue
         ;;
-      [Dd])
+      [Ss])
         if [[ "$start_needed" = "1" ]]; then
           if [[ "$SERVER_TARGET" = "wildfly" ]]; then
             local wf_load
@@ -752,7 +752,7 @@ cleanup() {
     local cleanup_output=""
     if ! cleanup_output="$("$ROOT_DIR/.jwebgen/scripts/deploy.sh" --cleanup-dev 2>&1)"; then
       if [[ "$cleanup_output" == *"__JWEBGEN_EVENT__ deploy_sudo_required"* ]]; then
-        ui_warn "Automatic cleanup needs sudo privileges. Run: sudo -v && jwebgen --clean --deploy"
+        ui_warn "Cleanup could not remove deployment files (permission denied). Run sudo -v, then jwebgen --deploy --cleanup-dev—or fix deploy directory permissions."
       else
         ui_warn "Automatic deployment cleanup failed (non-blocking). Try: jwebgen --clean --deploy"
       fi
