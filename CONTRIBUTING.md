@@ -17,8 +17,23 @@ npm run check
 
 Touching deploy/dev flows? Run `--new`, `--build`, `--deploy`, `--dev`, `--status` on a machine you have (Linux, macOS, or Windows) with a real or fake server layout.
 
-Target branch is usually `develop`; follow whatever branch rules the repo uses.
+## Branch flow
 
-Release (0.x line): bump `version` in `package.json` + `CHANGELOG.md`, merge to `main`, tag `v0.x.y` (e.g. `v0.1.0`). While on 0.x, minor bumps may include breaking CLI changes. Run `npm run release:verify` before tagging.
+| Stage | Branch | What happens |
+|-------|--------|----------------|
+| Daily work | PRs → `develop` | CI only. |
+| Prerelease | PR `develop` → `next` | **semantic-release** → npm dist-tag **`next`**, GitHub prerelease. |
+| Stable | PR `next` → `main` | **semantic-release** → npm dist-tag **`latest`**, GitHub release. |
 
-The npm tarball is only `bin/`, `src/`, and the top-level Markdown docs—tests stay in git, not in `npm pack`.
+Releases run on push to **`main`** and **`next`** ([`.github/workflows/release.yml`](.github/workflows/release.yml)). Do not push version tags manually.
+
+Use [Conventional Commits](https://www.conventionalcommits.org/) (`fix:`, `feat:`, `feat!:` / `BREAKING CHANGE:`). Squash-merge titles must stay conventional so semantic-release can parse them.
+
+## Maintainers
+
+- **npm publish:** [Trusted Publisher](https://docs.npmjs.com/trusted-publishers) on package `jwebgen` (GitHub Actions, workflow `release.yml`, repo `Mourtalla-8/jwebgen`). Optional fallback: repository secret **`NPM_TOKEN`** (Granular **Automation** token).
+- **Version files on `main`:** `package.json` / `CHANGELOG.md` in git may lag behind npm until a maintainer syncs them after a release (no `@semantic-release/git` on protected branches).
+
+## Package layout
+
+Published tarball: `bin/`, `src/`, `LICENSE`, and top-level Markdown listed in `package.json` → `files`. Tests stay in git only.

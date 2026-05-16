@@ -9,8 +9,10 @@ Small CLI to scaffold Servlet/JSP (Jakarta) web apps and wire up build, deploy, 
 From npm (Node 22.x+):
 
 ```bash
-npm install -g jwebgen
-# or: npx jwebgen@0.1.0 --help
+npm install -g jwebgen@latest
+# prereleases from branch next:
+npm install -g jwebgen@next
+# or: npx jwebgen@latest --help
 ```
 
 `npx jwebgen` (without a path) resolves the published package from the registry, not a local clone.
@@ -68,4 +70,4 @@ npm run smoke:global-install
 
 [TROUBLESHOOTING.md](TROUBLESHOOTING.md) · [CONTRIBUTING.md](CONTRIBUTING.md)
 
-Releases: tag `v0.x.y` on `main` (0.x = unstable API); workflows live under `.github/workflows/`.
+Releases are automated with [semantic-release](https://semantic-release.gitbook.io/) on push to **`main`** (stable, npm `latest`) and **`next`** (prereleases, npm `next`). Use [Conventional Commits](https://www.conventionalcommits.org/); workflow: `develop` → PR → `next` → PR → `main`. See [CONTRIBUTING.md](CONTRIBUTING.md). Workflows live under `.github/workflows/`.

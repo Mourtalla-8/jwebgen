@@ -1,6 +1,6 @@
 {
   "name": "jwebgen",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "CLI to scaffold Jakarta Servlet/JSP apps with build, deploy, and dev scripts.",
   "type": "module",
   "bin": {
@@ -24,7 +24,8 @@
     "smoke:generated": "bash ./tests/smoke-generated-project.sh",
     "smoke:global-install": "node tests/install-global-smoke.mjs",
     "check": "npm run check:syntax && npm run check:wording && npm run lint && npm run test",
-    "release:verify": "npm pack --dry-run >/dev/null && npm run check"
+    "release:verify": "npm pack --dry-run >/dev/null && npm run check",
+    "semantic-release": "semantic-release"
   },
   "engines": {
     "node": ">=22.0.0"
@@ -57,7 +58,14 @@
   "license": "MIT",
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/commit-analyzer": "^13.0.1",
+    "@semantic-release/exec": "^7.1.0",
+    "@semantic-release/github": "^12.0.8",
+    "@semantic-release/npm": "^13.1.5",
+    "@semantic-release/release-notes-generator": "^14.1.1",
     "eslint": "^10.2.1",
-    "globals": "^17.5.0"
+    "globals": "^17.5.0",
+    "semantic-release": "^25.0.3"
   }
 }
