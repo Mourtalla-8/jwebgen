@@ -12,9 +12,8 @@ concurrency:
 jobs:
   release:
     runs-on: ubuntu-latest
-    # Keep NPM_TOKEN in env for children (semantic-release writes `${NPM_TOKEN}` into a temp userconfig).
-    # Do not set setup-node `registry-url`: that creates a repo `.npmrc` @semantic-release/npm may copy into
-    # its temp config without valid publish auth (npm then falls back to OTP).
+    # Publish: npm Trusted Publisher (OIDC, workflow file must be `release.yml` on npmjs.com)
+    # or NPM_TOKEN (Granular Automation). Do not set setup-node `registry-url` here.
     env:
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
     permissions:
@@ -28,13 +27,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Require NPM_TOKEN secret
-        run: |
-          if [ -z "${NPM_TOKEN}" ]; then
-            echo "::error::Repository secret NPM_TOKEN is missing or empty"
-            exit 1
-          fi
-
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
@@ -45,6 +37,7 @@ jobs:
         run: npm ci
 
       - name: Verify npm token (whoami)
+        if: env.NPM_TOKEN != ''
         run: |
           npm config set //registry.npmjs.org/:_authToken="${NPM_TOKEN}"
           npm whoami
