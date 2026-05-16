@@ -1,6 +1,6 @@
 {
   "name": "jwebgen",
-  "version": "0.1.1-next.1",
+  "version": "0.1.1",
   "description": "CLI to scaffold Jakarta Servlet/JSP apps with build, deploy, and dev scripts.",
   "type": "module",
   "bin": {
